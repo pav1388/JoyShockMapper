@@ -99,9 +99,12 @@ public:
 
 	~PollingThread()
 	{
-		if (_thread && _continue)
+		if (_continue)
 		{
 			Stop();
+		}
+		if (_thread)
+		{
 			_thread->join();
 			_thread.reset();
 		}
