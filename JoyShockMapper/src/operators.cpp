@@ -238,6 +238,7 @@ ostream &operator<<(ostream &out, const AxisSignPair &asp)
 
 istream &operator>>(istream &in, AxisSignPair &asp)
 {
+	size_t pos;
 	string value;
 	getline(in, value);
 	stringstream ss(value);

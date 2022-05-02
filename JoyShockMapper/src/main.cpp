@@ -116,634 +116,30 @@ JSMSetting<float> touch_deadzone_inner = JSMSetting<float>(SettingID::TOUCH_DEAD
 JSMSetting<RingMode> touch_ring_mode = JSMSetting<RingMode>(SettingID::TOUCH_RING_MODE, RingMode::OUTER);
 JSMSetting<FloatXY> touchpad_sens = JSMSetting<FloatXY>(SettingID::TOUCHPAD_SENS, { 1.f, 1.f });
 JSMVariable<Switch> hide_minimized = JSMVariable<Switch>(Switch::OFF);
-JSMSetting<FloatXY> scroll_sens = JSMSetting<FloatXY>(SettingID::SCROLL_SENS, { 30.f, 30.f });
-
-mutex loading_lock;
-
-float os_mouse_speed = 1.0;
-float last_flick_and_rotation = 0.0;
-unique_ptr<PollingThread> autoLoadThread;
-unique_ptr<PollingThread> minimizeThread;
-unique_ptr<TrayIcon> tray;
-bool devicesCalibrating = false;
-Whitelister whitelister(false);
-unordered_map<int, shared_ptr<JoyShock>> handle_to_joyshock;
-
-// This class holds all the logic related to a single digital button. It does not hold the mapping but only a reference
-// to it. It also contains it's various states, flags and data.
-class DigitalButton
-{
-public:
-	// All digital buttons need a reference to the same instance of a the common structure within the same controller.
-	// It enables the buttons to synchronize and be aware of the state of the whole controller.
-	struct Common {
-		Common(int deviceHandle)
-			: _deviceHandle(deviceHandle)
-		{
-			chordStack.push_front(ButtonID::NONE); //Always hold mapping none at the end to handle modeshifts and chords
-			_referenceCount++;
-		}
-		deque<pair<ButtonID, KeyCode>> gyroActionQueue; // Queue of gyro control actions currently in effect
-		deque<pair<ButtonID, KeyCode>> activeTogglesQueue;
-		deque<ButtonID> chordStack; // Represents the current active buttons in order from most recent to latest
-		const int _deviceHandle;
-		function<DigitalButton *(ButtonID)> _getMatchingSimBtn;
-
-		private:
-		int _referenceCount;
-
-		public:
-		void IncrementReferenceCounter()
-		{
-			_referenceCount++;
-		}
-
-		bool DecrementReferenceCounter()
-		{
-			_referenceCount--;
-			if (_referenceCount == 0)
-			{
-				delete this;
-				return false;
-			}
-			return true;
-		}
-	};
-
-	static bool findQueueItem(pair<ButtonID, KeyCode> &pair, ButtonID btn)
-	{
-		return btn == pair.first;
-	}
-
-
-	DigitalButton(DigitalButton::Common* btnCommon, ButtonID id)
-		: _id(id)
-		, _btnState(BtnState::NoPress)
-		, _common(btnCommon)
-		, _mapping(id < ButtonID::SIZE ? mappings[int(id)] : touch_buttons[int(id) - FIRST_TOUCH_BUTTON])
-		, _press_times()
-		, _keyToRelease()
-		, _turboCount(0)
-		, _simPressMaster(nullptr)
-		, _instantReleaseQueue()
-	{
-		_instantReleaseQueue.reserve(2);
-	}
-
-	const ButtonID _id; // Always ID first for easy debugging
-	BtnState _btnState = BtnState::NoPress;
-	Common* _common;
-	const JSMButton &_mapping;
-	chrono::steady_clock::time_point _press_times;
-	unique_ptr<Mapping> _keyToRelease; // At key press, remember what to release
-	string _nameToRelease;
-	unsigned int _turboCount;
-	DigitalButton * _simPressMaster;
-	vector<BtnEvent> _instantReleaseQueue;
-
-	bool CheckInstantRelease(BtnEvent instantEvent)
-	{
-		auto instant = find(_instantReleaseQueue.begin(), _instantReleaseQueue.end(), instantEvent);
-		if (instant != _instantReleaseQueue.end())
-		{
-			//cout << "Button " << _id << " releases instant " << instantEvent << endl;
-			_keyToRelease->ProcessEvent(BtnEvent::OnInstantRelease, this, _nameToRelease);
-			_instantReleaseQueue.erase(instant);
-			return true;
-		}
-		return false;
-	}
-
-	void ProcessButtonPress(bool pressed, chrono::steady_clock::time_point time_now, float turbo_ms, float hold_ms)
-	{
-		auto elapsed_time = GetPressDurationMS(time_now);
-		if (pressed)
-		{
-			if (_turboCount == 0)
-			{
-				if (elapsed_time > MAGIC_INSTANT_DURATION)
-				{
-					CheckInstantRelease(BtnEvent::OnPress);
-				}
-				if (elapsed_time > hold_ms)
-				{
-					_keyToRelease->ProcessEvent(BtnEvent::OnHold, this, _nameToRelease);
-					_keyToRelease->ProcessEvent(BtnEvent::OnTurbo, this, _nameToRelease);
-					_turboCount++;
-				}
-			}
-			else
-			{
-				if (elapsed_time > hold_ms + MAGIC_INSTANT_DURATION)
-				{
-					CheckInstantRelease(BtnEvent::OnHold);
-				}
-				if (floorf((elapsed_time - hold_ms) / turbo_ms) >= _turboCount)
-				{
-					_keyToRelease->ProcessEvent(BtnEvent::OnTurbo, this, _nameToRelease);
-					_turboCount++;
-				}
-				if (elapsed_time > hold_ms + _turboCount * turbo_ms + MAGIC_INSTANT_DURATION)
-				{
-					CheckInstantRelease(BtnEvent::OnTurbo);
-				}
-			}
-		}
-		else // not pressed
-		{
-			_keyToRelease->ProcessEvent(BtnEvent::OnRelease, this, _nameToRelease);
-			if (_turboCount == 0)
-			{
-				_keyToRelease->ProcessEvent(BtnEvent::OnTap, this, _nameToRelease);
-				_btnState = BtnState::TapRelease;
-				_press_times = time_now; // Start counting tap duration
-			}
-			else
-			{
-				_keyToRelease->ProcessEvent(BtnEvent::OnHoldRelease, this, _nameToRelease);
-				if (_instantReleaseQueue.empty())
-				{
-					_btnState = BtnState::NoPress;
-					ClearKey();
-				}
-				else
-				{
-					_btnState = BtnState::InstRelease;
-					_press_times = time_now; // Start counting tap duration
-				}
-			}
-		}
-	}
-
-	Mapping *GetPressMapping()
-	{
-		if (!_keyToRelease)
-		{
-			// Look at active chord mappings starting with the latest activates chord
-			for (auto activeChord = _common->chordStack.cbegin(); activeChord != _common->chordStack.cend(); activeChord++)
-			{
-				auto binding = _mapping.get(*activeChord);
-				if (binding && *activeChord != _id)
-				{
-					_keyToRelease.reset( new Mapping(*binding));
-					_nameToRelease = _mapping.getName(*activeChord);
-					return _keyToRelease.get();
-				}
-			}
-			// Chord stack should always include NONE which will provide a value in the loop above
-			throw exception("ChordStack should always include ButtonID::NONE, for the chorded variable to return the base value.");
-		}
-		return _keyToRelease.get();
-	}
-
-	void StartCalibration()
-	{
-		printf("Starting continuous calibration\n");
-		JslResetContinuousCalibration(_common->_deviceHandle);
-		JslStartContinuousCalibration(_common->_deviceHandle);
-	}
-
-	void FinishCalibration()
-	{
-		JslPauseContinuousCalibration(_common->_deviceHandle);
-		printf("Gyro calibration set\n");
-		ClearAllActiveToggle(KeyCode("CALIBRATE"));
-	}
-
-	void ApplyGyroAction(KeyCode gyroAction)
-	{
-		_common->gyroActionQueue.push_back({ _id, gyroAction });
-	}
-
-	void RemoveGyroAction()
-	{
-		auto gyroAction = find_if(_common->gyroActionQueue.begin(), _common->gyroActionQueue.end(),
-			[this](auto pair)
-			{
-				// On a sim press, release the master button (the one who triggered the press)
-				return pair.first == (_simPressMaster ? _simPressMaster->_id : _id);
-			});
-		if (gyroAction != _common->gyroActionQueue.end())
-		{
-			ClearAllActiveToggle(gyroAction->second);
-			_common->gyroActionQueue.erase(gyroAction);
-		}
-	}
-
-	void ApplyBtnPress(KeyCode keyCode)
-	{
-		if(keyCode.code != NO_HOLD_MAPPED)
-		{
-			pressKey(keyCode, true);
-		}
-	}
-
-	void ApplyBtnRelease(KeyCode key)
-	{
-		if (key.code != NO_HOLD_MAPPED)
-		{
-			pressKey(key, false);
-			ClearAllActiveToggle(key);
-		}
-	}
-
-	void ApplyButtonToggle(KeyCode key, function<void(DigitalButton *)> apply, function<void(DigitalButton *)> release)
-	{
-		auto currentlyActive = find_if(_common->activeTogglesQueue.begin(), _common->activeTogglesQueue.end(),
-			[this, key](pair<ButtonID, KeyCode> pair)
-			{
-				return pair.first == _id && pair.second == key;
-			});
-		if (currentlyActive == _common->activeTogglesQueue.end())
-		{
-			apply(this);
-			_common->activeTogglesQueue.push_front( { _id, key } );
-		}
-		else
-		{
-			release(this); // The bound action here should always erase the active toggle from the queue
-		}
-	}
-
-	void RegisterInstant(BtnEvent evt)
-	{
-		//cout << "Button " << _id << " registers instant " << evt << endl;
-		_instantReleaseQueue.push_back(evt);
-	}
-
-	void ClearAllActiveToggle(KeyCode key)
-	{
-		std::function<bool(pair<ButtonID, KeyCode>)> isSameKey = [key](pair<ButtonID, KeyCode> pair)
-		{
-			return pair.second == key;
-		};
-
-		for(auto currentlyActive = find_if(_common->activeTogglesQueue.begin(), _common->activeTogglesQueue.end(), isSameKey);
-			currentlyActive != _common->activeTogglesQueue.end();
-			currentlyActive = find_if(_common->activeTogglesQueue.begin(), _common->activeTogglesQueue.end(), isSameKey))
-		{
-			_common->activeTogglesQueue.erase(currentlyActive);
-		}
-	}
-
-	void SyncSimPress(DigitalButton &btn)
-	{
-		_keyToRelease.reset(new Mapping(*btn._keyToRelease));
-		_nameToRelease = btn._nameToRelease;
-		_simPressMaster = &btn;
-		//cout << btn << " is the master button" << endl;
-	}
-
-	void ClearKey()
-	{
-		_keyToRelease.reset();
-		_instantReleaseQueue.clear();
-		_nameToRelease.clear();
-		_turboCount = 0;
-	}
-
-	// Pretty wrapper
-	inline float GetPressDurationMS(chrono::steady_clock::time_point time_now)
-	{
-		return static_cast<float>(chrono::duration_cast<chrono::milliseconds>(time_now - _press_times).count());
-	}
-
-	void handleButtonChange(bool pressed, chrono::steady_clock::time_point time_now, float turboTime, float holdTime)
-	{
-		if (_id < ButtonID::SIZE || _id >= ButtonID::T1) // Can't chord touch stick buttons?!?
-		{
-			auto foundChord = find(_common->chordStack.begin(), _common->chordStack.end(), _id);
-			if (!pressed)
-			{
-				if (foundChord != _common->chordStack.end())
-				{
-					//cout << "Button " << index << " is released!" << endl;
-					_common->chordStack.erase(foundChord); // The chord is released
-				}
-			}
-			else if (foundChord == _common->chordStack.end()) {
-				//cout << "Button " << index << " is pressed!" << endl;
-				_common->chordStack.push_front(_id); // Always push at the fromt to make it a stack
-			}
-		}
-
-		switch (_btnState)
-		{
-		case BtnState::NoPress:
-			if (pressed)
-			{
-				_press_times = time_now;
-				if (_mapping.HasSimMappings())
-				{
-					_btnState = BtnState::WaitSim;
-				}
-				else if (_mapping.getDblPressMap())
-				{
-					// Start counting time between two start presses
-					_btnState = BtnState::DblPressStart;
-				}
-				else
-				{
-					_btnState = BtnState::BtnPress;
-					GetPressMapping()->ProcessEvent(BtnEvent::OnPress, this, _nameToRelease);
-				}
-			}
-			break;
-		case BtnState::BtnPress:
-			ProcessButtonPress(pressed, time_now, turboTime, holdTime);
-			break;
-		case BtnState::TapRelease:
-		{
-			if (pressed || GetPressDurationMS(time_now) > MAGIC_INSTANT_DURATION)
-			{
-				CheckInstantRelease(BtnEvent::OnRelease);
-				CheckInstantRelease(BtnEvent::OnTap);
-			}
-			if (pressed || GetPressDurationMS(time_now) > _keyToRelease->getTapDuration())
-			{
-				GetPressMapping()->ProcessEvent(BtnEvent::OnTapRelease, this, _nameToRelease);
-				_btnState = BtnState::NoPress;
-				ClearKey();
-			}
-			break;
-		}
-		case BtnState::WaitSim:
-		{
-			// Is there a sim mapping on this button where the other button is in WaitSim state too?
-			auto simBtn = _common->_getMatchingSimBtn(_id);
-			if (pressed && simBtn)
-			{
-				_btnState = BtnState::SimPress;
-				_press_times = time_now; // Reset Timer
-				_keyToRelease.reset(new Mapping(_mapping.AtSimPress(simBtn->_id)->get())); // Make a copy
-				_nameToRelease = _mapping.getSimPressName(simBtn->_id);
-
-				simBtn->_btnState = BtnState::SimPress;
-				simBtn->_press_times = time_now;
-				simBtn->SyncSimPress(*this);
-
-				_keyToRelease->ProcessEvent(BtnEvent::OnPress, this, _nameToRelease);
-			}
-			else if (!pressed || GetPressDurationMS(time_now) > sim_press_window)
-			{
-				// Button was released before sim delay expired OR
-				// Button is still pressed but Sim delay did expire
-				if (_mapping.getDblPressMap())
-				{
-					// Start counting time between two start presses
-					_btnState = BtnState::DblPressStart;
-				}
-				else
-				{
-					_btnState = BtnState::BtnPress;
-					GetPressMapping()->ProcessEvent(BtnEvent::OnPress, this, _nameToRelease);
-					//_press_times = time_now;
-				}
-			}
-			// Else let time flow, stay in this state, no output.
-			break;
-		}
-		case BtnState::SimPress:
-			if (_simPressMaster && _simPressMaster->_btnState != BtnState::SimPress)
-			{
-				// The master button has released! change state now!
-				_btnState = BtnState::SimRelease;
-				_simPressMaster = nullptr;
-			}
-			else if (!pressed || !_simPressMaster) // Both slave and master handle release, but only the master handles the press
-			{
-				ProcessButtonPress(pressed, time_now, turboTime, holdTime);
-				if (_simPressMaster && _btnState != BtnState::SimPress)
-				{
-					// The slave button has released! Change master state now!
-					_simPressMaster->_btnState = BtnState::SimRelease;
-					_simPressMaster = nullptr;
-				}
-			}
-			break;
-		case BtnState::SimRelease:
-			if (!pressed)
-			{
-				_btnState = BtnState::NoPress;
-				ClearKey();
-			}
-			break;
-		case BtnState::DblPressStart:
-			if (GetPressDurationMS(time_now) > dbl_press_window)
-			{
-				GetPressMapping()->ProcessEvent(BtnEvent::OnPress, this, _nameToRelease);
-				_btnState = BtnState::BtnPress;
-				//_press_times = time_now; // Reset Timer
-			}
-			else if (!pressed)
-			{
-				if (GetPressDurationMS(time_now) > holdTime)
-				{
-					_btnState = BtnState::DblPressNoPressHold;
-				}
-				else
-				{
-					_btnState = BtnState::DblPressNoPressTap;
-				}
-			}
-			break;
-		case BtnState::DblPressNoPressTap:
-			if (GetPressDurationMS(time_now) > dbl_press_window)
-			{
-				_btnState = BtnState::BtnPress;
-				_press_times = time_now; // Reset Timer to raise a tap
-				GetPressMapping()->ProcessEvent(BtnEvent::OnPress, this, _nameToRelease);
-			}
-			else if (pressed)
-			{
-				_btnState = BtnState::DblPressPress;
-				_press_times = time_now;
-				_keyToRelease.reset(new Mapping(_mapping.getDblPressMap()->second));
-				_nameToRelease = _mapping.getName(_id);
-				_mapping.getDblPressMap()->second.get().ProcessEvent(BtnEvent::OnPress, this, _nameToRelease);
-			}
-			break;
-		case BtnState::DblPressNoPressHold:
-			if (GetPressDurationMS(time_now) > dbl_press_window)
-			{
-				_btnState = BtnState::BtnPress;
-				// Don't reset timer to preserve hold press behaviour
-				GetPressMapping()->ProcessEvent(BtnEvent::OnPress, this, _nameToRelease);
-			}
-			else if (pressed)
-			{
-				_btnState = BtnState::DblPressPress;
-				_press_times = time_now;
-				_keyToRelease.reset(new Mapping(_mapping.getDblPressMap()->second));
-				_nameToRelease = _mapping.getName(_id);
-				_mapping.getDblPressMap()->second.get().ProcessEvent(BtnEvent::OnPress, this, _nameToRelease);
-			}
-			break;
-		case BtnState::DblPressPress:
-			ProcessButtonPress(pressed, time_now, turboTime, holdTime);
-			break;
-		case BtnState::InstRelease:
-		{
-			if (GetPressDurationMS(time_now) > MAGIC_INSTANT_DURATION)
-			{
-				CheckInstantRelease(BtnEvent::OnRelease);
-				_btnState = BtnState::NoPress;
-				ClearKey();
-			}
-			break;
-		}
-		default:
-			cout << "Invalid button state " << _btnState << ": Resetting to NoPress" << endl;
-			_btnState = BtnState::NoPress;
-			break;
-		}
-	}
-};
-
-ostream &operator << (ostream &out, Mapping mapping)
-{
-	out << mapping.command;
-	return out;
-}
-
-istream &operator >> (istream &in, Mapping &mapping)
-{
-	string valueName(128, '\0');
-	in.getline(&valueName[0], valueName.size());
-	valueName.resize(strlen(valueName.c_str()));
-	smatch results;
-	int count = 0;
-
-	mapping.command = valueName;
-	stringstream ss;
-
-	while (regex_match(valueName, results, regex(R"(\s*([!\^]?)((\".*?\")|\w*[0-9A-Z]|\W)([\\\/+'_]?)\s*(.*))")) && !results[0].str().empty())
-	{
-		if (count > 0) ss << " and ";
-		Mapping::ActionModifier actMod = results[1].str().empty() ? Mapping::ActionModifier::None :
-			results[1].str()[0] == '!' ? Mapping::ActionModifier::Instant :
-			results[1].str()[0] == '^' ? Mapping::ActionModifier::Toggle :
-			Mapping::ActionModifier::INVALID;
-
-		string keyStr(results[2]);
-
-		Mapping::EventModifier evtMod = results[4].str().empty() ? Mapping::EventModifier::None :
-			results[4].str()[0] == '\\' ? Mapping::EventModifier::StartPress :
-			results[4].str()[0] == '+'  ? Mapping::EventModifier::TurboPress :
-			results[4].str()[0] == '/'  ? Mapping::EventModifier::ReleasePress :
-			results[4].str()[0] == '\'' ? Mapping::EventModifier::TapPress :
-			results[4].str()[0] == '_' ? Mapping::EventModifier::HoldPress :
-			Mapping::EventModifier::INVALID;
-
-		string leftovers(results[5]);
-
-		KeyCode key(keyStr);
-		if (evtMod == Mapping::EventModifier::None)
-		{
-			evtMod = count == 0 ? (leftovers.empty() ? Mapping::EventModifier::StartPress : Mapping::EventModifier::TapPress) :
-				                         (count == 1 ? Mapping::EventModifier::HoldPress  : Mapping::EventModifier::None);
-		}
-
-		// Some exceptions :(
-		if (key.code == COMMAND_ACTION && actMod == Mapping::ActionModifier::None)
-		{
-			// Any command actions are instant by default
-			actMod = Mapping::ActionModifier::Instant;
-		}
-		else if (key.code == CALIBRATE && actMod == Mapping::ActionModifier::None &&
-			(evtMod == Mapping::EventModifier::TapPress || evtMod == Mapping::EventModifier::ReleasePress) )
-		{
-			// Calibrate only makes sense on tap or release if it toggles. Also preserves legacy.
-			actMod = Mapping::ActionModifier::Toggle;
-		}
-
-		if (key.code == 0 ||
-			key.code == COMMAND_ACTION && actMod != Mapping::ActionModifier::Instant ||
-			actMod == Mapping::ActionModifier::INVALID ||
-			evtMod == Mapping::EventModifier::INVALID ||
-			evtMod == Mapping::EventModifier::None && count >= 2 ||
-			evtMod == Mapping::EventModifier::ReleasePress && actMod == Mapping::ActionModifier::None ||
-			!mapping.AddMapping(key, evtMod, actMod))
-		{
-			//error!!!
-			in.setstate(in.failbit);
-			break;
-		}
-		else
-		{
-			// build string rep
-			if (actMod != Mapping::ActionModifier::None)
-			{
-				ss << actMod << " ";
-			}
-			ss << key.name;
-			if (count != 0 || !leftovers.empty() || evtMod != Mapping::EventModifier::StartPress) // Don't display event modifier when using default binding on single key
-			{
-				ss << " on " << evtMod;
-			}
-		}
-		valueName = leftovers;
-		count++;
-	} // Next item
-
-	mapping.description = ss.str();
-
-	return in;
-}
-
-bool operator ==(const Mapping &lhs, const Mapping &rhs)
-{
-	// Very flawfull :(
-	return lhs.command == rhs.command;
-}
-
-Mapping::Mapping(in_string mapping)
-{
-	stringstream ss(mapping);
-	ss >> *this;
-	if (ss.fail())
-	{
-		clear();
-	}
-}
-
-void Mapping::ProcessEvent(BtnEvent evt, DigitalButton *button, in_string displayName) const
-{
-	// cout << button._id << " processes event " << evt << endl;
-	auto entry = eventMapping.find(evt);
-	if (entry != eventMapping.end() && entry->second) // Skip over empty entries
-	{
-		switch (evt)
-		{
-		case BtnEvent::OnPress:
-			cout << displayName << ": true" << endl;
-			break;
-		case BtnEvent::OnRelease:
-		case BtnEvent::OnHoldRelease:
-			cout << displayName << ": false" << endl;
-			break;
-		case BtnEvent::OnTap:
-			cout << displayName << ": tapped" << endl;
-			break;
-		case BtnEvent::OnHold:
-			cout << displayName << ": held" << endl;
-			break;
-		case BtnEvent::OnTurbo:
-			cout << displayName << ": turbo" << endl;
-			break;
-		}
-		//cout << button._id << " processes event " << evt << endl;
-		if(entry->second)
-			entry->second(button);
-	}
-}
-
-void Mapping::InsertEventMapping(BtnEvent evt, OnEventAction action)
-{
-	auto existingActions = eventMapping.find(evt);
-	eventMapping[evt] = existingActions == eventMapping.end() ? action :
-		bind(&RunAllActions, placeholders::_1, 2, existingActions->second, action); // Chain with already existing mapping, if any
-}
+JSMVariable<ControllerScheme> virtual_controller = JSMVariable<ControllerScheme>(ControllerScheme::NONE);
+JSMSetting<TriggerMode> touch_ds_mode = JSMSetting<TriggerMode>(SettingID::TOUCHPAD_DUAL_STAGE_MODE, TriggerMode::NO_SKIP);
+JSMSetting<Switch> rumble_enable = JSMSetting<Switch>(SettingID::RUMBLE, Switch::ON);
+JSMSetting<Switch> adaptive_trigger = JSMSetting<Switch>(SettingID::ADAPTIVE_TRIGGER, Switch::ON );
+JSMSetting<AdaptiveTriggerSetting> left_trigger_effect = JSMSetting<AdaptiveTriggerSetting>(SettingID::LEFT_TRIGGER_EFFECT, AdaptiveTriggerSetting{});
+JSMSetting<AdaptiveTriggerSetting> right_trigger_effect = JSMSetting<AdaptiveTriggerSetting>(SettingID::RIGHT_TRIGGER_EFFECT, AdaptiveTriggerSetting{});
+JSMVariable<int> left_trigger_offset = JSMVariable<int>(25);
+JSMVariable<int> left_trigger_range = JSMVariable<int>(150);
+JSMVariable<int> right_trigger_offset = JSMVariable<int>(25);
+JSMVariable<int> right_trigger_range = JSMVariable<int>(150);
+JSMVariable<Switch> auto_calibrate_gyro = JSMVariable<Switch>(Switch::OFF);
+JSMSetting<float> left_stick_undeadzone_inner = JSMSetting<float>(SettingID::LEFT_STICK_UNDEADZONE_INNER, 0.f);
+JSMSetting<float> left_stick_undeadzone_outer = JSMSetting<float>(SettingID::LEFT_STICK_UNDEADZONE_OUTER, 0.f);
+JSMSetting<float> left_stick_unpower = JSMSetting<float>(SettingID::LEFT_STICK_UNPOWER, 0.f);
+JSMSetting<float> right_stick_undeadzone_inner = JSMSetting<float>(SettingID::RIGHT_STICK_UNDEADZONE_INNER, 0.f);
+JSMSetting<float> right_stick_undeadzone_outer = JSMSetting<float>(SettingID::RIGHT_STICK_UNDEADZONE_OUTER, 0.f);
+JSMSetting<float> right_stick_unpower = JSMSetting<float>(SettingID::RIGHT_STICK_UNPOWER, 0.f);
+JSMSetting<float> left_stick_virtual_scale = JSMSetting<float>(SettingID::LEFT_STICK_VIRTUAL_SCALE, 1.f);
+JSMSetting<float> right_stick_virtual_scale = JSMSetting<float>(SettingID::RIGHT_STICK_VIRTUAL_SCALE, 1.f);
+JSMSetting<float> wind_stick_range = JSMSetting<float>(SettingID::WIND_STICK_RANGE, 900.f);
+JSMSetting<float> wind_stick_power = JSMSetting<float>(SettingID::WIND_STICK_POWER, 1.f);
+JSMSetting<float> unwind_rate = JSMSetting<float>(SettingID::UNWIND_RATE, 1800.f);
+JSMSetting<GyroOutput> gyro_output = JSMSetting<GyroOutput>(SettingID::GYRO_OUTPUT, GyroOutput::MOUSE);
+JSMSetting<GyroOutput> flick_stick_output = JSMSetting<GyroOutput>(SettingID::FLICK_STICK_OUTPUT, GyroOutput::MOUSE);
 
 JSMVariable<PathString> currentWorkingDir = JSMVariable<PathString>(PathString());
 vector<JSMButton> grid_mappings; // array of virtual buttons on the touchpad grid
@@ -1231,6 +627,20 @@ public:
 			case SettingID::TOUCH_RING_MODE:
 				opt = GetOptionalSetting<E>(touch_stick_mode, *activeChord);
 				break;
+			case SettingID::TOUCHPAD_DUAL_STAGE_MODE:
+				opt = GetOptionalSetting<E>(touch_ds_mode, *activeChord);
+				break;
+			case SettingID::RUMBLE:
+				opt = GetOptionalSetting<E>(rumble_enable, *activeChord);
+				break;
+			case SettingID::ADAPTIVE_TRIGGER:
+				opt = GetOptionalSetting<E>(adaptive_trigger, *activeChord);
+				break;
+			case SettingID::GYRO_OUTPUT:
+				opt = GetOptionalSetting<E>(gyro_output, *activeChord);
+				break;
+			case SettingID::FLICK_STICK_OUTPUT:
+				opt = GetOptionalSetting<E>(flick_stick_output, *activeChord);
 				break;
 			}
 			if (opt)
@@ -1651,13 +1061,50 @@ public:
 private:
 	bool isSoftPullPressed(int triggerIndex, float triggerPosition)
 	{
-		DigitalButton *button = index < ButtonID::SIZE ? &buttons[int(index)] :
-		touchpadIndex >= 0 && touchpadIndex < touchpads.size() ? &touchpads[touchpadIndex].buttons[int(index) - FIRST_TOUCH_BUTTON] :
-		index >= ButtonID::T1 ? &gridButtons[int(index) - int(ButtonID::T1)] : throw exception("What index is this?");
-		return button;
+		float threshold = getSetting(SettingID::TRIGGER_THRESHOLD);
+		if (platform_controller_type == JS_TYPE_DS && getSetting<Switch>(SettingID::ADAPTIVE_TRIGGER) != Switch::OFF)
+			threshold = max(0.f, threshold); // hair trigger disabled on dual sense when adaptive triggers are active
+		if (threshold >= 0)
+		{
+			return triggerPosition > threshold;
+		}
+		// else HAIR TRIGGER
+
+		// Calculate 3 sample averages with the last MAGIC_TRIGGER_SMOOTHING samples + new sample
+		float sum = 0.f;
+		for_each(prevTriggerPosition[triggerIndex].begin(), prevTriggerPosition[triggerIndex].begin() + 3, [&sum](auto data) { sum += data; });
+		float avg_tm3 = sum / 3.0f;
+		sum = sum - *(prevTriggerPosition[triggerIndex].begin()) + *(prevTriggerPosition[triggerIndex].end() - 2);
+		float avg_tm2 = sum / 3.0f;
+		sum = sum - *(prevTriggerPosition[triggerIndex].begin() + 1) + *(prevTriggerPosition[triggerIndex].end() - 1);
+		float avg_tm1 = sum / 3.0f;
+		sum = sum - *(prevTriggerPosition[triggerIndex].begin() + 2) + triggerPosition;
+		float avg_t0 = sum / 3.0f;
+		//if (avg_t0 > 0) COUT << "Trigger: " << avg_t0 << endl;
+
+		// Soft press is pressed if we got three averaged samples in a row that are pressed
+		bool isPressed;
+		if (avg_t0 > avg_tm1 && avg_tm1 > avg_tm2 && avg_tm2 > avg_tm3)
+		{
+			//DEBUG_LOG << "Hair Trigger pressed: " << avg_t0 << " > " << avg_tm1 << " > " << avg_tm2 << " > " << avg_tm3 << endl;
+			isPressed = true;
+		}
+		else if (avg_t0 < avg_tm1 && avg_tm1 < avg_tm2 && avg_tm2 < avg_tm3)
+		{
+			//DEBUG_LOG << "Hair Trigger released: " << avg_t0 << " < " << avg_tm1 << " < " << avg_tm2 << " < " << avg_tm3 << endl;
+			isPressed = false;
+		}
+		else
+		{
+			isPressed = triggerState[triggerIndex] != DstState::NoPress && triggerState[triggerIndex] != DstState::QuickSoftTap;
+		}
+		prevTriggerPosition[triggerIndex].pop_front();
+		prevTriggerPosition[triggerIndex].push_back(triggerPosition);
+		return isPressed;
 	}
 
-	void handleTriggerChange(ButtonID softIndex, ButtonID fullIndex, TriggerMode mode, float position)
+public:
+	void handleButtonChange(ButtonID id, bool pressed, int touchpadID = -1)
 	{
 		DigitalButton *button = int(id) <= LAST_ANALOG_TRIGGER ? &buttons[int(id)] :
 		  touchpadID >= 0 && touchpadID < touchpads.size()     ? &touchpads[touchpadID].buttons.find(id)->second :
@@ -3027,45 +2474,59 @@ void TouchStick::handleTouchStickChange(shared_ptr<JoyShock> js, bool down, shor
 	_prevDown = down;
 }
 
-void DisplayTouchInfo(optional<FloatXY> xy, optional<FloatXY> prevXY = nullopt)
+void DisplayTouchInfo(int id, optional<FloatXY> xy, optional<FloatXY> prevXY = nullopt)
 {
 	if (xy)
 	{
 		if (!prevXY)
 		{
-			cout << "New touch at " << *xy << endl;
+			cout << "New touch " << id << " at " << *xy << endl;
 		}
 		else if (fabsf(xy->x() - prevXY->x()) > FLT_EPSILON || fabsf(xy->y() - prevXY->y()) > FLT_EPSILON)
 		{
-			cout << "Touch moved to " << *xy << endl;
+			cout << "Touch " << id << " moved to " << *xy << endl;
 		}
 	}
 	else if (prevXY)
 	{
-		cout << "Touch has been released" << endl;
+		cout << "Touch " << id << " has been released" << endl;
 	}
 }
 
 void TouchCallback(int jcHandle, TOUCH_STATE newState, TOUCH_STATE prevState, float delta_time)
 {
+
 	//if (current.t0Down || previous.t0Down)
 	//{
-	//	DisplayTouchInfo(current.t0Down ? current.t0Id : previous.t0Id, 
+	//	DisplayTouchInfo(current.t0Down ? current.t0Id : previous.t0Id,
 	//		current.t0Down ? optional<FloatXY>({ current.t0X, current.t0Y }) : nullopt,
 	//		previous.t0Down ? optional<FloatXY>({ previous.t0X, previous.t0Y }) : nullopt);
 	//}
 
-	//if (point1.isDown() || js->prevTouchPoints[1].isDown())
+	//if (current.t1Down || previous.t1Down)
 	//{
-	//	DisplayTouchInfo(
-	//		point1.isDown() ? optional<FloatXY>({ point1.posX, point1.posY }) : nullopt,
-	//		js->prevTouchPoints[1].isDown() ? optional<FloatXY>({ js->prevTouchPoints[1].posX, js->prevTouchPoints[1].posY }) : nullopt);
+	//	DisplayTouchInfo(current.t1Down ? current.t1Id : previous.t1Id,
+	//		current.t1Down ? optional<FloatXY>({ current.t1X, current.t1Y }) : nullopt,
+	//		previous.t1Down ? optional<FloatXY>({ previous.t1X, previous.t1Y }) : nullopt);
 	//}
 
-	JoyShock *js = getJoyShockFromHandle(jcHandle);
-	if (!js)
+	shared_ptr<JoyShock> js = handle_to_joyshock[jcHandle];
+	int tpSizeX, tpSizeY;
+	if (!js || jsl->GetTouchpadDimension(jcHandle, tpSizeX, tpSizeY) == false)
 		return;
-	js->callback_lock.lock();
+
+	lock_guard guard(js->_context->callback_lock);
+
+	TOUCH_POINT point0, point1;
+
+	point0.posX = newState.t0Down ? newState.t0X : -1.f; // Absolute position in percentage
+	point0.posY = newState.t0Down ? newState.t0Y : -1.f;
+	point0.movX = js->prevTouchState.t0Down ? (newState.t0X - js->prevTouchState.t0X) * tpSizeX : 0.f; // Relative movement in unit
+	point0.movY = js->prevTouchState.t0Down ? (newState.t0Y - js->prevTouchState.t0Y) * tpSizeY : 0.f;
+	point1.posX = newState.t1Down ? newState.t1X : -1.f;
+	point1.posY = newState.t1Down ? newState.t1Y : -1.f;
+	point1.movX = js->prevTouchState.t1Down ? (newState.t1X - js->prevTouchState.t1X) * tpSizeX : 0.f;
+	point1.movY = js->prevTouchState.t1Down ? (newState.t1Y - js->prevTouchState.t1Y) * tpSizeY : 0.f;
 
 	auto mode = js->getSetting<TouchpadMode>(SettingID::TOUCHPAD_MODE);
 	// js->handleButtonChange(ButtonID::TOUCH, point0.isDown() || point1.isDown()); // This is handled by dual stage "trigger" step
@@ -5058,7 +4519,56 @@ int main(int argc, char *argv[])
 	commandRegistry.Add((new JSMAssignment<Switch>("HIDE_MINIMIZED", hide_minimized))
 	                      ->SetHelp("JSM will be hidden in the notification area when minimized if this setting is ON. Otherwise it stays in the taskbar."));
 	commandRegistry.Add((new JSMAssignment<FloatXY>(scroll_sens))
-		->SetHelp("Scrolling sensitivity for sticks and touchpad in degrees. Second value is used for touchpad pinch-strech gestures."));
+	                      ->SetHelp("Scrolling sensitivity for sticks."));
+	commandRegistry.Add((new JSMAssignment<Switch>(rumble_enable))
+	                      ->SetHelp("Disable the rumbling feature from vigem. Valid values are ON and OFF."));
+	commandRegistry.Add((new JSMAssignment<Switch>(adaptive_trigger))
+	                      ->SetHelp("Control the adaptive trigger feature of the DualSense. Valid values are ON and OFF."));
+	commandRegistry.Add((new JSMAssignment<AdaptiveTriggerSetting>(left_trigger_effect))
+	                      ->SetHelp("Sets the adaptive trigger effect on the left trigger:\n"\
+									"OFF: No effect\n"\
+									"ON: Use effect generated by JSM depending on ZL_MODE\n"\
+									"RESISTANCE start[0 9] force[0 8]: Some resistance starting at point\n"\
+									"BOW start[0 8] end[0 8] forceStart[0 8] forceEnd[0 8]: increasingly strong resistance\n"\
+									"GALLOPING start[0 8] end[0 9] foot1[0 6] foot2[0 7] freq[Hz]: Two pulses repeated periodically\n"\
+									"SEMI_AUTOMATIC start[2 7] end[0 8] force[0 8]: Trigger effect\n"\
+									"AUTOMATIC start[0 9] strength[0 8] freq[Hz]: Regular pulse effect\n"\
+									"MACHINE start[0 9] end[0 9] force1[0 7] force2[0 7] freq[Hz] period: Irregular pulsing"));
+	commandRegistry.Add((new JSMAssignment<AdaptiveTriggerSetting>(right_trigger_effect))
+	                      ->SetHelp("Sets the adaptive trigger effect on the right trigger:\n"\
+									"OFF: No effect\n"\
+									"ON: Use effect generated by JSM depending on ZR_MODE\n"\
+									"RESISTANCE start[0 9] force[0 8]: Some resistance starting at point\n"\
+									"BOW start[0 8] end[0 8] forceStart[0 8] forceEnd[0 8]: increasingly strong resistance\n"\
+									"GALLOPING start[0 8] end[0 9] foot1[0 6] foot2[0 7] freq[Hz]: Two pulses repeated periodically\n"\
+									"SEMI_AUTOMATIC start[2 7] end[0 8] force[0 8]: Trigger effect\n"\
+									"AUTOMATIC start[0 9] strength[0 8] freq[Hz]: Regular pulse effect\n"\
+									"MACHINE start[0 9] end[0 9] force1[0 7] force2[0 7] freq[Hz] period: Irregular pulsing"));
+	commandRegistry.Add((new JSMAssignment<TriggerMode>(touch_ds_mode))
+	                      ->SetHelp("Dual stage mode for the touchpad TOUCH and CAPTURE (i.e. click) bindings."));
+	commandRegistry.Add((new JSMMacro("CLEAR"))->SetMacro(bind(&ClearConsole))->SetHelp("Removes all text in the console screen"));
+	commandRegistry.Add((new JSMMacro("CALIBRATE_TRIGGERS"))->SetMacro([](JSMMacro *, in_string) {
+		                                                        triggerCalibrationStep = 1;
+		                                                        return true;
+	                                                        })
+	                      ->SetHelp("Starts the trigger calibration procedure for the dualsense triggers."));
+	commandRegistry.Add((new JSMAssignment<int>(magic_enum::enum_name(SettingID::LEFT_TRIGGER_OFFSET).data(), left_trigger_offset)));
+	commandRegistry.Add((new JSMAssignment<int>(magic_enum::enum_name(SettingID::RIGHT_TRIGGER_OFFSET).data(), right_trigger_offset)));
+	commandRegistry.Add((new JSMAssignment<int>(magic_enum::enum_name(SettingID::LEFT_TRIGGER_RANGE).data(), left_trigger_range)));
+	commandRegistry.Add((new JSMAssignment<int>(magic_enum::enum_name(SettingID::RIGHT_TRIGGER_RANGE).data(), right_trigger_range)));
+	commandRegistry.Add((new JSMAssignment<Switch>("AUTO_CALIBRATE_GYRO", auto_calibrate_gyro))
+	                      ->SetHelp("Gyro calibration happens automatically when this setting is ON. Otherwise you'll need to calibrate the gyro manually when using gyro aiming."));
+	commandRegistry.Add((new JSMAssignment<AxisSignPair>(left_stick_axis))
+	                      ->SetHelp("When in AIM mode, set stick X axis inversion. Valid values are the following:\nSTANDARD or 1, and INVERTED or -1"));
+	commandRegistry.Add((new JSMAssignment<AxisSignPair>(right_stick_axis))
+	                      ->SetHelp("When in AIM mode, set stick X axis inversion. Valid values are the following:\nSTANDARD or 1, and INVERTED or -1"));
+	commandRegistry.Add((new JSMAssignment<AxisSignPair>(motion_stick_axis))
+	                      ->SetHelp("When in AIM mode, set stick X axis inversion. Valid values are the following:\nSTANDARD or 1, and INVERTED or -1"));
+	commandRegistry.Add((new JSMAssignment<AxisSignPair>(touch_stick_axis))
+	                      ->SetHelp("When in AIM mode, set stick X axis inversion. Valid values are the following:\nSTANDARD or 1, and INVERTED or -1"));
+
+	commandRegistry.Add(new JSMAssignment<AxisMode>(aim_x_sign, true));
+	commandRegistry.Add(new JSMAssignment<AxisMode>(aim_y_sign, true));
 
 	commandRegistry.Add((new JSMAssignment<float>(left_stick_undeadzone_inner))
 	                      ->SetHelp("When outputting as a virtual controller, account for this much inner deadzone being applied in the target game. This value can only be between 0 and 1 but it should be small."));

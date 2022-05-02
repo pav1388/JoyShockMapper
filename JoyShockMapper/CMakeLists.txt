@@ -18,6 +18,12 @@ add_executable (
     src/operators.cpp
     src/CmdRegistry.cpp
     src/quatMaths.cpp
+    src/ButtonHelp.cpp
+ 	src/DigitalButton.cpp
+	src/MotionImpl.cpp
+	src/Mapping.cpp
+    src/TriggerEffectGenerator.cpp
+    include/TriggerEffectGenerator.h
     include/InputHelpers.h
     include/PlatformDefinitions.h
     include/TrayIcon.h
@@ -70,11 +76,13 @@ if (WINDOWS)
     include_external_msproject(ViGEmClient 
       "${PROJECT_BINARY_DIR}/_deps/vigemclient-src/src/ViGEmClient.vcxproj")
 
+#build-jsm-win64-jsl\
+
     set_target_properties(ViGEmClient PROPERTIES
       MAP_IMPORTED_CONFIG_DEBUG DEBUG_LIB
       MAP_IMPORTED_CONFIG_RELEASE RELEASE_LIB
       VS_PLATFORM_TOOLSET "v141"
-      IMPORTED_LOCATION "${PROJECT_BINARY_DIR}/_deps/vigemclient-src/lib/${CMAKE_BUILD_TYPE}/$(PlatformShortName)/ViGEmClient.lib"
+      IMPORTED_LOCATION "${PROJECT_BINARY_DIR}/lib/${CMAKE_BUILD_TYPE}/$(PlatformShortName)/ViGEmClient.lib"
       INTERFACE_INCLUDE_DIRECTORIES "${PROJECT_BINARY_DIR}/_deps/vigemclient-src/include"
     )
     
@@ -83,7 +91,7 @@ if (WINDOWS)
     target_link_libraries (
         ${BINARY_NAME} PRIVATE
          debug "${PROJECT_BINARY_DIR}/_deps/vigemclient-src/lib/debug/$(PlatformShortName)/ViGEmClient.lib"
-		 optimized "${PROJECT_BINARY_DIR}/lib/release/$(PlatformShortName)/ViGEmClient.lib"
+		 optimized "${PROJECT_BINARY_DIR}/_deps/vigemclient-src/lib/release/$(PlatformShortName)/ViGEmClient.lib"
     )
     
     target_include_directories (
@@ -157,12 +165,34 @@ target_include_directories (
     "${PROJECT_BINARY_DIR}/${PROJECT_NAME}/include"
 )
 
-CPMAddPackage (
-    NAME JoyShockLibrary
-    GITHUB_REPOSITORY Electronicks/JoyShockLibrary
-    #VERSION 2.1.0
-    GIT_TAG d225824b3922485bc8364c21ad513971e6ed1d04
-)
+if(SDL OR NOT DEFINED SDL)
+	set(SDL_HIDAPI ON)
+	CPMAddPackage (
+		NAME SDL2
+		GITHUB_REPOSITORY libsdl-org/SDL
+		GIT_TAG release-2.0.20
+	)
+	
+	set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+
+
+	target_link_libraries (
+		${BINARY_NAME} PRIVATE
+		Platform::Dependencies
+		SDL2
+	)
+
+	install (
+		TARGETS ${BINARY_NAME} SDL2
+		RUNTIME DESTINATION ${PACKAGE_DIR}
+	)
+else()
+	# JoyShockLibrary
+	CPMAddPackage (
+		NAME JoyShockLibrary
+		GITHUB_REPOSITORY Electronicks/JoyShockLibrary
+		GIT_TAG steamcontroller
+	)
 
 	target_link_libraries (
 		${BINARY_NAME} PRIVATE

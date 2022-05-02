@@ -89,49 +89,60 @@ constexpr bool isControllerKey(WORD code)
 
 enum class ButtonID
 {
-	INVALID =		-2, // Represents an error in user input
-	NONE,		//  Represents no button when explicitely stated by the user. Not to be confused with NO_HOLD_MAPPED which is no action bound.
-	UP,			// = 0 as the first index
-	DOWN,		
-	LEFT,		
-	RIGHT,		
-	L,			
-	ZL,			
-	MINUS,		
-	E,			
-	S,			
-	N,			
-	W,			
-	R,			
-	ZR,			
-	PLUS,		
-	HOME,		
-	SL,			
-	SR,			
-	L3,			
-	R3,			
-	LUP,		
-	LDOWN,		
-	LLEFT,		
-	LRIGHT,		
-	LRING,		
-	RUP,		
-	RDOWN,		
-	RLEFT,		
-	RRIGHT,		
-	RRING,		
-	MUP,        
-	MDOWN,		
-	MLEFT,		
-	MRIGHT,		
-	MRING,		
-	LEAN_LEFT,  
-	LEAN_RIGHT, 
-	TOUCH,		// Touch anywhere on the touchpad
-	ZLF,		// = FIRST_ANALOG_TRIGGER
-				// insert more analog triggers here
-	ZRF,		// =  LAST_ANALOG_TRIGGER
-	SIZE,		// Not a button
+	INVALID = -2, // Represents an error in user input
+	NONE,         //  Represents no button when explicitely stated by the user. Not to be confused with NO_HOLD_MAPPED which is no action bound.
+	UP,           // = 0 as the first index
+	DOWN,
+	LEFT,
+	RIGHT,
+	L,
+	ZL,
+	MINUS,
+	E,
+	S,
+	N,
+	W,
+	R,
+	ZR,
+	PLUS,
+	HOME,
+	LSL,
+	LSR,
+	RSL,
+	RSR,
+	L3,
+	R3,
+	LEAN_LEFT,
+	LEAN_RIGHT,
+	MIC,
+	LUP,
+	LDOWN,
+	LLEFT,
+	LRIGHT,
+	LRING,
+	RUP,
+	RDOWN,
+	RLEFT,
+	RRIGHT,
+	RRING,
+	MUP,
+	MDOWN,
+	MLEFT,
+	MRIGHT,
+	MRING,
+	TOUCH,   // Touch anywhere on the touchpad
+	ZLF,     // = FIRST_ANALOG_TRIGGER
+	CAPTURE, // Full press of touchpad touch + press
+	// insert more analog triggers here
+	ZRF,  // =  LAST_ANALOG_TRIGGER
+
+	TUP,
+	TDOWN,
+	TLEFT,
+	TRIGHT,
+	TRING,
+
+	SIZE, // Not a button
 
 	// Virtual buttons configured on the touchpad. The number of buttons vary dynamically, but they each need a different ID
 	T1,  // FIRST_TOUCH_BUTTON
@@ -258,6 +269,30 @@ enum class SettingID
 	TOUCHPAD_SENS,
 	LIGHT_BAR,
 	SCROLL_SENS,
+	VIRTUAL_CONTROLLER,
+	RUMBLE,
+	TOUCHPAD_DUAL_STAGE_MODE,
+	CLEAR,
+	ADAPTIVE_TRIGGER,
+	LEFT_TRIGGER_EFFECT,
+	RIGHT_TRIGGER_EFFECT,
+	LEFT_TRIGGER_OFFSET,
+	LEFT_TRIGGER_RANGE,
+	RIGHT_TRIGGER_OFFSET,
+	RIGHT_TRIGGER_RANGE,
+	LEFT_STICK_UNDEADZONE_INNER,
+	LEFT_STICK_UNDEADZONE_OUTER,
+	LEFT_STICK_UNPOWER,
+	RIGHT_STICK_UNDEADZONE_INNER,
+	RIGHT_STICK_UNDEADZONE_OUTER,
+	RIGHT_STICK_UNPOWER,
+	LEFT_STICK_VIRTUAL_SCALE,
+	RIGHT_STICK_VIRTUAL_SCALE,
+	WIND_STICK_RANGE,
+	WIND_STICK_POWER,
+	UNWIND_RATE,
+	GYRO_OUTPUT,
+	FLICK_STICK_OUTPUT,
 };
 
 // constexpr are like #define but with respect to typeness
