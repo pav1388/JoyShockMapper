@@ -9,11 +9,12 @@
 #include <fstream>
 
 JSMCommand::JSMCommand(in_string name)
-	: _parse()
-	, _help("Error in entering the command. Enter README to bring up the user manual.")
-	, _taskOnDestruction()
-	, _name(name)
-{}
+  : _parse()
+  , _help("Enter README to bring up the user manual.")
+  , _taskOnDestruction()
+  , _name(name)
+{
+}
 
 JSMCommand::~JSMCommand()
 {
@@ -41,21 +42,35 @@ unique_ptr<JSMCommand> JSMCommand::GetModifiedCmd(char op, in_string chord)
 bool JSMCommand::ParseData(in_string arguments)
 {
 	_ASSERT_EXPR(_parse, L"There is no function defined to parse this command.");
-	if (arguments.compare("HELP") == 0 || !_parse(this, arguments))
+	if (arguments.compare("HELP") == 0)
 	{
 		// Parsing has failed. Show help.
-		cout << _help << endl;
+		COUT << _help << endl;
+	}
+	else if (!_parse(this, arguments))
+	{
+		CERR << _help << endl;
 	}
 	return true; // Command is completely processed
 }
 
 CmdRegistry::CmdRegistry()
 {
+	NONAME = { 0b01001011, 0b01001111 };
 }
 
-
-bool CmdRegistry::loadConfigFile(in_string fileName) {
+bool CmdRegistry::loadConfigFile(string fileName)
+{
 	// https://stackoverflow.com/questions/2602013/read-whole-ascii-file-into-c-stdstring
+	auto comment = fileName.find_first_of('#');
+	if (comment != string::npos)
+	{
+		fileName = fileName.substr(0, comment - 1);
+	}
+	// Trim away quotation marks from drag and drop
+	if (*fileName.begin() == '\"' && *(fileName.end() - 1) == '\"')
+		fileName = fileName.substr(1, fileName.size() - 2);
+
 	ifstream file(fileName);
 	if (!file.is_open())
 	{
@@ -63,10 +78,12 @@ bool CmdRegistry::loadConfigFile(in_string fileName) {
 	}
 	if (file)
 	{
-		printf("Loading commands from file %s\n", fileName.c_str());
+		COUT << "Loading commands from file ";
+		COUT_INFO << fileName << endl;
 		// https://stackoverflow.com/questions/6892754/creating-a-simple-configuration-file-and-parser-in-c
 		string line;
-		while (getline(file, line)) {
+		while (getline(file, line))
+		{
 			processLine(line);
 		}
 		file.close();
@@ -77,18 +94,21 @@ bool CmdRegistry::loadConfigFile(in_string fileName) {
 
 string_view CmdRegistry::strtrim(std::string_view str)
 {
-	if (str.empty()) return {};
+	if (str.empty())
+		return {};
 
 	while (isspace(str[0]))
 	{
 		str.remove_prefix(1);
-		if (str.empty()) return {};
+		if (str.empty())
+			return {};
 	}
 
 	while (isspace(str.back()))
 	{
 		str.remove_suffix(1);
-		if (str.empty()) return {};
+		if (str.empty())
+			return {};
 	}
 
 	return str;
@@ -212,7 +232,9 @@ void CmdRegistry::processLine(const string& line)
 
 		if (!hasProcessed)
 		{
-			cout << "Unrecognized command: \"" << trimmedLine << "\"" << endl << "Enter HELP to display all commands." << endl;
+			CERR << "Unrecognized command: \"" << trimmedLine << "\"\nEnter ";
+			COUT_INFO << "HELP";
+			CERR << " to display all commands." << endl;
 		}
 	}
 	// else ignore empty lines
@@ -247,13 +269,19 @@ bool JSMMacro::DefaultParser(JSMCommand* cmd, in_string arguments)
 	auto macroCmd = static_cast<JSMMacro*>(cmd);
 	// Developper protection to remind you to set a parser.
 	_ASSERT_EXPR(macroCmd->_macro, L"No Macro was set for this command.");
-	macroCmd->_macro(macroCmd, arguments);
+	if (!macroCmd->_macro(macroCmd, arguments) && !macroCmd->_help.empty())
+	{
+		COUT << macroCmd->_help << endl;
+		COUT << "The "; // Parsing has failed. Show help.
+		COUT_INFO << "README";
+		COUT << " command can lead you to further details on this command." << endl;
+	}
 	return true;
 }
 
 JSMMacro::JSMMacro(in_string name)
-	: JSMCommand(name)
-	, _macro()
+  : JSMCommand(name)
+  , _macro()
 {
 	SetParser(&DefaultParser);
 }

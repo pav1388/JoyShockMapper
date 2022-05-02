@@ -1,17 +1,64 @@
 #include <cstdlib>
 
 #include "JoyShockMapper.h"
+#include "PlatformDefinitions.h"
 #include "InputHelpers.h"
 
-const char *AUTOLOAD_FOLDER() {
-	return _strdup((GetCWD() + "\\Autoload\\").c_str());
+constexpr uint16_t DEFAULT_COLOR = FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE; // White
+#define FOREGROUND_YELLOW FOREGROUND_RED | FOREGROUND_GREEN
+
+template<std::ostream *stdio, uint16_t color>
+class ColorStream : public stringbuf
+{
+public:
+	ColorStream() { }
+	// print the string on the stdio
+	virtual ~ColorStream()
+	{
+		std::lock_guard<std::mutex> guard(print_mutex);
+		HANDLE hStdout = GetStdHandle(STD_ERROR_HANDLE);
+		SetConsoleTextAttribute(hStdout, color);
+		(*stdio) << str();
+		SetConsoleTextAttribute(hStdout, DEFAULT_COLOR);
+	}
 };
 
-const char *GYRO_CONFIGS_FOLDER() {
+streambuf *Log::makeBuffer(Level level)
+{
+	switch (level)
+	{
+	case Level::ERR:
+		return new ColorStream<&std::cerr, FOREGROUND_RED | FOREGROUND_INTENSITY>();
+	case Level::WARN:
+		return new ColorStream<&cout, FOREGROUND_YELLOW | FOREGROUND_INTENSITY>();
+	case Level::INFO:
+		return new ColorStream<&cout, FOREGROUND_BLUE | FOREGROUND_INTENSITY>();
+#if defined(NDEBUG) // release
+	case Level::UT:
+		return new NullBuffer(); // unused
+#else
+	case Level::UT:
+		return new ColorStream<&cout, FOREGROUND_BLUE | FOREGROUND_RED>(); // purplish
+#endif
+	case Level::BOLD:
+		return new ColorStream<&cout, FOREGROUND_GREEN | FOREGROUND_INTENSITY>();
+	default:
+		return new ColorStream<&std::cout, FOREGROUND_GREEN>();
+	}
+}
+
+const char *AUTOLOAD_FOLDER()
+{
+	return _strdup((GetCWD() + "\\AutoLoad\\").c_str());
+};
+
+const char *GYRO_CONFIGS_FOLDER()
+{
 	return _strdup((GetCWD() + "\\GyroConfigs\\").c_str());
 };
 
-const char *BASE_JSM_CONFIG_FOLDER() {
+const char *BASE_JSM_CONFIG_FOLDER()
+{
 	return _strdup((GetCWD() + "\\").c_str());
 };
 
@@ -117,6 +164,26 @@ WORD nameToKey(const std::string &name)
 					return (character2 - '1') * 10 + VK_F10 + (character3 - '0');
 				}
 			}
+		}
+	}
+	if (length == 5)
+	{
+		auto pchar = name.c_str();
+		if (*pchar++ == 'R')
+		{
+			while (*pchar != '\0')
+			{
+				if (*pchar < '0' || *pchar > 'F' || (*pchar > '9' && *pchar < 'A'))
+				{
+					break;
+				}
+				pchar++;
+			}
+			if (*pchar == '\0')
+			{
+				return RUMBLE;
+			}
+			// Else it's not a rumble command. Could be RIGHT for example
 		}
 	}
 	if (length > 2 && name[0] == '"' && name[length - 1] == '"')
@@ -271,6 +338,10 @@ WORD nameToKey(const std::string &name)
 	{
 		return VK_SUBTRACT;
 	}
+	if (name.compare("SUBTRACT") == 0)
+	{
+		return VK_SUBTRACT;
+	}
 	if (name.compare("DIVIDE") == 0)
 	{
 		return VK_DIVIDE;
@@ -323,6 +394,10 @@ WORD nameToKey(const std::string &name)
 	{
 		return VK_MEDIA_PLAY_PAUSE;
 	}
+	if (name.compare(NONAME) == 0)
+	{
+		return VK_NONAME;
+	}
 	if (name.compare("NONE") == 0)
 	{
 		return NO_HOLD_MAPPED;
@@ -362,6 +437,78 @@ WORD nameToKey(const std::string &name)
 	if (name.compare("GYRO_OFF") == 0)
 	{
 		return GYRO_OFF_BIND;
+	}
+	if (name.compare("X_UP") == 0 || name.compare("PS_UP") == 0)
+	{
+		return X_UP;
+	}
+	if (name.compare("X_DOWN") == 0 || name.compare("PS_DOWN") == 0)
+	{
+		return X_DOWN;
+	}
+	if (name.compare("X_LEFT") == 0 || name.compare("PS_LEFT") == 0)
+	{
+		return X_LEFT;
+	}
+	if (name.compare("X_RIGHT") == 0 || name.compare("PS_RIGHT") == 0)
+	{
+		return X_RIGHT;
+	}
+	if (name.compare("X_LB") == 0 || name.compare("PS_L1") == 0)
+	{
+		return X_LB;
+	}
+	if (name.compare("X_RB") == 0 || name.compare("PS_R1") == 0)
+	{
+		return X_RB;
+	}
+	if (name.compare("X_X") == 0 || name.compare("PS_SQUARE") == 0)
+	{
+		return X_X;
+	}
+	if (name.compare("X_A") == 0 || name.compare("PS_CROSS") == 0)
+	{
+		return X_A;
+	}
+	if (name.compare("X_Y") == 0 || name.compare("PS_TRIANGLE") == 0)
+	{
+		return X_Y;
+	}
+	if (name.compare("X_B") == 0 || name.compare("PS_CIRCLE") == 0)
+	{
+		return X_B;
+	}
+	if (name.compare("X_LS") == 0 || name.compare("PS_L3") == 0)
+	{
+		return X_LS;
+	}
+	if (name.compare("X_RS") == 0 || name.compare("PS_R3") == 0)
+	{
+		return X_RS;
+	}
+	if (name.compare("X_BACK") == 0 || name.compare("PS_SHARE") == 0)
+	{
+		return X_BACK;
+	}
+	if (name.compare("X_START") == 0 || name.compare("PS_OPTIONS") == 0)
+	{
+		return X_START;
+	}
+	if (name.compare("X_GUIDE") == 0 || name.compare("PS_HOME") == 0)
+	{
+		return PS_HOME;
+	}
+	if (name.compare("PS_PAD_CLICK") == 0)
+	{
+		return PS_PAD_CLICK;
+	}
+	if (name.compare("X_RT") == 0 || name.compare("PS_R2") == 0)
+	{
+		return X_RT;
+	}
+	if (name.compare("X_LT") == 0 || name.compare("PS_L2") == 0)
+	{
+		return X_LT;
 	}
 	return 0x00;
 }

@@ -2,9 +2,16 @@
 
 #include <string>
 
+extern std::string NONAME;
+
 #ifdef _WIN32
 
 #include <Windows.h>
+#include <iostream>
+#include <sstream>
+#include <mutex>
+
+static std::mutex print_mutex;
 
 #define U(string) L##string
 
@@ -16,9 +23,10 @@ extern const char *AUTOLOAD_FOLDER();
 extern const char *GYRO_CONFIGS_FOLDER();
 extern const char *BASE_JSM_CONFIG_FOLDER();
 
-#elif defined (__linux__)
+#elif defined(__linux__)
 
 #include <cassert>
+#include <sstream>
 
 #define WINAPI
 #define VK_OEM_PLUS 0xBB
@@ -90,6 +98,7 @@ extern const char *BASE_JSM_CONFIG_FOLDER();
 #define VK_MBUTTON 0x04
 #define VK_XBUTTON1 0x05
 #define VK_XBUTTON2 0x06
+#define VK_NONAME 0xFC
 
 #define U(string) string
 #define _ASSERT_EXPR(condition, message) assert(condition)

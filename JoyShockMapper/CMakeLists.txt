@@ -6,8 +6,7 @@ git_describe(GIT_TAG --tags --dirty=_d)
 string(REGEX REPLACE "^v([0-9]+)\\..*" "\\1" JSM_VERSION_MAJOR "${GIT_TAG}")
 string(REGEX REPLACE "^v[0-9]+\\.([0-9]+).*" "\\1" JSM_VERSION_MINOR "${GIT_TAG}")
 string(REGEX REPLACE "^v[0-9]+\\.[0-9]+\\.([0-9]+).*" "\\1" JSM_VERSION_PATCH "${GIT_TAG}")
-string(REGEX REPLACE "^v[0-9]+\\.[0-9]+\\.[0-9]+(-?[0-9]*).*" "\\1" JSM_VERSION_TWEAK "${GIT_TAG}")
-set(JSM_VERSION "v${JSM_VERSION_MAJOR}.${JSM_VERSION_MINOR}.${JSM_VERSION_PATCH}${JSM_VERSION_TWEAK}")
+set(JSM_VERSION "v${JSM_VERSION_MAJOR}.${JSM_VERSION_MINOR}.${JSM_VERSION_PATCH}")
 
 message(STATUS "JSM version is " ${JSM_VERSION})
 
@@ -19,7 +18,6 @@ add_executable (
     src/operators.cpp
     src/CmdRegistry.cpp
     src/quatMaths.cpp
-	src/ButtonHelp.cpp
     include/InputHelpers.h
     include/PlatformDefinitions.h
     include/TrayIcon.h
@@ -30,44 +28,112 @@ add_executable (
     include/Whitelister.h
     include/JoyShockMapper.h
     include/ColorCodes.h
+    include/MotionIf.h
+	include/Gamepad.h
+	include/DigitalButton.h
+	include/JslWrapper.h
+	include/Mapping.h
 )
 
 if (WINDOWS)
+	if(SDL)
+		target_sources (
+				${BINARY_NAME} PRIVATE
+				src/SDL2Wrapper.cpp
+		)
+		add_definitions(-DSDL2)
+	else()
+		target_sources (
+				${BINARY_NAME} PRIVATE
+				src/JslWrapper.cpp
+		)
+	endif()
+
     target_sources (
         ${BINARY_NAME} PRIVATE
         src/win32/InputHelpers.cpp
-                                            include/win32/resource.h
         src/win32/PlatformDefinitions.cpp
-        src/win32/WindowsTrayIcon.cpp       include/win32/WindowsTrayIcon.h
-        src/win32/Whitelister.cpp
-        "Win32 Dialog.rc"
+        src/win32/WindowsTrayIcon.cpp        include/win32/WindowsTrayIcon.h
+        src/win32/Gamepad.cpp
+        src/win32/HidHideApi.cpp             include/HidHideApi.h
+        src/win32/HidHideWhitelister.cpp
+        "Win32 Dialog.rc"                    include/win32/resource.h
     )
 
-    set_target_properties (
-        ${BINARY_NAME}
-        PROPERTIES WIN32_EXECUTABLE ON
+    # ViGEmClient
+    CPMAddPackage (
+        NAME ViGEmClient
+        GITHUB_REPOSITORY ViGEm/ViGEmClient
+        VERSION 1.17.167.0
+    )
+    
+    include_external_msproject(ViGEmClient 
+      "${PROJECT_BINARY_DIR}/_deps/vigemclient-src/src/ViGEmClient.vcxproj")
+
+    set_target_properties(ViGEmClient PROPERTIES
+      MAP_IMPORTED_CONFIG_DEBUG DEBUG_LIB
+      MAP_IMPORTED_CONFIG_RELEASE RELEASE_LIB
+      VS_PLATFORM_TOOLSET "v141"
+      IMPORTED_LOCATION "${PROJECT_BINARY_DIR}/_deps/vigemclient-src/lib/${CMAKE_BUILD_TYPE}/$(PlatformShortName)/ViGEmClient.lib"
+      INTERFACE_INCLUDE_DIRECTORIES "${PROJECT_BINARY_DIR}/_deps/vigemclient-src/include"
+    )
+    
+    add_dependencies(${BINARY_NAME} ViGEmClient)
+    
+    target_link_libraries (
+        ${BINARY_NAME} PRIVATE
+         debug "${PROJECT_BINARY_DIR}/_deps/vigemclient-src/lib/debug/$(PlatformShortName)/ViGEmClient.lib"
+		 optimized "${PROJECT_BINARY_DIR}/lib/release/$(PlatformShortName)/ViGEmClient.lib"
+    )
+    
+    target_include_directories (
+        ${BINARY_NAME} PUBLIC
+        "${PROJECT_BINARY_DIR}/_deps/vigemclient-src/include"
     )
 
-    set_target_properties (
-        ${BINARY_NAME}
-        PROPERTIES VS_DEBUGGER_WORKING_DIRECTORY
-        "$(ProjectDir)/$(Configuration)/"
-    )
-
-    set (BUILD_SHARED_LIBS ON)
-
-    add_custom_command(
-        TARGET ${BINARY_NAME}
-        POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy
-            "$<TARGET_FILE:JoyShockLibrary>"
-            "$<TARGET_FILE_DIR:${PROJECT_NAME}>/$<TARGET_FILE_NAME:JoyShockLibrary>"
+    if(SDL)
+		add_custom_command(
+			TARGET ${BINARY_NAME}
+			POST_BUILD
+			COMMAND ${CMAKE_COMMAND} -E copy
+				"$<TARGET_FILE:SDL2>"
+				"$<TARGET_FILE_DIR:${PROJECT_NAME}>/$<TARGET_FILE_NAME:SDL2>"
+		)
+    else()
+		add_custom_command(
+			TARGET ${BINARY_NAME}
+			POST_BUILD
+			COMMAND ${CMAKE_COMMAND} -E copy
+				"$<TARGET_FILE:JoyShockLibrary>"
+				"$<TARGET_FILE_DIR:${PROJECT_NAME}>/$<TARGET_FILE_NAME:JoyShockLibrary>"
+		)
+    endif()
+	
+	set_target_properties (
+        ${BINARY_NAME} PROPERTIES
+         WIN32_EXECUTABLE ON
+         VS_STARTUP_PROJECT "${BINARY_NAME}"
+         VS_DEBUGGER_WORKING_DIRECTORY "$(ProjectDir)/$(Configuration)/"
+		 VS_DEBUGGER_COMMAND_ARGUMENTS "$(SolutionDir)../dist"
     )
 
 	 add_definitions(/bigobj)
 endif ()
 
 if (LINUX)
+	if(SDL OR NOT DEFINED SDL)
+		target_sources (
+				${BINARY_NAME} PRIVATE
+				src/SDL2Wrapper.cpp
+		)
+		add_definitions(-DSDL2)
+	else()
+		target_sources (
+				${BINARY_NAME} PRIVATE
+				src/JslWrapper.cpp
+		)
+	endif()
+
     target_sources (
         ${BINARY_NAME} PRIVATE
         src/linux/Init.cpp
@@ -75,6 +141,7 @@ if (LINUX)
         src/linux/PlatformDefinitions.cpp
         src/linux/StatusNotifierItem.cpp    include/linux/StatusNotifierItem.h
         src/linux/Whitelister.cpp
+		src/linux/Gamepad.cpp
     )
 endif ()
 
@@ -90,41 +157,61 @@ target_include_directories (
     "${PROJECT_BINARY_DIR}/${PROJECT_NAME}/include"
 )
 
-#CPMAddPackage (
-#    NAME JoyShockLibrary
-#    GITHUB_REPOSITORY JibbSmart/JoyShockLibrary
-#    VERSION 2.1.0
-#    GIT_TAG d225824b3922485bc8364c21ad513971e6ed1d04
-#)
-
-#find_package( JoyShockLibrary REQUIRED
-#	PATHS "../../JoyShockLibrary"
-#)
-
-#add_library (JoyShockLibrary STATIC IMPORTED GLOBAL)
-
-set(BUILD_SHARED_LIBS TRUE)
-
-add_subdirectory("../../JoyShockLibrary" "../../JoyShockLibrary/build")
-
-target_link_libraries (
-    ${BINARY_NAME} PRIVATE
-    Platform::Dependencies
-    JoyShockLibrary
+CPMAddPackage (
+    NAME JoyShockLibrary
+    GITHUB_REPOSITORY Electronicks/JoyShockLibrary
+    #VERSION 2.1.0
+    GIT_TAG d225824b3922485bc8364c21ad513971e6ed1d04
 )
 
-install (
-    TARGETS ${BINARY_NAME} JoyShockLibrary
-)
+	target_link_libraries (
+		${BINARY_NAME} PRIVATE
+		Platform::Dependencies
+		JoyShockLibrary
+	)
 
+	install (
+		TARGETS ${BINARY_NAME} JoyShockLibrary
+		RUNTIME DESTINATION ${PACKAGE_DIR}
+	)
+endif()
+
+
+# magic_enum
 CPMAddPackage (
     NAME magic_enum
-    GITHUB_REPOSITORY Neargye/magic_enum
-    GIT_TAG v0.6.6
+    GITHUB_REPOSITORY jamek/magic_enum
+    GIT_TAG 47e34ada93e0bf70dcea551636755cd66d893768
 )
 
 target_link_libraries (
     ${BINARY_NAME} PRIVATE
     Platform::Dependencies
     magic_enum
+)
+
+# pocket_fsm
+CPMAddPackage (
+    NAME pocket_fsm
+    GITHUB_REPOSITORY Electronicks/pocket_fsm
+    GIT_TAG e447ec24c7a547bd1fbe8d964baa866a9cf146c8
+)
+
+target_link_libraries (
+    ${BINARY_NAME} PRIVATE
+    Platform::Dependencies
+    pocket_fsm
+)
+
+# GamepadMotionHelpers
+CPMAddPackage (
+    NAME GamepadMotionHelpers
+    GITHUB_REPOSITORY JibbSmart/GamepadMotionHelpers
+    GIT_TAG main
+)
+
+target_link_libraries (
+    ${BINARY_NAME} PRIVATE
+    Platform::Dependencies
+    GamepadMotionHelpers
 )
