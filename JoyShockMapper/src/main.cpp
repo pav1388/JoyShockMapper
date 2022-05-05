@@ -51,11 +51,11 @@ JSMSetting<GyroAxisMask> mouse_y_from_gyro = JSMSetting<GyroAxisMask>(SettingID:
 JSMSetting<GyroSettings> gyro_settings = JSMSetting<GyroSettings>(SettingID::GYRO_ON, GyroSettings()); // Ignore mode none means no GYRO_OFF button
 JSMSetting<JoyconMask> joycon_gyro_mask = JSMSetting<JoyconMask>(SettingID::JOYCON_GYRO_MASK, JoyconMask::IGNORE_LEFT);
 JSMSetting<JoyconMask> joycon_motion_mask = JSMSetting<JoyconMask>(SettingID::JOYCON_MOTION_MASK, JoyconMask::IGNORE_RIGHT);
-JSMSetting<TriggerMode> zlMode = JSMSetting<TriggerMode>(SettingID::ZL_MODE, TriggerMode::NO_FULL);
-JSMSetting<TriggerMode> zrMode = JSMSetting<TriggerMode>(SettingID::ZR_MODE, TriggerMode::NO_FULL);
+JSMSetting<TriggerMode> zlMode = JSMSetting<TriggerMode>(SettingID::ZL_MODE, TriggerMode::NO_SKIP);
+JSMSetting<TriggerMode> zrMode = JSMSetting<TriggerMode>(SettingID::ZR_MODE, TriggerMode::NO_SKIP);
 JSMSetting<FlickSnapMode> flick_snap_mode = JSMSetting<FlickSnapMode>(SettingID::FLICK_SNAP_MODE, FlickSnapMode::NONE);
-JSMSetting<FloatXY> min_gyro_sens = JSMSetting<FloatXY>(SettingID::MIN_GYRO_SENS, { 0.0f, 0.0f });
-JSMSetting<FloatXY> max_gyro_sens = JSMSetting<FloatXY>(SettingID::MAX_GYRO_SENS, { 0.0f, 0.0f });
+JSMSetting<FloatXY> min_gyro_sens = JSMSetting<FloatXY>(SettingID::MIN_GYRO_SENS, { 1.0f, 1.0f });
+JSMSetting<FloatXY> max_gyro_sens = JSMSetting<FloatXY>(SettingID::MAX_GYRO_SENS, { 1.0f, 1.0f });
 JSMSetting<float> min_gyro_threshold = JSMSetting<float>(SettingID::MIN_GYRO_THRESHOLD, 0.0f);
 JSMSetting<float> max_gyro_threshold = JSMSetting<float>(SettingID::MAX_GYRO_THRESHOLD, 0.0f);
 JSMSetting<float> stick_power = JSMSetting<float>(SettingID::STICK_POWER, 1.0f);
@@ -140,6 +140,8 @@ JSMSetting<float> wind_stick_power = JSMSetting<float>(SettingID::WIND_STICK_POW
 JSMSetting<float> unwind_rate = JSMSetting<float>(SettingID::UNWIND_RATE, 1800.f);
 JSMSetting<GyroOutput> gyro_output = JSMSetting<GyroOutput>(SettingID::GYRO_OUTPUT, GyroOutput::MOUSE);
 JSMSetting<GyroOutput> flick_stick_output = JSMSetting<GyroOutput>(SettingID::FLICK_STICK_OUTPUT, GyroOutput::MOUSE);
+JSMVariable<int> steam_controller_gyro_k = JSMVariable<int>(2000);
+JSMVariable<int> steam_controller_accel_k = JSMVariable<int>(8192);
 
 JSMVariable<PathString> currentWorkingDir = JSMVariable<PathString>(PathString());
 vector<JSMButton> grid_mappings; // array of virtual buttons on the touchpad grid
@@ -1577,6 +1579,8 @@ static void resetAllMappings()
 	unwind_rate.Reset();
 	gyro_output.Reset();
 	flick_stick_output.Reset();
+	steam_controller_gyro_k.Reset();
+	steam_controller_accel_k.Reset();
 	for_each(grid_mappings.begin(), grid_mappings.end(), [](auto &map) { map.Reset(); });
 
 	os_mouse_speed = 1.0f;
@@ -2768,6 +2772,16 @@ void joyShockPollCallback(int jcHandle, JOY_SHOCK_STATE state, JOY_SHOCK_STATE l
 	MotionIf &motion = *jc->motion;
 
 	IMU_STATE imu = jsl->GetIMUState(jc->handle);
+	static constexpr int SC_TYPE = JS_TYPE_STEAM_CONTROLLER;
+	if (jc->platform_controller_type == SC_TYPE)
+	{
+		imu.gyroX *= steam_controller_gyro_k;
+		imu.gyroY *= steam_controller_gyro_k;
+		imu.gyroZ *= steam_controller_gyro_k;
+		imu.accelX /= float(steam_controller_accel_k);
+		imu.accelY /= float(steam_controller_accel_k);
+		imu.accelZ /= float(steam_controller_accel_k);
+	}
 
 	if (auto_calibrate_gyro.get() == Switch::ON)
 	{
@@ -4596,6 +4610,8 @@ int main(int argc, char *argv[])
 	                      ->SetHelp("Whether gyro should be converted to mouse, left stick, or right stick movement. If you don't want to use gyro aiming, simply leave GYRO_SENS set to 0."));
 	commandRegistry.Add((new JSMAssignment<GyroOutput>(flick_stick_output))
 	                      ->SetHelp("Whether flick stick should be converted to a mouse, left stick, or right stick movement."));
+	commandRegistry.Add(new JSMAssignment<int>("SC_GYRO_K", steam_controller_gyro_k)); // temp
+	commandRegistry.Add(new JSMAssignment<int>("SC_ACCEL_K", steam_controller_accel_k)); // temp
 	
 	bool quit = false;
 	commandRegistry.Add((new JSMMacro("QUIT"))
