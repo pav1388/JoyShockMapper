@@ -1146,7 +1146,7 @@ public:
 		return clamp(threshold + 0.05f, 0.0f, 1.0f);
 	}
 
-	void handleTriggerChange(ButtonID softIndex, ButtonID fullIndex, TriggerMode mode, float position, AdaptiveTriggerSetting &trigger_rumble)
+	void handleTriggerChange(ButtonID softIndex, ButtonID fullIndex, TriggerMode mode, float position, bool fullPressed, AdaptiveTriggerSetting &trigger_rumble)
 	{
 		uint8_t offset = softIndex == ButtonID::ZL ? left_trigger_offset : right_trigger_offset;
 		uint8_t range = softIndex == ButtonID::ZL ? left_trigger_range : right_trigger_range;
@@ -1171,7 +1171,7 @@ public:
 			trigger_rumble.force = 0;
 			trigger_rumble.start = offset + 0.05 * range;
 			_context->updateChordStack(position > 0, softIndex);
-			_context->updateChordStack(position >= 1.0, fullIndex);
+			_context->updateChordStack(fullPressed, fullIndex);
 			return;
 		}
 		else if (mode == TriggerMode::X_RT)
@@ -1182,7 +1182,7 @@ public:
 			trigger_rumble.force = 0;
 			trigger_rumble.start = offset + 0.05 * range;
 			_context->updateChordStack(position > 0, softIndex);
-			_context->updateChordStack(position >= 1.0, fullIndex);
+			_context->updateChordStack(fullPressed, fullIndex);
 			return;
 		}
 
@@ -1248,7 +1248,7 @@ public:
 				triggerState[idxState] = DstState::QuickSoftTap;
 				handleButtonChange(softIndex, true);
 			}
-			else if (position == 1.0)
+			else if (fullPressed)
 			{
 				// Trigger has been full pressed quickly
 				triggerState[idxState] = DstState::QuickFullPress;
@@ -1279,7 +1279,7 @@ public:
 				triggerState[idxState] = DstState::NoPress;
 				handleButtonChange(softIndex, false);
 			}
-			else if (position == 1.0)
+			else if (fullPressed)
 			{
 				// Trigger has been full pressed quickly
 				triggerState[idxState] = DstState::QuickFullPress;
@@ -1311,7 +1311,7 @@ public:
 			trigger_rumble.force = UINT16_MAX;
 			trigger_rumble.start = offset + 0.89 * range;
 			trigger_rumble.end = offset + 0.99 * range;
-			if (position < 1.0f)
+			if (!fullPressed)
 			{
 				// Full press is being release
 				triggerState[idxState] = DstState::QuickFullRelease;
@@ -1332,7 +1332,7 @@ public:
 			{
 				triggerState[idxState] = DstState::NoPress;
 			}
-			else if (position == 1.0f)
+			else if (fullPressed)
 			{
 				// Trigger is being full pressed again
 				triggerState[idxState] = DstState::QuickFullPress;
@@ -1355,7 +1355,7 @@ public:
 					trigger_rumble.start = min(offset + 0.89 * range, trigger_rumble.start + 1 / 150. * tick_time * range);
 					trigger_rumble.end = trigger_rumble.start + 0.1 * range;
 					handleButtonChange(softIndex, true);
-					if (position == 1.0)
+					if (fullPressed)
 					{
 						// Full press is allowed in addition to soft press
 						triggerState[idxState] = DstState::DelayFullPress;
@@ -1368,7 +1368,7 @@ public:
 					trigger_rumble.start = min(offset + 0.89 * range, trigger_rumble.start + 1 / 150. * tick_time * range);
 					trigger_rumble.end = trigger_rumble.start + 0.1 * range;
 					handleButtonChange(softIndex, false);
-					if (position == 1.0)
+					if (fullPressed)
 					{
 						triggerState[idxState] = DstState::ExclFullPress;
 						handleButtonChange(fullIndex, true);
@@ -1388,7 +1388,7 @@ public:
 			trigger_rumble.force = UINT16_MAX;
 			trigger_rumble.start = offset + 0.8 * range;
 			trigger_rumble.end = offset + 0.99 * range;
-			if (position < 1.0)
+			if (!fullPressed)
 			{
 				// Full Press is being released
 				triggerState[idxState] = DstState::SoftPress;
@@ -1406,7 +1406,7 @@ public:
 			trigger_rumble.force = UINT16_MAX;
 			trigger_rumble.start = offset + 0.89 * range;
 			trigger_rumble.end = offset + 0.99 * range;
-			if (position < 1.0f)
+			if (!fullPressed)
 			{
 				// Full press is being release
 				triggerState[idxState] = DstState::SoftPress;
@@ -2616,7 +2616,7 @@ void TouchCallback(int jcHandle, TOUCH_STATE newState, TOUCH_STATE prevState, fl
 		//  if (point0.isDown() ^ point1.isDown()) // XOR
 		if (point0.isDown() || point1.isDown())
 		{
-			TOUCH_POINT *downPoint = point0.isDown() ? &point0 : &point1;
+			TOUCH_POINT *downPoint = point1.isDown() ? &point1 : &point0;
 			FloatXY sens = js->getSetting<FloatXY>(SettingID::TOUCHPAD_SENS);
 			// if(downPoint->movX || downPoint->movY) cout << "Moving the cursor by " << std::dec << int(downPoint->movX) << " h and " << int(downPoint->movY) << " v" << endl;
 			moveMouse(downPoint->movX * sens.x(), downPoint->movY * sens.y());
@@ -2778,9 +2778,9 @@ void joyShockPollCallback(int jcHandle, JOY_SHOCK_STATE state, JOY_SHOCK_STATE l
 		imu.gyroX *= steam_controller_gyro_k;
 		imu.gyroY *= steam_controller_gyro_k;
 		imu.gyroZ *= steam_controller_gyro_k;
-		imu.accelX /= float(steam_controller_accel_k);
-		imu.accelY /= float(steam_controller_accel_k);
-		imu.accelZ /= float(steam_controller_accel_k);
+		imu.accelX *= steam_controller_accel_k;
+		imu.accelY *= steam_controller_accel_k;
+		imu.accelZ *= steam_controller_accel_k;
 	}
 
 	if (auto_calibrate_gyro.get() == Switch::ON)
@@ -3428,7 +3428,7 @@ void joyShockPollCallback(int jcHandle, JOY_SHOCK_STATE state, JOY_SHOCK_STATE l
 		jc->handleButtonChange(ButtonID::L3, buttons & (1 << JSOFFSET_LCLICK));
 
 		float lTrigger = jsl->GetLeftTrigger(jc->handle);
-		jc->handleTriggerChange(ButtonID::ZL, ButtonID::ZLF, jc->getSetting<TriggerMode>(SettingID::ZL_MODE), lTrigger, jc->left_effect);
+		jc->handleTriggerChange(ButtonID::ZL, ButtonID::ZLF, jc->getSetting<TriggerMode>(SettingID::ZL_MODE), lTrigger, buttons & (1 << JSOFFSET_ZL), jc->left_effect);
 
 		bool touch = jsl->GetTouchDown(jc->handle, false) || jsl->GetTouchDown(jc->handle, true);
 		switch (jc->platform_controller_type)
@@ -3439,12 +3439,14 @@ void joyShockPollCallback(int jcHandle, JOY_SHOCK_STATE state, JOY_SHOCK_STATE l
 			// Don't break but continue onto DS4 stuff too
 		case JS_TYPE_DS4:
 		{
-			float triggerpos = buttons & (1 << JSOFFSET_CAPTURE) ? 1.f :
-			  touch                                              ? 0.99f :
-                                                                   0.f;
-			jc->handleTriggerChange(ButtonID::TOUCH, ButtonID::CAPTURE, jc->getSetting<TriggerMode>(SettingID::TOUCHPAD_DUAL_STAGE_MODE), triggerpos, jc->unused_effect);
+			float triggerpos = touch ? 0.99f : 0.f;
+			jc->handleTriggerChange(ButtonID::TOUCH, ButtonID::CAPTURE, jc->getSetting<TriggerMode>(SettingID::TOUCHPAD_DUAL_STAGE_MODE), triggerpos, buttons & (1 << JSOFFSET_TOUCHPAD_CLICK), jc->unused_effect);
 		}
 		break;
+		case JS_TYPE_STEAM_CONTROLLER:
+			jc->handleButtonChange(ButtonID::TOUCH, touch);
+			jc->handleButtonChange(ButtonID::CAPTURE, buttons & (1 << JSOFFSET_TOUCHPAD_CLICK)); // Left pad click
+			break;
 		case JS_TYPE_XBOXONE_ELITE:
 			jc->handleButtonChange(ButtonID::RSL, buttons & (1 << JSOFFSET_SL2)); //Xbox Elite back paddles
 			jc->handleButtonChange(ButtonID::RSR, buttons & (1 << JSOFFSET_SR2));
@@ -3482,7 +3484,7 @@ void joyShockPollCallback(int jcHandle, JOY_SHOCK_STATE state, JOY_SHOCK_STATE l
 		jc->handleButtonChange(ButtonID::R3, buttons & (1 << JSOFFSET_RCLICK));
 
 		float rTrigger = jsl->GetRightTrigger(jc->handle);
-		jc->handleTriggerChange(ButtonID::ZR, ButtonID::ZRF, jc->getSetting<TriggerMode>(SettingID::ZR_MODE), rTrigger, jc->right_effect);
+		jc->handleTriggerChange(ButtonID::ZR, ButtonID::ZRF, jc->getSetting<TriggerMode>(SettingID::ZR_MODE), rTrigger, buttons & (1 << JSOFFSET_ZR), jc->right_effect);
 	}
 
 	auto at = jc->getSetting<Switch>(SettingID::ADAPTIVE_TRIGGER);
