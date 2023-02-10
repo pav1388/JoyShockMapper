@@ -1,5 +1,7 @@
 #include "JslWrapper.h"
 #include "JSMVariable.hpp"
+#include "TriggerEffectGenerator.h"
+#include "SettingsManager.h"
 #include "SDL.h"
 #include <map>
 #include <mutex>
@@ -10,9 +12,6 @@
 #include <memory>
 #include <iostream>
 #include <cstring>
-#include "TriggerEffectGenerator.h"
-
-extern JSMVariable<float> tick_time; // defined in main.cc
 
 typedef struct
 {
@@ -251,7 +250,8 @@ public:
 		auto inst = static_cast<SdlInstance *>(obj);
 		while (inst->keep_polling)
 		{
-			SDL_Delay(tick_time.get());
+			auto tick_time = SettingsManager::get<float>(SettingID::TICK_TIME)->value();
+			SDL_Delay(tick_time);
 
 			std::lock_guard guard(inst->controller_lock);
 			for (auto iter = inst->_controllerMap.begin(); iter != inst->_controllerMap.end(); ++iter)
@@ -263,16 +263,16 @@ public:
 					IMU_STATE dummy2;
 					memset(&dummy1, 0, sizeof(dummy1));
 					memset(&dummy2, 0, sizeof(dummy2));
-					inst->g_callback(iter->first, dummy1, dummy1, dummy2, dummy2, tick_time.get());
+					inst->g_callback(iter->first, dummy1, dummy1, dummy2, dummy2, tick_time);
 				}
 				if (inst->g_touch_callback)
 				{
 					TOUCH_STATE touch = inst->GetTouchState(iter->first, false), dummy3;
 					memset(&dummy3, 0, sizeof(dummy3));
-					inst->g_touch_callback(iter->first, touch, dummy3, tick_time.get());
+					inst->g_touch_callback(iter->first, touch, dummy3, tick_time);
 				}
 				// Perform rumble
-				SDL_GameControllerRumble(iter->second->_sdlController, iter->second->_big_rumble, iter->second->_small_rumble, tick_time.get() + 5);
+				SDL_GameControllerRumble(iter->second->_sdlController, iter->second->_big_rumble, iter->second->_small_rumble, tick_time + 5);
 			}
 		}
 

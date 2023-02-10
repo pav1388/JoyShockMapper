@@ -44,7 +44,7 @@ protected:
 			string assignment(results.empty() ? arguments : results[1].str());
 			if (assignment.rfind("DEFAULT", 0) == 0)
 			{
-				_var.Reset();
+				_var.reset();
 			}
 			else if (!_parse(this, assignment, label))
 			{
@@ -72,7 +72,7 @@ protected:
 	{
 		if (setting && argument.compare("NONE") == 0)
 		{
-			setting->MarkModeshiftForRemoval(modeshift);
+			setting->markModeshiftForRemoval(modeshift);
 			COUT << "Modeshift " << modeshift << "," << cmd->_name << " has been removed." << endl;
 			return true;
 		}
@@ -92,12 +92,12 @@ protected:
 		if (!ss.fail())
 		{
 			T oldVal = inst->_var;
-			inst->_var = value;
+			inst->_var.set(value);
 			inst->_var.updateLabel(label);
 
 			// The assignment won't trigger my listener DisplayNewValue if
 			// the new value after filtering is the same as the old.
-			if (oldVal == inst->_var.get())
+			if (oldVal == inst->_var.value())
 			{
 				// So I want to do it myself.
 				inst->DisplayNewValue(inst->_var);
@@ -105,7 +105,7 @@ protected:
 
 			// Command succeeded if the value requested was the current one
 			// or if the new value is different from the old.
-			return value == oldVal || inst->_var.get() != oldVal; // Command processed successfully
+			return value == oldVal || inst->_var.value() != oldVal; // Command processed successfully
 		}
 		// Couldn't read the value
 		return false;
@@ -119,7 +119,7 @@ protected:
 
 	virtual void DisplayCurrentValue()
 	{
-		COUT << _displayName << " = " << _var.get() << endl;
+		COUT << _displayName << " = " << _var.value() << endl;
 	}
 
 	virtual T ReadValue(stringstream& in)
@@ -145,17 +145,17 @@ protected:
 				if (settingVar)
 				{
 					//Create Modeshift
-					unique_ptr<JSMCommand> chordAssignment(new JSMAssignment<T>(name.str(), *settingVar->AtChord(btn)));
-					chordAssignment->SetHelp(_help)->SetParser(bind(&JSMAssignment<T>::ModeshiftParser, btn, settingVar, &_parse, placeholders::_1, placeholders::_2, placeholders::_3))->SetTaskOnDestruction(bind(&JSMSetting<T>::ProcessModeshiftRemoval, settingVar, btn));
+					unique_ptr<JSMCommand> chordAssignment(new JSMAssignment<T>(name.str(), *settingVar->atChord(btn)));
+					chordAssignment->SetHelp(_help)->SetParser(bind(&JSMAssignment<T>::ModeshiftParser, btn, settingVar, &_parse, placeholders::_1, placeholders::_2, placeholders::_3))->SetTaskOnDestruction(bind(&JSMSetting<T>::processModeshiftRemoval, settingVar, btn));
 					return chordAssignment;
 				}
 				auto buttonVar = dynamic_cast<JSMButton*>(&_var);
 				if (buttonVar && btn > ButtonID::NONE)
 				{
-					auto chordedVar = buttonVar->AtChord(btn);
+					auto chordedVar = buttonVar->atChord(btn);
 					// The reinterpret_cast is required for compilation, but settings will never run this code anyway.
 					unique_ptr<JSMCommand> chordAssignment(new JSMAssignment<T>(name.str(), reinterpret_cast<JSMVariable<T>&>(*chordedVar)));
-					chordAssignment->SetHelp(_help)->SetParser(_parse)->SetTaskOnDestruction(bind(&JSMButton::ProcessChordRemoval, buttonVar, btn, chordedVar));
+					chordAssignment->SetHelp(_help)->SetParser(_parse)->SetTaskOnDestruction(bind(&JSMButton::processChordRemoval, buttonVar, btn, chordedVar));
 					// BE ADVISED! If a custom parser was set using bind(), the very same bound vars will
 					// be passed along.
 					return chordAssignment;
@@ -166,9 +166,9 @@ protected:
 				auto buttonVar = dynamic_cast<JSMButton*>(&_var);
 				if (buttonVar && btn > ButtonID::NONE)
 				{
-					auto simPressVar = buttonVar->AtSimPress(btn);
+					auto simPressVar = buttonVar->atSimPress(btn);
 					unique_ptr<JSMCommand> simAssignment(new JSMAssignment<Mapping>(name.str(), *simPressVar));
-					simAssignment->SetHelp(_help)->SetParser(_parse)->SetTaskOnDestruction(bind(&JSMButton::ProcessSimPressRemoval, buttonVar, btn, simPressVar));
+					simAssignment->SetHelp(_help)->SetParser(_parse)->SetTaskOnDestruction(bind(&JSMButton::processSimPressRemoval, buttonVar, btn, simPressVar));
 					// BE ADVISED! If a custom parser was set using bind(), the very same bound vars will
 					// be passed along.
 					return simAssignment;
@@ -193,7 +193,7 @@ public:
 		SetParser(std::bind(&JSMAssignment::DefaultParser, _1, _2, _3));
 		if (!inNoListener)
 		{
-			_listenerId = _var.AddOnChangeListener(bind(&JSMAssignment::DisplayNewValue, this, placeholders::_1));
+			_listenerId = _var.addOnChangeListener(bind(&JSMAssignment::DisplayNewValue, this, placeholders::_1));
 		}
 	}
 
@@ -216,7 +216,7 @@ public:
 	{
 		if (_listenerId != 0)
 		{
-			_var.RemoveOnChangeListener(_listenerId);
+			_var.removeOnChangeListener(_listenerId);
 		}
 	}
 

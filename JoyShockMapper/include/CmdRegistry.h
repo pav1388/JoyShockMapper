@@ -53,7 +53,7 @@ public:
 	virtual unique_ptr<JSMCommand> GetModifiedCmd(char op, in_string chord);
 
 	// Get the help string for the command.
-	inline string Help() const
+	inline string_view Help() const
 	{
 		return _help;
 	}
@@ -85,7 +85,7 @@ private:
 
 	static string_view strtrim(std::string_view str);
 
-	static bool findCommandWithName(in_string name, CmdMap::value_type& pair);
+	static bool findCommandWithName(in_string name, const CmdMap::value_type& pair);
 
 public:
 	CmdRegistry();
@@ -96,23 +96,23 @@ public:
 	// Add a command to the registry. The regisrty takes ownership of the memory of this pointer.
 	// You can use _ASSERT() on the return value of this function to make sure the commands are
 	// accepted.
-	bool Add(JSMCommand* newCommand);
+	bool add(JSMCommand* newCommand);
 
 	bool Remove(in_string name);
 
 	bool hasCommand(in_string name) const;
 
-	bool isCommandValid(in_string line);
+	bool isCommandValid(in_string line) const;
 
 	// Process a command entered by the user
 	// intentionally dont't use const ref
 	void processLine(const string& line);
 
 	// Fill vector with registered command names
-	void GetCommandList(vector<string_view>& outList);
+	void GetCommandList(vector<string_view>& outList) const;
 
 	// Return help string for provided command
-	string GetHelp(in_string command);
+	string_view GetHelp(in_string command) const;
 };
 
 // Macro commands are simple function calls when recognized. But it could do different things

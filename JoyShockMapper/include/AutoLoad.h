@@ -3,8 +3,10 @@
 
 class CmdRegistry;
 
-namespace patate
+
+namespace JSM
 {
+
 class AutoLoad : public PollingThread
 {
 public:
@@ -15,4 +17,5 @@ public:
 private:
 	bool AutoLoadPoll(void* param);
 };
-} // namespace patate
+
+} //JSM

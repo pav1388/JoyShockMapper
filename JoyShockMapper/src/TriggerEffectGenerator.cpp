@@ -68,9 +68,9 @@ bool TriggerEffectGenerator::SimpleSemiAutomaticGun(byte *destinationArray, int 
 	return true;
 }
 
-bool TriggerEffectGenerator::Reset(byte *destinationArray, int destinationIndex)
+bool TriggerEffectGenerator::reset(byte *destinationArray, int destinationIndex)
 {
-	destinationArray[destinationIndex + 0] = (byte)TriggerEffectType::Reset;
+	destinationArray[destinationIndex + 0] = (byte)TriggerEffectType::reset;
 	destinationArray[destinationIndex + 1] = 0x00;
 	destinationArray[destinationIndex + 2] = 0x00;
 	destinationArray[destinationIndex + 3] = 0x00;
@@ -101,7 +101,7 @@ bool TriggerEffectGenerator::SimpleAutomaticGun(byte *destinationArray, int dest
 		destinationArray[destinationIndex + 10] = 0x00;
 		return true;
 	}
-	return Reset(destinationArray, destinationIndex);
+	return reset(destinationArray, destinationIndex);
 }
 
 bool TriggerEffectGenerator::LimitedResistance(byte *destinationArray, int destinationIndex, byte start, byte force)
@@ -123,7 +123,7 @@ bool TriggerEffectGenerator::LimitedResistance(byte *destinationArray, int desti
 		destinationArray[destinationIndex + 10] = 0x00;
 		return true;
 	}
-	return Reset(destinationArray, destinationIndex);
+	return reset(destinationArray, destinationIndex);
 }
 
 bool TriggerEffectGenerator::LimitedSemiAutomaticGun(byte *destinationArray, int destinationIndex, byte start, byte end, byte force)
@@ -149,7 +149,7 @@ bool TriggerEffectGenerator::LimitedSemiAutomaticGun(byte *destinationArray, int
 		destinationArray[destinationIndex + 10] = 0x00;
 		return true;
 	}
-	return Reset(destinationArray, destinationIndex);
+	return reset(destinationArray, destinationIndex);
 }
 
 bool TriggerEffectGenerator::Resistance(byte *destinationArray, int destinationIndex, byte start, byte force)
@@ -182,7 +182,7 @@ bool TriggerEffectGenerator::Resistance(byte *destinationArray, int destinationI
 		destinationArray[destinationIndex + 10] = 0x00;
 		return true;
 	}
-	return Reset(destinationArray, destinationIndex);
+	return reset(destinationArray, destinationIndex);
 }
 
 bool TriggerEffectGenerator::Bow(byte *destinationArray, int destinationIndex, byte start, byte end, byte force, byte snapForce)
@@ -216,7 +216,7 @@ bool TriggerEffectGenerator::Bow(byte *destinationArray, int destinationIndex, b
 		destinationArray[destinationIndex + 10] = 0x00;
 		return true;
 	}
-	return Reset(destinationArray, destinationIndex);
+	return reset(destinationArray, destinationIndex);
 }
 
 bool TriggerEffectGenerator::Galloping(byte *destinationArray, int destinationIndex, byte start, byte end, byte firstFoot, byte secondFoot, byte frequency)
@@ -252,7 +252,7 @@ bool TriggerEffectGenerator::Galloping(byte *destinationArray, int destinationIn
 		destinationArray[destinationIndex + 10] = 0x00;
 		return true;
 	}
-	return Reset(destinationArray, destinationIndex);
+	return reset(destinationArray, destinationIndex);
 }
 
 bool TriggerEffectGenerator::SemiAutomaticGun(byte *destinationArray, int destinationIndex, byte start, byte end, byte force)
@@ -282,7 +282,7 @@ bool TriggerEffectGenerator::SemiAutomaticGun(byte *destinationArray, int destin
 		destinationArray[destinationIndex + 10] = 0x00;
 		return true;
 	}
-	return Reset(destinationArray, destinationIndex);
+	return reset(destinationArray, destinationIndex);
 }
 
 bool TriggerEffectGenerator::AutomaticGun(byte *destinationArray, int destinationIndex, byte start, byte strength, byte frequency)
@@ -315,7 +315,7 @@ bool TriggerEffectGenerator::AutomaticGun(byte *destinationArray, int destinatio
 		destinationArray[destinationIndex + 10] = 0x00;
 		return true;
 	}
-	return Reset(destinationArray, destinationIndex);
+	return reset(destinationArray, destinationIndex);
 }
 
 bool TriggerEffectGenerator::Machine(byte *destinationArray, int destinationIndex, byte start, byte end, byte strengthA, byte strengthB, byte frequency, byte period)
@@ -349,7 +349,7 @@ bool TriggerEffectGenerator::Machine(byte *destinationArray, int destinationInde
 		destinationArray[destinationIndex + 10] = 0x00;
 		return true;
 	}
-	return Reset(destinationArray, destinationIndex);
+	return reset(destinationArray, destinationIndex);
 }
 
 }

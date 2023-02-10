@@ -35,7 +35,7 @@ public:
 	};
 	enum class EventModifier
 	{
-		None,
+		Auto,
 		StartPress,
 		ReleasePress,
 		TurboPress,
@@ -86,6 +86,8 @@ public:
 	void ProcessEvent(BtnEvent evt, EventActionIf &button) const;
 
 	bool AddMapping(KeyCode key, EventModifier evtMod, ActionModifier actMod = ActionModifier::None);
+
+	bool AppendToCommand(KeyCode key, EventModifier evtMod, ActionModifier actMod = ActionModifier::None);
 
 	inline bool isValid() const
 	{

@@ -41,7 +41,7 @@ enum class TriggerEffectType : byte
 {
 	SimpleResistance = 0x01,       // 00 00 0 001 // Suggest don't use
 	SimpleSemiAutomaticGun = 0x02, // 00 00 0 100 // Suggest don't use
-	Reset = 0x05,                  // 00 00 0 101 // Safe to Use, part of libpad
+	reset = 0x05,                  // 00 00 0 101 // Safe to Use, part of libpad
 	SimpleAutomaticGun = 0x06,     // 00 00 0 110 // Suggest don't use
 
 	LimitedResistance = 0x11,       // 00 01 0 001 // Suggest don't use
@@ -91,7 +91,7 @@ public:
 	/// @param destinationArray The byte[] that receives the data.
 	/// @param destinationIndex A 32-bit integer that represents the index in the destinationArray at which storing begins.
 	/// @returns The success of the effect write.
-	static bool Reset(byte *destinationArray, int destinationIndex);
+	static bool reset(byte *destinationArray, int destinationIndex);
 
 	/// Simplistic automatic gun effect data generator.
 	/// This is not used by libpad and may be removed in a future DualSense firmware.

@@ -293,6 +293,9 @@ enum class SettingID
 	UNWIND_RATE,
 	GYRO_OUTPUT,
 	FLICK_STICK_OUTPUT,
+	HIDE_MINIMIZED,
+	AUTO_CALIBRATE_GYRO,
+	JSM_DIRECTORY,
 };
 
 // constexpr are like #define but with respect to typeness
@@ -343,16 +346,17 @@ enum class StickMode
 	OUTER_RING,
 	INNER_RING,
 	SCROLL_WHEEL,
+	// Following requires virtual controller (keep them contiguous)
 	LEFT_STICK,
 	RIGHT_STICK,
 	LEFT_ANGLE_TO_X,
 	LEFT_ANGLE_TO_Y,
 	RIGHT_ANGLE_TO_X,
 	RIGHT_ANGLE_TO_Y,
-	LEFT_STEER_X,
-	RIGHT_STEER_X,
 	LEFT_WIND_X,
 	RIGHT_WIND_X,
+	LEFT_STEER_X,
+	RIGHT_STEER_X,
 	INVALID
 };
 enum class FlickSnapMode
@@ -555,7 +559,7 @@ struct FloatXY : public pair<float, float>
 struct GyroSettings
 {
 	bool always_off = false;
-	ButtonID button = ButtonID::NONE;
+	ButtonID button = ButtonID::NONE; // Ignore on button none means no GYRO_OFF button (or Always On);
 	GyroIgnoreMode ignore_mode = GyroIgnoreMode::BUTTON;
 };
 

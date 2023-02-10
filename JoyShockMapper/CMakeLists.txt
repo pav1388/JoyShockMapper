@@ -25,6 +25,7 @@ add_executable (
 	src/Mapping.cpp
     src/TriggerEffectGenerator.cpp
     src/AutoLoad.cpp
+	src/SettingsManager.cpp
     include/TriggerEffectGenerator.h
     include/InputHelpers.h
     include/PlatformDefinitions.h
@@ -42,8 +43,11 @@ add_executable (
 	include/JslWrapper.h
 	include/Mapping.h
     include/AutoLoad.h
+	include/SettingsManager.h
     src/dimgui/Application.cpp
+    src/dimgui/InputSelector.cpp
     include/dimgui/Application.h
+    include/dimgui/InputSelector.h
 )
 
 if (WINDOWS)

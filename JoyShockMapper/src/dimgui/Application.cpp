@@ -3,98 +3,105 @@
 #include "JSMVariable.hpp"
 #include "imgui_impl_sdl2.h"
 #include "imgui_impl_sdlrenderer.h"
+#include "SettingsManager.h"
+#include "CmdRegistry.h"
+#include <regex>
+#include <span>
 
 #define ImTextureID SDL_Texture
 
 extern vector<JSMButton> mappings;
-extern JSMSetting<TriggerMode> zlMode;
-extern JSMSetting<TriggerMode> zrMode;
-extern JSMSetting<TriggerMode> touch_ds_mode;
-extern JSMSetting<StickMode> left_stick_mode;
-extern JSMSetting<StickMode> right_stick_mode;
-extern JSMSetting<StickMode> motion_stick_mode;
 
-static constexpr std::string_view popup = "Pick an input";
+using namespace magic_enum;
+using namespace ImGui;
+#define EndMenu() ImGui::EndMenu(); // Symbol conflict with windows
 
-Application::Application()
+static void HelpMarker(string_view desc)
 {
+	SameLine();
+	TextDisabled("(?)");
+	if (IsItemHovered(ImGuiHoveredFlags_DelayShort))
+	{
+		BeginTooltip();
+		PushTextWrapPos(GetFontSize() * 35.0f);
+		TextUnformatted(desc.data());
+		PopTextWrapPos();
+		EndTooltip();
+	}
 }
 
-std::string getButtonDescription(ButtonID id)
+Application::Application(const CmdRegistry& cmds)
+  : _cmds(cmds)
 {
-	std::stringstream ss;
-	ss << mappings[magic_enum::enum_integer(id)].get().value().description();
-	ss << "###" << magic_enum::enum_name(id);
-	return ss.str();
 }
 
 std::string_view getButtonLabel(ButtonID id)
 {
-	return mappings[magic_enum::enum_integer(id)].label();
+	return mappings[enum_integer(id)].label();
 }
 
 template<typename T>
-void drawCombo(JSMSetting<T>& setting)
+void drawCombo(JSMSetting<T>& setting, ImGuiComboFlags flags = 0)
 {
-	using namespace magic_enum;
-	T selected = *setting.get();
-	if (ImGui::BeginCombo(enum_name(setting._id).data(), enum_name(selected).data()))
+	SetNextItemWidth(150.f);
+	if (BeginCombo(enum_name(setting._id).data(), enum_name(setting.value()).data(), flags))
 	{
-		for (int n = 0; n < enum_count<T>(); ++n)
+		for (auto [enumVal, enumStr] : enum_entries<T>())
 		{
-			const bool is_selected = (enum_cast<T>(n) == selected);
-			if (ImGui::Selectable(enum_names<T>()[n].data(), is_selected))
-			{
-				setting = *enum_cast<T>(n); // set global variable
-			}
-
-			// Set the initial focus when opening the combo (scrolling + keyboard navigation focus)
-			if (is_selected)
-				ImGui::SetItemDefaultFocus();
-		}
-		ImGui::EndCombo();
-	}
-}
-
-template<typename T>
-void drawCombo(string_view name, T& setting)
-{
-	using namespace magic_enum;
-	if (ImGui::BeginCombo(name.data(), enum_name(setting).data()))
-	{
-		for (int n = 0; n < enum_count<T>(); ++n)
-		{
-			auto val = enum_cast<T>(n);
-			if (!val || *val == T::INVALID)
+			if (enumVal == T::INVALID)
 				continue;
-			if constexpr (std::is_same<T, Mapping::EventModifier>::value)
+
+			bool disabled = false;
+			if constexpr (is_same_v<T, TriggerMode>)
 			{
-				if (*val == Mapping::EventModifier::None)
+				if (enumVal == TriggerMode::X_LT || enumVal == TriggerMode::X_RT)
+				{
+					auto virtual_controller = SettingsManager::getV<ControllerScheme>(SettingID::VIRTUAL_CONTROLLER)->value();
+					disabled = virtual_controller == ControllerScheme::NONE;
+					if (virtual_controller == ControllerScheme::DS4)
+					{
+						enumStr = enumVal == TriggerMode::X_LT ? "PS_L2" : "PS_R2";
+					}
+				}
+			}
+			if constexpr (is_same_v<T, StickMode>)
+			{
+				auto virtual_controller = SettingsManager::getV<ControllerScheme>(SettingID::VIRTUAL_CONTROLLER)->value();
+				if (enumVal >= StickMode::LEFT_STICK && enumVal <= StickMode::RIGHT_STEER_X)
+				{
+					disabled = virtual_controller == ControllerScheme::NONE;
+				}
+				if (setting._id != SettingID::MOTION_STICK_MODE &&
+				  (enumVal == StickMode::LEFT_STEER_X || enumVal == StickMode::RIGHT_STEER_X))
 				{
 					continue;
 				}
 			}
-			const bool is_selected = (*val == setting);
-			if (ImGui::Selectable(enum_names<T>()[n].data(), is_selected))
+			BeginDisabled(disabled);
+			if (Selectable(enumStr.data(), enumVal == setting.value()))
 			{
-				setting = *enum_cast<T>(n); // set global variable
+				setting.set(enumVal); // set global variable
 			}
 
 			// Set the initial focus when opening the combo (scrolling + keyboard navigation focus)
-			if (is_selected)
-				ImGui::SetItemDefaultFocus();
+			if (enumVal == setting.value())
+				SetItemDefaultFocus();
+			EndDisabled();
 		}
-		ImGui::EndCombo();
+		EndCombo();
 	}
 }
 
-void Application::drawButton(ButtonID btn)
+void Application::drawButton(ButtonID btn, ImVec2 size, bool enabled)
 {
-	using namespace ImGui;
-	if (Button(getButtonDescription(btn).data()))
+	std::stringstream description;
+	description << mappings[enum_integer(btn)].value().description(); // Button label to display
+	description << "###" << enum_name(btn);                           // Button ID for ImGui
+
+	BeginDisabled(!enabled);
+	if (Button(description.str().data(), size))
 	{
-		speedpopup = btn;
-		OpenPopup(popup.data(), ImGuiPopupFlags_AnyPopup);
+		_inputSelector.show(btn);
 	}
 
 	string_view label = getButtonLabel(btn).data();
@@ -102,102 +109,10 @@ void Application::drawButton(ButtonID btn)
 	{
 		SetTooltip(label.data());
 	}
+	EndDisabled();
 }
 
-void Application::ShowModalInputSelector()
-{
-	using namespace ImGui;
-	ImVec2 center = ImGui::GetMainViewport()->GetCenter();
-	ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-
-	if (ImGui::BeginPopupModal(popup.data(), nullptr, ImGuiWindowFlags_AlwaysAutoResize))
-	{
-		static Mapping::ActionModifier act = Mapping::ActionModifier::None;
-		static Mapping::EventModifier evt = Mapping::EventModifier::StartPress;
-		static KeyCode keyCode;
-		Mapping currentMapping;
-		currentMapping.AddMapping(keyCode, evt, act);
-		Text(currentMapping.description().data());
-		if (ImGui::CollapsingHeader("Modifiers", ImGuiTreeNodeFlags_None))
-		{
-			drawCombo("Action Modifiers", act);
-			drawCombo("Event Modifiers", evt);
-		}
-		if (ImGui::CollapsingHeader("Mouse", ImGuiTreeNodeFlags_None))
-		{
-			if (Button("LMOUSE"))
-			{
-				keyCode = KeyCode("LMOUSE");
-			}
-			if (Button("RMOUSE"))
-			{
-				keyCode = KeyCode("RMOUSE");
-			}
-			if (Button("MMOUSE"))
-			{
-				keyCode = KeyCode("MMOUSE");
-			}
-			if (Button("BMOUSE"))
-			{
-				keyCode = KeyCode("BMOUSE");
-			}
-			if (Button("MMOUSE"))
-			{
-				keyCode = KeyCode("MMOUSE");
-			}
-		}
-		if (ImGui::CollapsingHeader("Keyboard", ImGuiTreeNodeFlags_None))
-		{
-			ImGui::Text("IsItemHovered: %d", ImGui::IsItemHovered());
-			for (int i = 0; i < 5; i++)
-				ImGui::Text("Some content %d", i);
-		}
-		if (ImGui::CollapsingHeader("More keyboard", ImGuiTreeNodeFlags_None))
-		{
-			ImGui::Text("IsItemHovered: %d", ImGui::IsItemHovered());
-			for (int i = 0; i < 5; i++)
-				ImGui::Text("Some content %d", i);
-		}
-		if (ImGui::CollapsingHeader("Gyro management", ImGuiTreeNodeFlags_None))
-		{
-			ImGui::Text("IsItemHovered: %d", ImGui::IsItemHovered());
-			for (int i = 0; i < 5; i++)
-				ImGui::Text("Some content %d", i);
-		}
-		if (ImGui::CollapsingHeader("Virtual Controller", ImGuiTreeNodeFlags_None))
-		{
-			ImGui::Text("IsItemHovered: %d", ImGui::IsItemHovered());
-			for (int i = 0; i < 5; i++)
-				ImGui::Text("Some content %d", i);
-		}
-		if (ImGui::Button("OK", ImVec2(120, 0)))
-		{
-			mappings[magic_enum::enum_integer(*speedpopup)] = currentMapping;
-			speedpopup = std::nullopt;
-			ImGui::CloseCurrentPopup();
-		}
-		ImGui::EndPopup();
-	}
-}
-
-void Application::drawButton(ButtonID btn, ImVec2 size)
-{
-	using namespace ImGui;
-	if (Button(getButtonDescription(btn).data(), size))
-	{
-		// do something useful
-		speedpopup = btn;
-		OpenPopup(popup.data(), ImGuiPopupFlags_AnyPopup);
-	}
-
-	string_view label = getButtonLabel(btn).data();
-	if (ImGui::IsItemHovered() && !label.empty())
-	{
-		ImGui::SetTooltip(label.data());
-	}
-}
-
-void Application::Runloop()
+void Application::run()
 {
 	threadDone = std::async([this]()
 	  { return DrawLoop(); });
@@ -215,6 +130,7 @@ bool Application::DrawLoop()
 	SDL_WindowFlags window_flags = (SDL_WindowFlags)(SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI); //  | SDL_WINDOW_BORDERLESS | SDL_WINDOW_FULLSCREEN_DESKTOP
 	window = SDL_CreateWindow("JoyShockMapper", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1280, 720, window_flags);
 
+
 	// Setup SDL_Renderer instance
 	renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_PRESENTVSYNC | SDL_RENDERER_ACCELERATED);
 	if (!renderer || !window)
@@ -225,22 +141,22 @@ bool Application::DrawLoop()
 
 	// Setup Dear ImGui context
 	IMGUI_CHECKVERSION();
-	ImGui::CreateContext();
-	ImGuiIO& io = ImGui::GetIO();
+	CreateContext();
+	ImGuiIO& io = GetIO();
 	(void)io;
 	// io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
 	// io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
 
 	// Setup Dear ImGui style
-	ImGui::StyleColorsDark();
-	// ImGui::StyleColorsLight();
+	StyleColorsDark();
+	// StyleColorsLight();
 
 	// Setup Platform/Renderer backends
 	ImGui_ImplSDL2_InitForSDLRenderer(window, renderer);
 	ImGui_ImplSDLRenderer_Init(renderer);
 
 	// Load Fonts
-	// - If no fonts are loaded, dear imgui will use the default font. You can also load multiple fonts and use ImGui::PushFont()/PopFont() to select them.
+	// - If no fonts are loaded, dear imgui will use the default font. You can also load multiple fonts and use PushFont()/PopFont() to select them.
 	// - AddFontFromFileTTF() will return the ImFont* so you can store it if you need to select the font among multiple.
 	// - If the file cannot be loaded, the function will return NULL. Please handle those errors in your application (e.g. use an assertion, or display an error and quit).
 	// - The fonts will be rasterized at a given size (w/ oversampling) and stored into a texture when calling ImFontAtlas::Build()/GetTexDataAsXXXX(), which ImGui_ImplXXXX_NewFrame below will call.
@@ -255,11 +171,17 @@ bool Application::DrawLoop()
 	// ImFont* font = io.Fonts->AddFontFromFileTTF("c:\\Windows\\Fonts\\ArialUni.ttf", 18.0f, NULL, io.Fonts->GetGlyphRangesJapanese());
 	// IM_ASSERT(font != NULL);
 
-	ImGui::GetStyle().Alpha = 1.0f;
-	ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+	GetIO().ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 
 	SDL_Surface* image = SDL_LoadBMP("ds4.bmp");
 	SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, image);
+
+	// Add window transparency
+	// MakeWindowTransparent(window, RGB(Uint8(clear_color.x * 255), Uint8(clear_color.y * 255), Uint8(clear_color.z * 255)), Uint8(clear_color.w * 255));
+	SDL_SysWMinfo wmInfo;
+	SDL_VERSION(&wmInfo.version); // Initialize wmInfo
+	SDL_GetWindowWMInfo(window, &wmInfo);
+	HWND hWnd = wmInfo.info.win.window;
 
 	// Main loop
 	while (!done)
@@ -282,201 +204,295 @@ bool Application::DrawLoop()
 		if (done)
 			break;
 
+		auto &style = GetStyle();
+		style.Alpha = 1.0f;
+		style.Colors[ImGuiCol_WindowBg].w = 0;
+
 		// Start the Dear ImGui frame
 		ImGui_ImplSDLRenderer_NewFrame();
 		ImGui_ImplSDL2_NewFrame();
-		ImGui::NewFrame();
+		NewFrame();
 
-		ImGui::DockSpaceOverViewport(ImGui::GetMainViewport());
+		DockSpaceOverViewport(GetMainViewport(), ImGuiDockNodeFlags_PassthruCentralNode);
 
-		// 1. Show the big demo window (Most of the sample code is in ImGui::ShowDemoWindow()! You can browse its code to learn more about Dear ImGui!).
+		// 1. Show the big demo window (Most of the sample code is in ShowDemoWindow()! You can browse its code to learn more about Dear ImGui!).
 		if (show_demo_window)
-			ImGui::ShowDemoWindow(&show_demo_window);
+			ShowDemoWindow(&show_demo_window);
 
 		// 2. Show a simple window that we create ourselves. We use a Begin/End pair to create a named window.
 		// static float f = 0.0f;
 		using namespace ImGui;
-		static int counter = 0;
-
-		Begin("ButtonBar");
-		Checkbox("Show demo window", &show_demo_window);
-		SameLine();
-		if (ImGui::Button("RECONNECT_CONTROLLERS"))
+		if (BeginMainMenuBar())
 		{
-			WriteToConsole("RECONNECT_CONTROLLERS");
-		}
-		SameLine();
-		static int durationIndex = 0; // Here we store our selection data as an index.
-		if (Button("RESTART_GYRO_CALIBRATION"))
-		{
-			auto t = std::thread([]()
-			  {
+			if (BeginMenu("File"))
+			{
+				if (MenuItem("New", "CTRL+N", nullptr, false))
+				{
+				}
+				if (MenuItem("Open", "CTRL+O", nullptr, false))
+				{
+				}
+				if (MenuItem("Save", "CTRL+S", nullptr, false))
+				{
+				}
+				if (MenuItem("Save As...", "SHIFT+CTRL+S", nullptr, false))
+				{
+				}
+				Separator();
+				if (MenuItem("On Startup", nullptr, nullptr, false))
+				{
+				}
+				if (MenuItem("On Reset", nullptr, nullptr, false))
+				{
+				}
+				if (BeginMenu("Templates"))
+				{
+					if (MenuItem("_2DMouse", nullptr, nullptr, false))
+					{
+					}
+					if (MenuItem("_3DMouse", nullptr, nullptr, false))
+					{
+					}
+					EndMenu();
+				}
+				if (BeginMenu("AutoLoad"))
+				{
+					if (MenuItem("game1", nullptr, nullptr, false))
+					{
+					}
+					if (MenuItem("game2", nullptr, nullptr, false))
+					{
+					}
+					EndMenu();
+				}
+				Separator();
+				if (MenuItem("Quit"))
+				{
+					done = true;
+				}
+				EndMenu();
+			}
+			if (BeginMenu("Commands"))
+			{
+				if (MenuItem("Reset Mappings"))
+				{
+					WriteToConsole("RESET_MAPPINGS");
+				}
+				HelpMarker(_cmds.GetHelp("RESET_MAPPINGS"));
+				static bool mergeJoycons = true;
+				Checkbox("Merge Joycons", &mergeJoycons);
+				HelpMarker("If checked, complimentary joycons will be consider two parts of a single controller");
+				if (MenuItem("Reconnect Controllers"))
+				{
+					if (mergeJoycons)
+						WriteToConsole("RECONNECT_CONTROLLERS MERGE");
+					else
+						WriteToConsole("RECONNECT_CONTROLLERS SPLIT");
+				}
+				HelpMarker(_cmds.GetHelp("RECONNECT_CONTROLLERS"));
+				static bool counterOsMouseSpeed = false;
+				if (Checkbox("Counter OS Mouse Speed", &counterOsMouseSpeed))
+				{
+					if (counterOsMouseSpeed)
+						WriteToConsole("COUNTER_OS_MOUSE_SPEED");
+					else
+						WriteToConsole("IGNORE_OS_MOUSE_SPEED");
+				}
+				HelpMarker(_cmds.GetHelp("COUNTER_OS_MOUSE_SPEED"));
+				if (MenuItem("Calculate Real World Calibration"))
+				{
+					WriteToConsole("CALCULATE_REAL_WORLD_CALIBRATION");
+				}
+				HelpMarker(_cmds.GetHelp("CALCULATE_REAL_WORLD_CALIBRATION"));
+				Separator();
+				static float duration = 3.f;
+				SliderFloat("Calibration duration", &duration, 0.5f, 5.0f);
+				if (MenuItem("Calibrate All Controllers"))
+				{
+					auto t = std::thread([]()
+					  {
 					WriteToConsole("RESTART_GYRO_CALIBRATION");
-					int32_t ms = (durationIndex + 1) * 1000;
+					int32_t ms = duration * 1000.f;
 					Sleep(ms); // ms
 					WriteToConsole("FINISH_GYRO_CALIBRATION"); });
-			t.detach();
-		}
-		static const char* items[] = { "1 second", "2 second", "3 seconds", "4 seconds", "5 seconds" };
-		SameLine();
-		if (ImGui::BeginCombo("duration", nullptr, ImGuiComboFlags_NoPreview))
-		{
-			for (int n = 0; n < IM_ARRAYSIZE(items); n++)
-			{
-				const bool is_selected = (durationIndex == n);
-				if (ImGui::Selectable(items[n], is_selected))
-					durationIndex = n;
-
-				// Set the initial focus when opening the combo (scrolling + keyboard navigation focus)
-				if (is_selected)
-					ImGui::SetItemDefaultFocus();
+					t.detach();
+				}
+				HelpMarker(_cmds.GetHelp("RESTART_GYRO_CALIBRATION"));
+				if (MenuItem("Reset Motion Stick"))
+				{
+					WriteToConsole("SET_MOTION_STICK_NEUTRAL");
+				}
+				HelpMarker(_cmds.GetHelp("SET_MOTION_STICK_NEUTRAL"));
+				Separator();
+				static bool whitelistAdd = false;
+				if (Checkbox("Add to Whitelister", &whitelistAdd))
+				{
+					if (whitelistAdd)
+						WriteToConsole("WHITELIST_ADD");
+					else
+						WriteToConsole("WHITELIST_REMOVE");
+				}
+				HelpMarker(_cmds.GetHelp("WHITELIST_ADD"));
+				if (MenuItem("Show Whitelister"))
+				{
+					WriteToConsole("WHITELIST_SHOW");
+				}
+				HelpMarker(_cmds.GetHelp("WHITELIST_SHOW"));
+				if (MenuItem("Calibrate Adaptive Triggers"))
+				{
+					WriteToConsole("CALIBRATE_TRIGGERS");
+					ShowConsole();
+				}
+				HelpMarker(_cmds.GetHelp("CALIBRATE_TRIGGERS"));
+				EndMenu();
 			}
-			ImGui::EndCombo();
+			if (BeginMenu("Debug"))
+			{
+				Checkbox("Show ImGui demo", &show_demo_window);
+				MenuItem("Record a bug", nullptr, false, false);
+				EndMenu();
+			}
+			if (BeginMenu("Help"))
+			{
+				MenuItem("Read Me", nullptr, false, false);
+				MenuItem("Check For Updates", nullptr, false, false);
+				MenuItem("About", nullptr, false, false);
+				EndMenu();
+			}
+			EndMainMenuBar();
 		}
-		SameLine();
-		if (Button("Quit")) // Buttons return true when clicked (most widgets return true when edited/activated)
-			done = true;
-		ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
-		End();
 
-		Begin("Ds4");
-		DockSpace(GetID("Ds4"));
-		bool isDs4Visible = ImGui::IsItemVisible();
-		End();
+		ImVec2 renderingAreaPos;
+		ImVec2 renderingAreaSize;
+		Begin("MainWindow", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoMove);
 
-		Begin("Left Bindings");
-		ImVec2 buttonSize{ GetWindowSize().x, 50.f };
-		ImVec2 dummySize{ buttonSize.x, buttonSize.y / 2.f };
-		drawButton(ButtonID::ZLF, buttonSize);
-		drawCombo(zlMode);
-		drawButton(ButtonID::ZL, buttonSize);
-		drawButton(ButtonID::L, buttonSize);
-		Dummy(dummySize);
-		drawButton(ButtonID::UP, buttonSize);
-		drawButton(ButtonID::LEFT, buttonSize);
-		drawButton(ButtonID::RIGHT, buttonSize);
-		drawButton(ButtonID::DOWN, buttonSize);
-		Dummy(dummySize);
-		drawButton(ButtonID::L3, buttonSize);
-		drawCombo(left_stick_mode);
-
-		ShowModalInputSelector();
-		End();
-
-		ImVec2 rightWindowSize;
-		Begin("Right Bindings");
-		rightWindowSize = GetWindowSize();
-		buttonSize = { GetWindowSize().x, 50.f };
-		drawButton(ButtonID::ZRF, buttonSize);
-		drawCombo(zrMode);
-		drawButton(ButtonID::ZR, buttonSize);
-		drawButton(ButtonID::R, buttonSize);
-		Dummy(dummySize);
-		drawButton(ButtonID::N, buttonSize);
-		drawButton(ButtonID::E, buttonSize);
-		drawButton(ButtonID::W, buttonSize);
-		drawButton(ButtonID::S, buttonSize);
-		Dummy(dummySize);
-		drawButton(ButtonID::R3, buttonSize);
-		drawCombo(right_stick_mode);
-		ShowModalInputSelector();
-		End();
-
-		ImVec2 topWindowPos, topWindowSize;
+		bool showBackground = BeginTabBar("Main");
+		//SetNextWindowBgAlpha(0.f);
+		if (ImGui::BeginTabItem("Button Bindings"))
 		{
-			Begin("Top buttons");
-			topWindowPos = GetWindowPos();
-			topWindowSize = GetWindowSize();
-			ImVec2 buttonSize{ GetWindowSize().x / 5.f - 10.f, 50.f };
+			auto drawlabel = [this](ButtonID btn)
+			{
+				AlignTextToFramePadding();
+				Text(enum_name(btn).data());
+				if (IsItemHovered())
+				{
+					SetTooltip(_cmds.GetHelp(enum_name(btn)).data());
+				}
+			};
+			auto mainWindowSize = ImGui::GetContentRegionAvail();
+			// Left
+			BeginChild("Left Bindings", { mainWindowSize.x * 1.f / 5.f, 0.f });
+			ImVec2 buttonSize = ImVec2{ 0.f, 0.f };
+			drawButton(ButtonID::ZLF, buttonSize, SettingsManager::get<TriggerMode>(SettingID::ZL_MODE)->value() != TriggerMode::NO_FULL);
+			SameLine();
+			drawlabel(ButtonID::ZLF);
+			drawCombo(*SettingsManager::get<TriggerMode>(SettingID::ZL_MODE));
+			if (IsItemHovered())
+			{
+				SetTooltip(_cmds.GetHelp(enum_name(SettingID::ZL_MODE)).data());
+			}
+			drawButton(ButtonID::ZL, buttonSize);
+			SameLine();
+			drawlabel(ButtonID::ZL);
+			drawButton(ButtonID::L, buttonSize);
+			SameLine();
+			drawlabel(ButtonID::L);
+			drawButton(ButtonID::UP, buttonSize);
+			SameLine();
+			drawlabel(ButtonID::UP);
+			drawButton(ButtonID::LEFT, buttonSize);
+			SameLine();
+			drawlabel(ButtonID::LEFT);
+			drawButton(ButtonID::RIGHT, buttonSize);
+			SameLine();
+			drawlabel(ButtonID::RIGHT);
+			drawButton(ButtonID::DOWN, buttonSize);
+			SameLine();
+			drawlabel(ButtonID::DOWN);
+			drawButton(ButtonID::L3, buttonSize);
+			SameLine();
+			drawlabel(ButtonID::L3);
+			drawCombo(*SettingsManager::get<StickMode>(SettingID::LEFT_STICK_MODE));
+			if (IsItemHovered())
+			{
+				SetTooltip(_cmds.GetHelp(enum_name(SettingID::LEFT_STICK_MODE)).data());
+			}
+			_inputSelector.draw();
+			EndChild();
+			ImGui::SameLine();
+
+			// Right
+			ImGui::BeginGroup();
+			BeginChild("Top buttons", { mainWindowSize.x * 3.f / 5.f, 60.f });
 			drawButton(ButtonID::MINUS, buttonSize);
 			SameLine();
 			drawButton(ButtonID::TOUCH, buttonSize);
 			SameLine();
-			static const char* items[] = { "NO_FULL", "NO_SKIP", "MAY_SKIP", "MUST_SKIP", "NO_SKIP_EXCLUSIVE", "MAY_SKIP_R", "MUST_SKIP_R", "X_LT", "X_RT" };
-			static int zlModeIndex = 0;
-			SetNextWindowSizeConstraints(buttonSize, buttonSize);
-			if (ImGui::BeginCombo(" ", items[zlModeIndex], ImGuiComboFlags_NoPreview))
-			{
-				for (int n = 0; n < IM_ARRAYSIZE(items); n++)
-				{
-					const bool is_selected = (zlModeIndex == n);
-					if (ImGui::Selectable(items[n], is_selected))
-						zlModeIndex = n; // set global variable
-
-					// Set the initial focus when opening the combo (scrolling + keyboard navigation focus)
-					if (is_selected)
-						ImGui::SetItemDefaultFocus();
-				}
-				ImGui::EndCombo();
-			}
+			drawCombo(*SettingsManager::get<TriggerMode>(SettingID::TOUCHPAD_DUAL_STAGE_MODE), ImGuiComboFlags_NoPreview);
 			SameLine();
 			drawButton(ButtonID::CAPTURE, buttonSize);
 			SameLine();
 			drawButton(ButtonID::PLUS, buttonSize);
-			ShowModalInputSelector();
-			End();
-		}
+			_inputSelector.draw();
+			EndChild();
 
-		ImVec2 bottomWindowPos, bottomWindowSize;
+			renderingAreaSize = { mainWindowSize.x * 3.f / 5.f, GetContentRegionAvail().y };
+			BeginChild("Rendering window", renderingAreaSize, false);
+			renderingAreaPos = ImGui::GetWindowPos();
+			EndChild();
+			EndGroup();
+
+			SameLine();
+			BeginChild("Right Bindings");
+			drawButton(ButtonID::ZRF, buttonSize, SettingsManager::get<TriggerMode>(SettingID::ZR_MODE)->value() != TriggerMode::NO_FULL);
+			drawCombo(*SettingsManager::get<TriggerMode>(SettingID::ZR_MODE));
+			drawButton(ButtonID::ZR, buttonSize);
+			drawButton(ButtonID::R, buttonSize);
+			drawButton(ButtonID::N, buttonSize);
+			drawButton(ButtonID::E, buttonSize);
+			drawButton(ButtonID::W, buttonSize);
+			drawButton(ButtonID::S, buttonSize);
+			drawButton(ButtonID::R3, buttonSize);
+			drawCombo(*SettingsManager::get<StickMode>(SettingID::RIGHT_STICK_MODE));
+			_inputSelector.draw();
+			EndChild();
+			ImGui::EndTabItem();
+		}
+		if (ImGui::BeginTabItem("Settings"))
 		{
-			Begin("Bottom Buttons");
-			bottomWindowPos = GetWindowPos();
-			bottomWindowSize = GetWindowSize();
-			ImVec2 buttonSize{ GetWindowSize().x / 6.f - 10.f, 50.f };
-			drawButton(ButtonID::LUP, buttonSize);
-			SameLine();
-			drawButton(ButtonID::LRIGHT, buttonSize);
-			SameLine();
-			drawButton(ButtonID::MUP, buttonSize);
-			SameLine();
-			drawButton(ButtonID::MRIGHT, buttonSize);
-			SameLine();
-			drawButton(ButtonID::RUP, buttonSize);
-			SameLine();
-			drawButton(ButtonID::RRIGHT, buttonSize);
-			drawButton(ButtonID::LLEFT, buttonSize);
-			SameLine();
-			drawButton(ButtonID::LDOWN, buttonSize);
-			SameLine();
-			drawButton(ButtonID::MLEFT, buttonSize);
-			SameLine();
-			drawButton(ButtonID::MDOWN, buttonSize);
-			SameLine();
-			drawButton(ButtonID::RLEFT, buttonSize);
-			SameLine();
-			drawButton(ButtonID::RDOWN, buttonSize);
-			ShowModalInputSelector();
-			End();
+			ImGui::Text("This is the Avocado tab!\nblah blah blah blah blah");
+			ImGui::EndTabItem();
 		}
+		EndTabBar(); // Main
+		End();       // MainWindow
 
-		SDL_Rect dstrect{
-			topWindowPos.x,
-			topWindowPos.y + topWindowSize.y,
-			topWindowSize.x,
-			rightWindowSize.y - bottomWindowSize.y - topWindowSize.y
+		SDL_Rect bgDims{
+			renderingAreaPos.x,
+			renderingAreaPos.y,
+			renderingAreaSize.x,
+			renderingAreaSize.y
 		};
 
-		if (isDs4Visible)
-		{
-			ImVec2 upLeft{ float(dstrect.x), float(dstrect.y) };
-			ImVec2 lowRight{ float(dstrect.x + dstrect.w), float(dstrect.y + dstrect.h) };
-			GetBackgroundDrawList()->AddImage(texture, upLeft, lowRight);
-		}
+		ImVec2 upLeft{ float(bgDims.x), float(bgDims.y) };
+		ImVec2 lowRight{ float(bgDims.x + bgDims.w), float(bgDims.y + bgDims.h) };
+		GetBackgroundDrawList()->AddImage(texture, upLeft, lowRight);
 
 		// Rendering
-		ImGui::Render();
 		SDL_RenderClear(renderer);
-		ImGui_ImplSDLRenderer_RenderDrawData(ImGui::GetDrawData());
-		SDL_SetTextureBlendMode(texture, SDL_BlendMode::SDL_BLENDMODE_ADD);
-		if (isDs4Visible)
-			SDL_RenderCopy(renderer, texture, nullptr, &dstrect);
+		Render();
+		if (showBackground && !_inputSelector.isShowing())
+		{
+			SDL_SetTextureBlendMode(texture, SDL_BlendMode::SDL_BLENDMODE_BLEND);
+			SDL_RenderCopy(renderer, texture, nullptr, &bgDims);
+		}
+		ImGui_ImplSDLRenderer_RenderDrawData(GetDrawData());
 		SDL_RenderPresent(renderer);
 	}
 
 	// Cleanup
 	ImGui_ImplSDLRenderer_Shutdown();
 	ImGui_ImplSDL2_Shutdown();
-	ImGui::DestroyContext();
+	DestroyContext();
 
 	SDL_DestroyTexture(texture);
 	SDL_FreeSurface(image);

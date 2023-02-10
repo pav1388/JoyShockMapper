@@ -7,33 +7,34 @@
 #include <future>
 #include <atomic>
 #include <optional>
+#include "Mapping.h"
+#include "InputSelector.h"
 
 enum class ButtonID;
+class CmdRegistry;
 
 class Application
 {
 public:
-	Application();
+	Application(const CmdRegistry &cmds);
 
 	~Application() = default;
 
-	void Runloop();
+	void run();
 
 	void StopLoop();
 
 	bool DrawLoop();
 
-	void ShowModalInputSelector();
-
-	void drawButton(ButtonID btn);
-	void drawButton(ButtonID btn, ImVec2 size);
+	void drawButton(ButtonID btn, ImVec2 size = ImVec2{ 0, 0 }, bool enabled = true);
 
 private:
-	// Our state
+	const CmdRegistry &_cmds;
+	InputSelector _inputSelector;
 	std::atomic_bool done = false;
 	bool show_demo_window = false;
 	SDL_Window* window = nullptr;
 	SDL_Renderer* renderer = nullptr;
 	std::future<bool> threadDone;
-	std::optional<ButtonID> speedpopup;
+
 };

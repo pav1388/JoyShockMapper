@@ -10,9 +10,9 @@ static bool iequals(const string& a, const string& b)
 		  return tolower(a) == tolower(b);
 	  });
 }
-
-namespace patate
+namespace JSM
 {
+
 AutoLoad::AutoLoad(CmdRegistry* commandRegistry, bool start)
   : PollingThread("AutoLoad thread", std::bind(&AutoLoad::AutoLoadPoll, this, std::placeholders::_1), (void*)commandRegistry, 1000, start)
 {
@@ -38,11 +38,7 @@ bool AutoLoad::AutoLoadPoll(void* param)
 			if (iequals(noextconfig, noextmodule))
 			{
 				COUT_INFO << "loading \"AutoLoad\\" << noextconfig << ".txt\"." << endl;
-				// loading_lock.lock();
-				// registry->processLine(path + file);
-				// loading_lock.unlock();
 				WriteToConsole(path + file);
-				// COUT_INFO << "[AUTOLOAD] Loading completed" << endl;
 				success = true;
 				break;
 			}
@@ -56,4 +52,5 @@ bool AutoLoad::AutoLoadPoll(void* param)
 	}
 	return true;
 }
-} // namespace patate
+
+} // JSM

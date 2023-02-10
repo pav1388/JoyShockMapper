@@ -117,7 +117,7 @@ string_view CmdRegistry::strtrim(std::string_view str)
 // Add a command to the registry. The regisrty takes ownership of the memory of this pointer.
 // You can use _ASSERT() on the return value of this function to make sure the commands are
 // accepted.
-bool CmdRegistry::Add(JSMCommand* newCommand)
+bool CmdRegistry::add(JSMCommand* newCommand)
 {
 	// Check that the pointer is valid, that the name is valid.
 	if (newCommand && regex_match(newCommand->_name, regex(R"(^(\+|-|\w+)$)")))
@@ -142,12 +142,12 @@ bool CmdRegistry::Remove(in_string name)
 	return false;
 }
 
-bool CmdRegistry::findCommandWithName(in_string name, CmdMap::value_type& pair)
+bool CmdRegistry::findCommandWithName(in_string name, const CmdMap::value_type& pair)
 {
 	return name == pair.first;
 }
 
-bool CmdRegistry::isCommandValid(in_string line)
+bool CmdRegistry::isCommandValid(in_string line) const
 {
 	ifstream file(line.data());
 	if (file.is_open())
@@ -177,7 +177,7 @@ bool CmdRegistry::isCommandValid(in_string line)
 	}
 
 	bool hasProcessed = false;
-	CmdMap::iterator cmd = find_if(_registry.begin(), _registry.end(), bind(&CmdRegistry::findCommandWithName, name, placeholders::_1));
+	CmdMap::const_iterator cmd = find_if(_registry.cbegin(), _registry.cend(), bind(&CmdRegistry::findCommandWithName, name, placeholders::_1));
 	return cmd != _registry.end();
 }
 
@@ -241,7 +241,7 @@ void CmdRegistry::processLine(const string& line)
 	// else ignore empty lines
 }
 
-void CmdRegistry::GetCommandList(vector<string_view>& outList)
+void CmdRegistry::GetCommandList(vector<string_view>& outList) const
 {
 	outList.clear();
 	for (auto& cmd : _registry)
@@ -254,7 +254,7 @@ bool CmdRegistry::hasCommand(in_string name) const
 	return _registry.find(name) != _registry.end();
 }
 
-string CmdRegistry::GetHelp(in_string command)
+string_view CmdRegistry::GetHelp(in_string command) const
 {
 	auto cmd = _registry.find(command);
 	if (cmd != _registry.end())

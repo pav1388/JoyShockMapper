@@ -18,8 +18,8 @@ istream &operator>>(istream &in, Mapping &mapping)
 	int count = 0;
 
 	mapping._command = valueName;
-	const char *rgx = R"(\s*([!\^]?)((\".*?\")|\w*[0-9A-Z]|\W)([\\\/+'_]?)\s*(.*))";
-	while (regex_match(valueName, results, regex(rgx)) && !results[0].str().empty())
+	static constexpr string_view rgx = R"(\s*([!\^]?)((\".*?\")|\w*[0-9A-Z]|\W)([\\\/+'_]?)\s*(.*))";
+	while (regex_match(valueName, results, regex(rgx.data())) && !results[0].str().empty())
 	{
 		Mapping::ActionModifier actMod =
 		  results[1].str().empty()   ? Mapping::ActionModifier::None :
@@ -30,7 +30,7 @@ istream &operator>>(istream &in, Mapping &mapping)
 		string keyStr(results[2]);
 
 		Mapping::EventModifier evtMod =
-		  results[4].str().empty()    ? Mapping::EventModifier::None :
+		  results[4].str().empty()    ? Mapping::EventModifier::Auto :
 		  results[4].str()[0] == '\\' ? Mapping::EventModifier::StartPress :
 		  results[4].str()[0] == '+'  ? Mapping::EventModifier::TurboPress :
 		  results[4].str()[0] == '/'  ? Mapping::EventModifier::ReleasePress :
@@ -41,10 +41,10 @@ istream &operator>>(istream &in, Mapping &mapping)
 		string leftovers(results[5]);
 
 		KeyCode key(keyStr);
-		if (evtMod == Mapping::EventModifier::None)
+		if (evtMod == Mapping::EventModifier::Auto)
 		{
 			evtMod = count == 0 ? (leftovers.empty() ? Mapping::EventModifier::StartPress : Mapping::EventModifier::TapPress) :
-			                      (count == 1 ? Mapping::EventModifier::HoldPress : Mapping::EventModifier::None);
+			                      (count == 1 ? Mapping::EventModifier::HoldPress : Mapping::EventModifier::Auto);
 		}
 
 		// Some exceptions :(
@@ -64,7 +64,7 @@ istream &operator>>(istream &in, Mapping &mapping)
 		  key.code == COMMAND_ACTION && actMod != Mapping::ActionModifier::Instant ||
 		  actMod == Mapping::ActionModifier::INVALID ||
 		  evtMod == Mapping::EventModifier::INVALID ||
-		  evtMod == Mapping::EventModifier::None && count >= 2 ||
+		  evtMod == Mapping::EventModifier::Auto && count >= 2 ||
 		  evtMod == Mapping::EventModifier::ReleasePress && actMod == Mapping::ActionModifier::None ||
 		  !mapping.AddMapping(key, evtMod, actMod))
 		{
@@ -291,6 +291,36 @@ bool Mapping::AddMapping(KeyCode key, EventModifier evtMod, ActionModifier actMo
 	}
 	// else don't display event modifier when using default binding on single key
 	_description = ss.str();
+	return true;
+}
+
+bool Mapping::AppendToCommand(KeyCode key, EventModifier evtMod, ActionModifier actMod)
+{
+	if (key.name.empty() || evtMod == EventModifier::INVALID || actMod == ActionModifier::INVALID)
+	{
+		return false;
+	}
+	stringstream ss;
+	if (!_command.empty())
+	{
+		ss << _command << " ";
+	}
+
+	if (actMod != ActionModifier::None)
+	{
+		ss << (actMod == ActionModifier::Instant ? '!' : '^');
+	}
+	ss << key.name;
+
+	if (evtMod != EventModifier::Auto)
+	{
+		ss << (evtMod == EventModifier::StartPress ? '\\' :
+		    evtMod == EventModifier::TurboPress    ? '+' :
+		    evtMod == EventModifier::ReleasePress  ? '/' :
+		    evtMod == EventModifier::TapPress      ? '\'' :
+		 /* evtMod == EventModifier::HoldPress    */ '_'); 
+	}
+	_command = ss.str();
 	return true;
 }
 
