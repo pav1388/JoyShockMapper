@@ -27,6 +27,9 @@ protected:
 	// The variable value itself
 	T _value;
 
+	// a user provided label
+	string _label;
+
 	// Parts of the code can be notified of when _value changes.
 	map<unsigned int, OnChangeDelegate> _onChangeListeners;
 
@@ -131,6 +134,16 @@ public:
 				listener.second(_value);
 		}
 		return _value; // Return actual value assign. Can be different from newValue because of filtering.
+	}
+
+	string_view label() const
+	{
+		return _label;
+	}
+
+	void updateLabel(in_string label)
+	{
+		_label = label;
 	}
 };
 

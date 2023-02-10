@@ -50,10 +50,13 @@ public:
 	// This functor nees to be set to way to validate a command line string;
 	static function<bool(in_string)> _isCommandValid;
 
+	friend istream &operator>>(istream &in, Mapping &mapping);
+	friend ostream &operator<<(ostream &out, const Mapping &mapping);
+
+private:
 	string _description = "no input";
 	string _command;
 
-private:
 	map<BtnEvent, EventActionIf::Callback> _eventMapping;
 	float _tapDurationMs = MAGIC_TAP_DURATION;
 	bool _hasViGEmBtn = false;
@@ -71,6 +74,15 @@ public:
 	{
 	}
 
+	std::string_view description() const
+	{
+		return _description;
+	}
+
+	std::string_view command() const
+	{
+		return _command;
+	}
 	void ProcessEvent(BtnEvent evt, EventActionIf &button) const;
 
 	bool AddMapping(KeyCode key, EventModifier evtMod, ActionModifier actMod = ActionModifier::None);
@@ -99,8 +111,6 @@ public:
 	}
 };
 
-istream &operator>>(istream &in, Mapping &mapping);
-ostream &operator<<(ostream &out, Mapping mapping);
 bool operator==(const Mapping &lhs, const Mapping &rhs);
 inline bool operator!=(const Mapping &lhs, const Mapping &rhs)
 {

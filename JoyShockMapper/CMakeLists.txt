@@ -10,6 +10,7 @@ set(JSM_VERSION "v${JSM_VERSION_MAJOR}.${JSM_VERSION_MINOR}.${JSM_VERSION_PATCH}
 
 message(STATUS "JSM version is " ${JSM_VERSION})
 
+
 configure_file(include/JSMVersion.h.in include/JSMVersion.h)
 
 add_executable (
@@ -23,6 +24,7 @@ add_executable (
 	src/MotionImpl.cpp
 	src/Mapping.cpp
     src/TriggerEffectGenerator.cpp
+    src/AutoLoad.cpp
     include/TriggerEffectGenerator.h
     include/InputHelpers.h
     include/PlatformDefinitions.h
@@ -39,6 +41,9 @@ add_executable (
 	include/DigitalButton.h
 	include/JslWrapper.h
 	include/Mapping.h
+    include/AutoLoad.h
+    src/dimgui/Application.cpp
+    include/dimgui/Application.h
 )
 
 if (WINDOWS)
@@ -70,31 +75,20 @@ if (WINDOWS)
     CPMAddPackage (
         NAME ViGEmClient
         GITHUB_REPOSITORY ViGEm/ViGEmClient
-        VERSION 1.17.167.0
-    )
-    
-    include_external_msproject(ViGEmClient 
-      "${PROJECT_BINARY_DIR}/_deps/vigemclient-src/src/ViGEmClient.vcxproj")
-
-    set_target_properties(ViGEmClient PROPERTIES
-      MAP_IMPORTED_CONFIG_DEBUG DEBUG_LIB
-      MAP_IMPORTED_CONFIG_RELEASE RELEASE_LIB
-      VS_PLATFORM_TOOLSET "v141"
-      IMPORTED_LOCATION "${PROJECT_BINARY_DIR}/_deps/vigemclient-src/lib/${CMAKE_BUILD_TYPE}/$(PlatformShortName)/ViGEmClient.lib"
-      INTERFACE_INCLUDE_DIRECTORIES "${PROJECT_BINARY_DIR}/_deps/vigemclient-src/include"
+		GIT_TAG 726404ef5590ea4bfcc7d9fa40cadcb2638a5b82 # updated cmakefile
+		# VERSION 1.21.222.0
     )
     
     add_dependencies(${BINARY_NAME} ViGEmClient)
     
     target_link_libraries (
         ${BINARY_NAME} PRIVATE
-         debug "${PROJECT_BINARY_DIR}/_deps/vigemclient-src/lib/debug/$(PlatformShortName)/ViGEmClient.lib"
-		 optimized "${PROJECT_BINARY_DIR}/lib/release/$(PlatformShortName)/ViGEmClient.lib"
-    )
-    
+		ViGEmClient
+	)
+	
     target_include_directories (
         ${BINARY_NAME} PUBLIC
-        "${PROJECT_BINARY_DIR}/_deps/vigemclient-src/include"
+        "${ViGEmClient_SOURCE_DIR}/include"
     )
 
     if(SDL)
@@ -168,22 +162,43 @@ if(SDL OR NOT DEFINED SDL)
 	CPMAddPackage (
 		NAME SDL2
 		GITHUB_REPOSITORY libsdl-org/SDL
-		GIT_TAG release-2.0.20
+		GIT_TAG release-2.26.2
 	)
+
+    # CPMAddPackage (
+	# 	NAME SDL_ttf
+	# 	GITHUB_REPOSITORY libsdl-org/SDL_ttf
+	# 	GIT_TAG release-2.20.1
+	# )
+
+    #CPMAddPackage (
+	#	NAME SDL_image
+	#	GITHUB_REPOSITORY libsdl-org/SDL
+	#	GIT_TAG release-2.6.2
+	#)
 	
 	set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
-
 
 	target_link_libraries (
 		${BINARY_NAME} PRIVATE
 		Platform::Dependencies
-		SDL2
+		SDL2 
+		# SDL2_ttf
 	)
+	
+	# install(EXPORT SDL2
+	# 	FILE SDL2.cmake
+	# 	DESTINATION lib/cmake/SDL2
+	# )
 
 	install (
-		TARGETS ${BINARY_NAME} SDL2
+		TARGETS ${BINARY_NAME} SDL2 
+		# SDL2_ttf
 		RUNTIME DESTINATION ${PACKAGE_DIR}
 	)
+	
+	# install(TARGETS SDL2_ttf PUBLIC_HEADER DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
+
 else()
 	# JoyShockLibrary
 	CPMAddPackage (
@@ -243,3 +258,38 @@ target_link_libraries (
     Platform::Dependencies
     GamepadMotionHelpers
 )
+
+# Dear ImGUI
+CPMAddPackage (
+    NAME imgui
+    GITHUB_REPOSITORY ocornut/imgui
+    GIT_TAG docking
+)
+
+add_library(imgui STATIC
+  ${imgui_SOURCE_DIR}/imgui.cpp ${imgui_SOURCE_DIR}/imgui.h
+  ${imgui_SOURCE_DIR}/imconfig.h ${imgui_SOURCE_DIR}/imgui_demo.cpp
+  ${imgui_SOURCE_DIR}/imgui_draw.cpp ${imgui_SOURCE_DIR}/imgui_internal.h
+  ${imgui_SOURCE_DIR}/imgui_tables.cpp ${imgui_SOURCE_DIR}/imgui_widgets.cpp
+  ${imgui_SOURCE_DIR}/imstb_rectpack.h ${imgui_SOURCE_DIR}/imstb_textedit.h
+  ${imgui_SOURCE_DIR}/imstb_truetype.h
+  ${imgui_SOURCE_DIR}/backends/imgui_impl_sdl2.h ${imgui_SOURCE_DIR}/backends/imgui_impl_sdl2.cpp
+  ${imgui_SOURCE_DIR}/backends/imgui_impl_sdlrenderer.h ${imgui_SOURCE_DIR}/backends/imgui_impl_sdlrenderer.cpp)
+
+target_include_directories(imgui PUBLIC ${imgui_SOURCE_DIR})
+target_link_libraries(imgui PUBLIC SDL2::SDL2)
+
+target_link_libraries(${BINARY_NAME} PUBLIC imgui)
+
+target_include_directories(${BINARY_NAME} PUBLIC ${PROJECT_BINARY_DIR}/_deps/imgui-src
+                                                 ${PROJECT_BINARY_DIR}/_deps/imgui-src/backends)
+
+add_custom_command(
+	TARGET ${BINARY_NAME}
+	POST_BUILD
+	COMMAND ${CMAKE_COMMAND} -E copy
+	"${PROJECT_SOURCE_DIR}/dist/ds4.bmp"
+	"$<TARGET_FILE_DIR:${PROJECT_NAME}>/ds4.bmp"
+)
+
+# FetchContent_MakeAvailable(imgui)

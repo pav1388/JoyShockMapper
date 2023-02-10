@@ -15,7 +15,7 @@
 using namespace std; // simplify all std calls
 
 // input string parameters should be const references.
-typedef const string &in_string;
+typedef string_view in_string;
 
 // Reused OS typedefs
 typedef unsigned short WORD;
@@ -473,6 +473,10 @@ class PathString : public string // Should be wstring
 {
 public:
 	PathString() = default;
+	PathString(const string& path)
+	  : string(path)
+	{
+	}
 	PathString(in_string path)
 	  : string(path)
 	{
@@ -498,14 +502,14 @@ union Color
 using AxisSignPair = pair<AxisMode, AxisMode>;
 
 // Needs to be accessed publicly
-extern WORD nameToKey(const std::string &name);
+extern WORD nameToKey(in_string name);
 
 struct KeyCode
 {
 	static const KeyCode EMPTY;
 
-	WORD code;
-	string name;
+	WORD code = NO_HOLD_MAPPED;
+	string name = "None";
 
 	KeyCode();
 

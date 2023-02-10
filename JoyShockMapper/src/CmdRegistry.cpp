@@ -39,7 +39,7 @@ unique_ptr<JSMCommand> JSMCommand::GetModifiedCmd(char op, in_string chord)
 	return nullptr;
 }
 
-bool JSMCommand::ParseData(in_string arguments)
+bool JSMCommand::ParseData(in_string arguments, in_string label)
 {
 	_ASSERT_EXPR(_parse, L"There is no function defined to parse this command.");
 	if (arguments.compare("HELP") == 0)
@@ -47,7 +47,7 @@ bool JSMCommand::ParseData(in_string arguments)
 		// Parsing has failed. Show help.
 		COUT << _help << endl;
 	}
-	else if (!_parse(this, arguments))
+	else if (!_parse(this, arguments, label))
 	{
 		CERR << _help << endl;
 	}
@@ -149,7 +149,7 @@ bool CmdRegistry::findCommandWithName(in_string name, CmdMap::value_type& pair)
 
 bool CmdRegistry::isCommandValid(in_string line)
 {
-	ifstream file(line);
+	ifstream file(line.data());
 	if (file.is_open())
 	{
 		file.close();
@@ -158,7 +158,8 @@ bool CmdRegistry::isCommandValid(in_string line)
 	smatch results;
 	string combo, name, arguments, label;
 	char op = '\0';
-	if (regex_match(line, results, regex(R"(^\s*([+-]?\w*)\s*([,+]\s*([+-]?\w*))?\s*([^#\n]*)(#\s*(.*))?$)")))
+	const string lineStr(line);
+	if (regex_match(lineStr, results, regex(R"(^\s*([+-]?\w*)\s*([,+]\s*([+-]?\w*))?\s*([^#\n]*)(#\s*(.*))?$)")))
 	{
 		if (results[2].length() > 0)
 		{
@@ -216,14 +217,14 @@ void CmdRegistry::processLine(const string& line)
 		{
 			if (combo.empty())
 			{
-				hasProcessed |= cmd->second->ParseData(arguments);
+				hasProcessed |= cmd->second->ParseData(arguments, label);
 			}
 			else
 			{
 				auto modCommand = cmd->second->GetModifiedCmd(op, combo);
 				if (modCommand)
 				{
-					hasProcessed |= modCommand->ParseData(arguments);
+					hasProcessed |= modCommand->ParseData(arguments, label);
 				}
 				// Any task set to be run on destruction is done here.
 			}
@@ -240,7 +241,7 @@ void CmdRegistry::processLine(const string& line)
 	// else ignore empty lines
 }
 
-void CmdRegistry::GetCommandList(vector<string>& outList)
+void CmdRegistry::GetCommandList(vector<string_view>& outList)
 {
 	outList.clear();
 	for (auto& cmd : _registry)
@@ -263,7 +264,7 @@ string CmdRegistry::GetHelp(in_string command)
 	return "";
 }
 
-bool JSMMacro::DefaultParser(JSMCommand* cmd, in_string arguments)
+bool JSMMacro::DefaultParser(JSMCommand* cmd, in_string arguments, in_string label)
 {
 	// Default macro parser assumes no argument and calls macro when called.
 	auto macroCmd = static_cast<JSMMacro*>(cmd);

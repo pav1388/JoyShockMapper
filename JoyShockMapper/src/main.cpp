@@ -8,6 +8,8 @@
 #include "JSMAssignment.hpp"
 #include "quatMaths.cpp"
 #include "Gamepad.h"
+#include "AutoLoad.h"
+#include "dimgui/Application.h"
 
 #include <mutex>
 #include <deque>
@@ -145,7 +147,7 @@ JSMSetting<GyroOutput> flick_stick_output = JSMSetting<GyroOutput>(SettingID::FL
 JSMVariable<PathString> currentWorkingDir = JSMVariable<PathString>(PathString());
 vector<JSMButton> grid_mappings; // array of virtual buttons on the touchpad grid
 vector<JSMButton> mappings;      // array enables use of for each loop and other i/f
-mutex loading_lock;
+// mutex loading_lock;
 
 float os_mouse_speed = 1.0;
 float last_flick_and_rotation = 0.0;
@@ -1727,7 +1729,7 @@ bool do_CALCULATE_REAL_WORLD_CALIBRATION(in_string argument)
 	{
 		try
 		{
-			numRotations = stof(argument);
+			numRotations = stof(string(argument));
 		}
 		catch (invalid_argument ia)
 		{
@@ -1791,7 +1793,7 @@ bool do_SLEEP(in_string argument)
 	{
 		try
 		{
-			sleepTime = stof(argument);
+			sleepTime = stof(argument.data());
 		}
 		catch (invalid_argument ia)
 		{
@@ -2523,12 +2525,12 @@ void TouchCallback(int jcHandle, TOUCH_STATE newState, TOUCH_STATE prevState, fl
 
 	point0.posX = newState.t0Down ? newState.t0X : -1.f; // Absolute position in percentage
 	point0.posY = newState.t0Down ? newState.t0Y : -1.f;
-	point0.movX = js->prevTouchState.t0Down ? (newState.t0X - js->prevTouchState.t0X) * tpSizeX : 0.f; // Relative movement in unit
-	point0.movY = js->prevTouchState.t0Down ? (newState.t0Y - js->prevTouchState.t0Y) * tpSizeY : 0.f;
+	point0.movX = js->prevTouchState.t0Down ? int16_t(newState.t0X - js->prevTouchState.t0X) * tpSizeX : 0; // Relative movement in unit
+	point0.movY = js->prevTouchState.t0Down ? int16_t(newState.t0Y - js->prevTouchState.t0Y) * tpSizeY : 0;
 	point1.posX = newState.t1Down ? newState.t1X : -1.f;
 	point1.posY = newState.t1Down ? newState.t1Y : -1.f;
-	point1.movX = js->prevTouchState.t1Down ? (newState.t1X - js->prevTouchState.t1X) * tpSizeX : 0.f;
-	point1.movY = js->prevTouchState.t1Down ? (newState.t1Y - js->prevTouchState.t1Y) * tpSizeY : 0.f;
+	point1.movX = js->prevTouchState.t1Down ? int16_t(newState.t1X - js->prevTouchState.t1X) * tpSizeX : 0;
+	point1.movY = js->prevTouchState.t1Down ? int16_t(newState.t1Y - js->prevTouchState.t1Y) * tpSizeY : 0;
 
 	auto mode = js->getSetting<TouchpadMode>(SettingID::TOUCHPAD_MODE);
 	// js->handleButtonChange(ButtonID::TOUCH, point0.isDown() || point1.isDown()); // This is handled by dual stage "trigger" step
@@ -3553,54 +3555,6 @@ static void removeNewLine(char *string)
 	}
 }
 
-// https://stackoverflow.com/a/4119881/1130520 gives us case insensitive equality
-static bool iequals(const string &a, const string &b)
-{
-	return equal(a.begin(), a.end(),
-	  b.begin(), b.end(),
-	  [](char a, char b) {
-		  return tolower(a) == tolower(b);
-	  });
-}
-
-bool AutoLoadPoll(void *param)
-{
-	auto registry = reinterpret_cast<CmdRegistry *>(param);
-	static string lastModuleName;
-	string windowTitle, windowModule;
-	tie(windowModule, windowTitle) = GetActiveWindowName();
-	if (!windowModule.empty() && windowModule != lastModuleName && windowModule.compare("JoyShockMapper.exe") != 0)
-	{
-		lastModuleName = windowModule;
-		string path(AUTOLOAD_FOLDER());
-		auto files = ListDirectory(path);
-		auto noextmodule = windowModule.substr(0, windowModule.find_first_of('.'));
-		COUT_INFO << "[AUTOLOAD] \"" << windowTitle << "\" in focus: "; // looking for config : " , );
-		bool success = false;
-		for (auto file : files)
-		{
-			auto noextconfig = file.substr(0, file.find_first_of('.'));
-			if (iequals(noextconfig, noextmodule))
-			{
-				COUT_INFO << "loading \"AutoLoad\\" << noextconfig << ".txt\"." << endl;
-				loading_lock.lock();
-				registry->processLine(path + file);
-				loading_lock.unlock();
-				COUT_INFO << "[AUTOLOAD] Loading completed" << endl;
-				success = true;
-				break;
-			}
-		}
-		if (!success)
-		{
-			COUT_INFO << "create ";
-			COUT << "AutoLoad\\" << noextmodule << ".txt";
-			COUT_INFO << " to autoload for this application." << endl;
-		}
-	}
-	return true;
-}
-
 bool MinimizePoll(void *param)
 {
 	if (isConsoleMinimized())
@@ -3622,7 +3576,7 @@ void beforeShowTrayMenu()
 			WriteToConsole("RECONNECT_CONTROLLERS");
 		});
 		tray->AddMenuItem(
-		  U("AutoLoad"), [](bool isChecked) {
+		  U("AutoLoad"), [] (bool isChecked) {
 			  autoloadSwitch = isChecked ? Switch::ON : Switch::OFF;
 		  },
 		  bind(&PollingThread::isRunning, autoLoadThread.get()));
@@ -4072,9 +4026,10 @@ public:
 		if (optBtn > ButtonID::NONE && op == ',' && settingVar)
 		{
 			//Create Modeshift
-			string name = chord + op + _displayName;
+			string name{ chord };
+			(name += op) += _displayName;
 			unique_ptr<JSMCommand> chordAssignment((new GyroButtonAssignment(_name, name, *settingVar->AtChord(*optBtn), _always_off, *optBtn))->SetListener());
-			chordAssignment->SetHelp(_help)->SetParser(bind(&GyroButtonAssignment::ModeshiftParser, *optBtn, settingVar, &_parse, placeholders::_1, placeholders::_2))->SetTaskOnDestruction(bind(&JSMSetting<GyroSettings>::ProcessModeshiftRemoval, settingVar, *optBtn));
+			chordAssignment->SetHelp(_help)->SetParser(bind(&GyroButtonAssignment::ModeshiftParser, *optBtn, settingVar, &_parse, placeholders::_1, placeholders::_2, placeholders::_3))->SetTaskOnDestruction(bind(&JSMSetting<GyroSettings>::ProcessModeshiftRemoval, settingVar, *optBtn));
 			return chordAssignment;
 		}
 		return JSMCommand::GetModifiedCmd(op, chord);
@@ -4093,7 +4048,7 @@ private:
 
 	bool Parser(in_string arguments)
 	{
-		stringstream ss(arguments);
+		stringstream ss(arguments.data());
 		ss >> arg;
 		do
 		{ // Run at least once with an empty arg string if there's no argument.
@@ -4112,7 +4067,7 @@ private:
 		{
 			// Show all commands
 			COUT << "Here's the list of all commands." << endl;
-			vector<string> list;
+			vector<string_view> list;
 			registry->GetCommandList(list);
 			for (auto cmd : list)
 			{
@@ -4137,7 +4092,7 @@ private:
 		{
 			// Show all commands that include ARG
 			COUT << "\"" << arg << "\" is not a command, but the following are:" << endl;
-			vector<string> list;
+			vector<string_view> list;
 			registry->GetCommandList(list);
 			for (auto cmd : list)
 			{
@@ -4204,7 +4159,7 @@ int main(int argc, char *argv[])
 	// Threads need to be created before listeners
 	CmdRegistry commandRegistry;
 	minimizeThread.reset(new PollingThread("Minimize thread", &MinimizePoll, nullptr, 1000, hide_minimized.get() == Switch::ON));          // Start by default
-	autoLoadThread.reset(new PollingThread("AutoLoad thread", &AutoLoadPoll, &commandRegistry, 1000, autoloadSwitch.get() == Switch::ON)); // Start by default
+	autoLoadThread.reset(new patate::AutoLoad(&commandRegistry, autoloadSwitch.get() == Switch::ON));                                     // Start by default
 
 	left_stick_mode.SetFilter(&filterStickMode)->AddOnChangeListener(bind(&UpdateRingModeFromStickMode, &left_ring_mode, ::placeholders::_1));
 	right_stick_mode.SetFilter(&filterStickMode)->AddOnChangeListener(bind(&UpdateRingModeFromStickMode, &right_ring_mode, ::placeholders::_1));
@@ -4645,15 +4600,19 @@ int main(int argc, char *argv[])
 		}
 	}
 
+	Application gui;
+	gui.Runloop();
+
 	// The main loop is simple and reads like pseudocode
 	string enteredCommand;
 	while (!quit)
 	{
 		getline(cin, enteredCommand);
-		loading_lock.lock();
+		// loading_lock.lock();
 		commandRegistry.processLine(enteredCommand);
-		loading_lock.unlock();
+		// loading_lock.unlock();
 	}
+	gui.StopLoop();
 #ifdef _WIN32
 	LocalFree(argv);
 #endif

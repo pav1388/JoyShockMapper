@@ -3,14 +3,14 @@
 #include <regex>
 #include <cstring>
 
-ostream &operator<<(ostream &out, Mapping mapping)
+ostream &operator<<(ostream &out, const Mapping &mapping)
 {
-	out << mapping._command;
-	return out;
+	return out << (mapping._command.empty() ? mapping._description : mapping._command);
 }
 
 istream &operator>>(istream &in, Mapping &mapping)
 {
+	// Has friend access
 	string valueName(128, '\0');
 	in.getline(&valueName[0], valueName.size());
 	valueName.resize(strlen(valueName.c_str()));
@@ -18,17 +18,14 @@ istream &operator>>(istream &in, Mapping &mapping)
 	int count = 0;
 
 	mapping._command = valueName;
-	stringstream ss;
 	const char *rgx = R"(\s*([!\^]?)((\".*?\")|\w*[0-9A-Z]|\W)([\\\/+'_]?)\s*(.*))";
 	while (regex_match(valueName, results, regex(rgx)) && !results[0].str().empty())
 	{
-		if (count > 0)
-			ss << " and ";
 		Mapping::ActionModifier actMod =
 		  results[1].str().empty()   ? Mapping::ActionModifier::None :
 		  results[1].str()[0] == '!' ? Mapping::ActionModifier::Instant :
 		  results[1].str()[0] == '^' ? Mapping::ActionModifier::Toggle :
-                                       Mapping::ActionModifier::INVALID;
+		                               Mapping::ActionModifier::INVALID;
 
 		string keyStr(results[2]);
 
@@ -39,7 +36,7 @@ istream &operator>>(istream &in, Mapping &mapping)
 		  results[4].str()[0] == '/'  ? Mapping::EventModifier::ReleasePress :
 		  results[4].str()[0] == '\'' ? Mapping::EventModifier::TapPress :
 		  results[4].str()[0] == '_'  ? Mapping::EventModifier::HoldPress :
-                                        Mapping::EventModifier::INVALID;
+		                                Mapping::EventModifier::INVALID;
 
 		string leftovers(results[5]);
 
@@ -47,7 +44,7 @@ istream &operator>>(istream &in, Mapping &mapping)
 		if (evtMod == Mapping::EventModifier::None)
 		{
 			evtMod = count == 0 ? (leftovers.empty() ? Mapping::EventModifier::StartPress : Mapping::EventModifier::TapPress) :
-                                  (count == 1 ? Mapping::EventModifier::HoldPress : Mapping::EventModifier::None);
+			                      (count == 1 ? Mapping::EventModifier::HoldPress : Mapping::EventModifier::None);
 		}
 
 		// Some exceptions :(
@@ -71,28 +68,13 @@ istream &operator>>(istream &in, Mapping &mapping)
 		  evtMod == Mapping::EventModifier::ReleasePress && actMod == Mapping::ActionModifier::None ||
 		  !mapping.AddMapping(key, evtMod, actMod))
 		{
-			//error!!!
+			// error!!!
 			in.setstate(in.failbit);
 			break;
-		}
-		else
-		{
-			// build string rep
-			if (actMod != Mapping::ActionModifier::None)
-			{
-				ss << actMod << " ";
-			}
-			ss << key.name;
-			if (count != 0 || !leftovers.empty() || evtMod != Mapping::EventModifier::StartPress) // Don't display event modifier when using default binding on single key
-			{
-				ss << " on " << evtMod;
-			}
 		}
 		valueName = leftovers;
 		count++;
 	} // Next item
-
-	mapping._description = ss.str();
 
 	return in;
 }
@@ -100,12 +82,12 @@ istream &operator>>(istream &in, Mapping &mapping)
 bool operator==(const Mapping &lhs, const Mapping &rhs)
 {
 	// Very flawfull :(
-	return lhs._command == rhs._command;
+	return lhs.command() == rhs.command();
 }
 
 Mapping::Mapping(in_string mapping)
 {
-	stringstream ss(mapping);
+	stringstream ss(mapping.data());
 	ss >> *this;
 	if (ss.fail())
 	{
@@ -141,7 +123,7 @@ void Mapping::ProcessEvent(BtnEvent evt, EventActionIf &button) const
 
 		if (entry->second)
 		{
-			//DEBUG_LOG << button.getDisplayName() << " processes event " << evt << endl;
+			// DEBUG_LOG << button.getDisplayName() << " processes event " << evt << endl;
 			entry->second(&button);
 		}
 	}
@@ -151,12 +133,20 @@ void Mapping::InsertEventMapping(BtnEvent evt, EventActionIf::Callback action)
 {
 	auto existingActions = _eventMapping.find(evt);
 	_eventMapping[evt] = existingActions == _eventMapping.end() ? action :
-                                                                  bind(&RunBothActions, placeholders::_1, existingActions->second, action); // Chain with already existing mapping, if any
+	                                                              bind(&RunBothActions, placeholders::_1, existingActions->second, action); // Chain with already existing mapping, if any
 }
 
 bool Mapping::AddMapping(KeyCode key, EventModifier evtMod, ActionModifier actMod)
 {
 	EventActionIf::Callback apply, release;
+	if (key.code == 0)
+	{
+		return false;
+	}
+	if (key.code == NO_HOLD_MAPPED)
+	{
+		return true;
+	}
 	if (key.code == CALIBRATE)
 	{
 		apply = bind(&EventActionIf::StartCalibration, placeholders::_1);
@@ -265,7 +255,7 @@ bool Mapping::AddMapping(KeyCode key, EventModifier evtMod, ActionModifier actMo
 		{
 			// Assign a dummy callback to the OnX event in order to display the console log
 			KeyCode noKey("NONE");
-			InsertEventMapping(applyEvt, [] (EventActionIf *) {});
+			InsertEventMapping(applyEvt, [](EventActionIf *) {});
 			applyEvt = whileEvent; // perform the apply action on the WhileX event instead of the OnX
 		}
 	}
@@ -278,6 +268,29 @@ bool Mapping::AddMapping(KeyCode key, EventModifier evtMod, ActionModifier actMo
 		// On turbo you also always need to clear the turbo on release
 		InsertEventMapping(BtnEvent::OnRelease, release);
 	}
+
+	stringstream ss;
+	// Update Description
+	if (_description.compare("no input") != 0)
+	{
+		ss << _description;
+		if (_eventMapping.size() > 2 && _eventMapping.find(BtnEvent::OnPress) != _eventMapping.end())
+		{
+			ss << " on Start Press";
+		}
+		ss << " and ";
+	}
+	if (actMod != Mapping::ActionModifier::None)
+	{
+		ss << actMod << " ";
+	}
+	ss << key.name;
+	if (_eventMapping.size() > 2 || evtMod != Mapping::EventModifier::StartPress)
+	{
+		ss << " on " << evtMod;
+	}
+	// else don't display event modifier when using default binding on single key
+	_description = ss.str();
 	return true;
 }
 
