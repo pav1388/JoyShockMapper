@@ -153,6 +153,11 @@ void InputSelector::draw()
 				speedpopup = std::nullopt;
 				CloseCurrentPopup();
 			}
+			else if (IsItemHovered())
+			{
+				SetTooltip(mappings[enum_integer(*speedpopup)].value().description().data());
+			}
+
 			TableSetColumnIndex(1);
 			Dummy({ -FLT_MIN , 0.f});
 			TableSetColumnIndex(2);

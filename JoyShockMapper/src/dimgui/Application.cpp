@@ -109,6 +109,50 @@ void Application::drawButton(ButtonID btn, ImVec2 size, bool enabled)
 	{
 		SetTooltip(label.data());
 	}
+	if (ImGui::BeginPopupContextItem(nullptr, ImGuiPopupFlags_MouseButtonRight))
+	{
+		if (MenuItem("Set"))
+		{
+			_inputSelector.show(btn);
+		}
+		MenuItem("Chord this button", "Middle Click", false, false);
+		if( BeginMenu("Simultaneous Press with"))
+		{
+			for (auto pair = enum_entries<ButtonID>().begin(); pair->first < ButtonID::SIZE; ++pair)
+			{
+
+				if (pair->first != btn)
+				{
+					if (MenuItem(pair->second.data(), nullptr, false, false))
+					{
+						auto simMap = mappings[enum_integer(btn)].atSimPress(pair->first);
+						// TODO: set simMap to some value using the input selectore and create a display for it somewhere in the UI
+					}
+				}
+			}
+			EndMenu();
+		}
+		float hold_press_time = SettingsManager::get<float>(SettingID::HOLD_PRESS_TIME)->value();
+		if (InputFloat(enum_name(SettingID::HOLD_PRESS_TIME).data(), &hold_press_time, 0.f, 0.f, "%.3f", ImGuiInputTextFlags_EnterReturnsTrue))
+		{
+			SettingsManager::get<float>(SettingID::HOLD_PRESS_TIME)->set(hold_press_time);
+		}
+		if (IsItemHovered())
+		{
+			SetTooltip(_cmds.GetHelp(enum_name(SettingID::HOLD_PRESS_TIME)).data());
+		}
+		float sim_press_window = SettingsManager::getV<float>(SettingID::SIM_PRESS_WINDOW)->value();
+		if (InputFloat(enum_name(SettingID::SIM_PRESS_WINDOW).data(), &sim_press_window, 0.f, 0.f, "%.3f", ImGuiInputTextFlags_EnterReturnsTrue))
+		{
+			SettingsManager::getV<float>(SettingID::SIM_PRESS_WINDOW)->set(sim_press_window);
+		}
+		if (IsItemHovered())
+		{
+			SetTooltip(_cmds.GetHelp(enum_name(SettingID::SIM_PRESS_WINDOW)).data());
+		}
+		EndPopup();
+	}
+
 	EndDisabled();
 }
 
@@ -364,7 +408,7 @@ bool Application::DrawLoop()
 
 		ImVec2 renderingAreaPos;
 		ImVec2 renderingAreaSize;
-		Begin("MainWindow", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoMove);
+		Begin("MainWindow", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar);
 
 		bool showBackground = BeginTabBar("Main");
 		//SetNextWindowBgAlpha(0.f);
