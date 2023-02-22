@@ -285,7 +285,7 @@ bool Mapping::AddMapping(KeyCode key, EventModifier evtMod, ActionModifier actMo
 		ss << actMod << " ";
 	}
 	ss << key.name;
-	if (_eventMapping.size() > 2 || evtMod != Mapping::EventModifier::StartPress)
+	if (_eventMapping.size() > 3 || evtMod != Mapping::EventModifier::StartPress)
 	{
 		ss << " on " << evtMod;
 	}

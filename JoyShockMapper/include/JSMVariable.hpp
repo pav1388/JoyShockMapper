@@ -61,9 +61,9 @@ protected:
 		return nu;
 	}
 
-public:
 	// Default value of the variable. Cannot be changed after construction.
 	const T _defVal;
+public:
 
 	JSMVariable(T defaultValue = T())
 	  : _value(defaultValue)
@@ -137,6 +137,11 @@ public:
 	virtual const T &value() const
 	{
 		return _value;
+	}
+
+	const T &defaultValue() const
+	{
+		return _defVal;
 	}
 
 	// Value can be written by using set()

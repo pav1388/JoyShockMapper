@@ -460,7 +460,6 @@ enum class ControllerScheme
 	NONE,
 	XBOX,
 	DS4,
-	WHEEL,
 	INVALID
 };
 

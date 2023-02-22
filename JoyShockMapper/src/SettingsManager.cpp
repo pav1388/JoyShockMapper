@@ -16,5 +16,9 @@ void SettingsManager::resetAllSettings()
 	{
 		kvPair.second->reset();
 	};
-	ranges::for_each(_settings, callReset);
+	static constexpr auto exceptions = [](SettingsMap::value_type &kvPair)
+	{
+		return kvPair.first != SettingID::JSM_DIRECTORY;
+	};
+	ranges::for_each(_settings | views::filter(exceptions), callReset);
 }

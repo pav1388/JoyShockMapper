@@ -91,7 +91,7 @@ public:
 
 	inline bool isValid() const
 	{
-		return !_eventMapping.empty();
+		return !_command.empty();
 	}
 
 	inline float getTapDuration() const

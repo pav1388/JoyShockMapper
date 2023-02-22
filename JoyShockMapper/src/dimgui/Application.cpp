@@ -16,6 +16,8 @@ using namespace magic_enum;
 using namespace ImGui;
 #define EndMenu() ImGui::EndMenu(); // Symbol conflict with windows
 
+InputSelector Application::BindingTab::_inputSelector;
+
 static void HelpMarker(string_view desc)
 {
 	SameLine();
@@ -33,6 +35,7 @@ static void HelpMarker(string_view desc)
 Application::Application(const CmdRegistry& cmds)
   : _cmds(cmds)
 {
+	  _tabs.emplace_back("Core Bindings", _cmds);
 }
 
 std::string_view getButtonLabel(ButtonID id)
@@ -77,7 +80,8 @@ void drawCombo(JSMSetting<T>& setting, ImGuiComboFlags flags = 0)
 					continue;
 				}
 			}
-			BeginDisabled(disabled);
+			if(disabled)
+				BeginDisabled();
 			if (Selectable(enumStr.data(), enumVal == setting.value()))
 			{
 				setting.set(enumVal); // set global variable
@@ -86,22 +90,22 @@ void drawCombo(JSMSetting<T>& setting, ImGuiComboFlags flags = 0)
 			// Set the initial focus when opening the combo (scrolling + keyboard navigation focus)
 			if (enumVal == setting.value())
 				SetItemDefaultFocus();
-			EndDisabled();
+			if(disabled)
+				EndDisabled();
 		}
 		EndCombo();
 	}
 }
 
-void Application::drawButton(ButtonID btn, ImVec2 size, bool enabled)
+void Application::BindingTab::drawButton(ButtonID btn, ImVec2 size)
 {
 	std::stringstream description;
 	description << mappings[enum_integer(btn)].value().description(); // Button label to display
 	description << "###" << enum_name(btn);                           // Button ID for ImGui
 
-	BeginDisabled(!enabled);
 	if (Button(description.str().data(), size))
 	{
-		_inputSelector.show(btn);
+		_showPopup = btn;
 	}
 
 	string_view label = getButtonLabel(btn).data();
@@ -111,9 +115,9 @@ void Application::drawButton(ButtonID btn, ImVec2 size, bool enabled)
 	}
 	if (ImGui::BeginPopupContextItem(nullptr, ImGuiPopupFlags_MouseButtonRight))
 	{
-		if (MenuItem("Set"))
+		if (MenuItem("Set", "Left Click"))
 		{
-			_inputSelector.show(btn);
+			_showPopup = btn;
 		}
 		MenuItem("Chord this button", "Middle Click", false, false);
 		if( BeginMenu("Simultaneous Press with"))
@@ -152,8 +156,6 @@ void Application::drawButton(ButtonID btn, ImVec2 size, bool enabled)
 		}
 		EndPopup();
 	}
-
-	EndDisabled();
 }
 
 void Application::run()
@@ -250,14 +252,15 @@ bool Application::DrawLoop()
 
 		auto &style = GetStyle();
 		style.Alpha = 1.0f;
-		style.Colors[ImGuiCol_WindowBg].w = 0;
 
 		// Start the Dear ImGui frame
 		ImGui_ImplSDLRenderer_NewFrame();
 		ImGui_ImplSDL2_NewFrame();
 		NewFrame();
 
+		PushStyleColor(ImGuiCol_WindowBg, {0.f, 0.f, 0.f, 0.f});
 		DockSpaceOverViewport(GetMainViewport(), ImGuiDockNodeFlags_PassthruCentralNode);
+		PopStyleColor();
 
 		// 1. Show the big demo window (Most of the sample code is in ShowDemoWindow()! You can browse its code to learn more about Dear ImGui!).
 		if (show_demo_window)
@@ -410,104 +413,12 @@ bool Application::DrawLoop()
 		ImVec2 renderingAreaSize;
 		Begin("MainWindow", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar);
 
-		bool showBackground = BeginTabBar("Main");
-		//SetNextWindowBgAlpha(0.f);
-		if (ImGui::BeginTabItem("Button Bindings"))
+		bool showBackground = BeginTabBar("BindingsTab");
+		for (auto bindingTab : _tabs)
 		{
-			auto drawlabel = [this](ButtonID btn)
-			{
-				AlignTextToFramePadding();
-				Text(enum_name(btn).data());
-				if (IsItemHovered())
-				{
-					SetTooltip(_cmds.GetHelp(enum_name(btn)).data());
-				}
-			};
-			auto mainWindowSize = ImGui::GetContentRegionAvail();
-			// Left
-			BeginChild("Left Bindings", { mainWindowSize.x * 1.f / 5.f, 0.f });
-			ImVec2 buttonSize = ImVec2{ 0.f, 0.f };
-			drawButton(ButtonID::ZLF, buttonSize, SettingsManager::get<TriggerMode>(SettingID::ZL_MODE)->value() != TriggerMode::NO_FULL);
-			SameLine();
-			drawlabel(ButtonID::ZLF);
-			drawCombo(*SettingsManager::get<TriggerMode>(SettingID::ZL_MODE));
-			if (IsItemHovered())
-			{
-				SetTooltip(_cmds.GetHelp(enum_name(SettingID::ZL_MODE)).data());
-			}
-			drawButton(ButtonID::ZL, buttonSize);
-			SameLine();
-			drawlabel(ButtonID::ZL);
-			drawButton(ButtonID::L, buttonSize);
-			SameLine();
-			drawlabel(ButtonID::L);
-			drawButton(ButtonID::UP, buttonSize);
-			SameLine();
-			drawlabel(ButtonID::UP);
-			drawButton(ButtonID::LEFT, buttonSize);
-			SameLine();
-			drawlabel(ButtonID::LEFT);
-			drawButton(ButtonID::RIGHT, buttonSize);
-			SameLine();
-			drawlabel(ButtonID::RIGHT);
-			drawButton(ButtonID::DOWN, buttonSize);
-			SameLine();
-			drawlabel(ButtonID::DOWN);
-			drawButton(ButtonID::L3, buttonSize);
-			SameLine();
-			drawlabel(ButtonID::L3);
-			drawCombo(*SettingsManager::get<StickMode>(SettingID::LEFT_STICK_MODE));
-			if (IsItemHovered())
-			{
-				SetTooltip(_cmds.GetHelp(enum_name(SettingID::LEFT_STICK_MODE)).data());
-			}
-			_inputSelector.draw();
-			EndChild();
-			ImGui::SameLine();
-
-			// Right
-			ImGui::BeginGroup();
-			BeginChild("Top buttons", { mainWindowSize.x * 3.f / 5.f, 60.f });
-			drawButton(ButtonID::MINUS, buttonSize);
-			SameLine();
-			drawButton(ButtonID::TOUCH, buttonSize);
-			SameLine();
-			drawCombo(*SettingsManager::get<TriggerMode>(SettingID::TOUCHPAD_DUAL_STAGE_MODE), ImGuiComboFlags_NoPreview);
-			SameLine();
-			drawButton(ButtonID::CAPTURE, buttonSize);
-			SameLine();
-			drawButton(ButtonID::PLUS, buttonSize);
-			_inputSelector.draw();
-			EndChild();
-
-			renderingAreaSize = { mainWindowSize.x * 3.f / 5.f, GetContentRegionAvail().y };
-			BeginChild("Rendering window", renderingAreaSize, false);
-			renderingAreaPos = ImGui::GetWindowPos();
-			EndChild();
-			EndGroup();
-
-			SameLine();
-			BeginChild("Right Bindings");
-			drawButton(ButtonID::ZRF, buttonSize, SettingsManager::get<TriggerMode>(SettingID::ZR_MODE)->value() != TriggerMode::NO_FULL);
-			drawCombo(*SettingsManager::get<TriggerMode>(SettingID::ZR_MODE));
-			drawButton(ButtonID::ZR, buttonSize);
-			drawButton(ButtonID::R, buttonSize);
-			drawButton(ButtonID::N, buttonSize);
-			drawButton(ButtonID::E, buttonSize);
-			drawButton(ButtonID::W, buttonSize);
-			drawButton(ButtonID::S, buttonSize);
-			drawButton(ButtonID::R3, buttonSize);
-			drawCombo(*SettingsManager::get<StickMode>(SettingID::RIGHT_STICK_MODE));
-			_inputSelector.draw();
-			EndChild();
-			ImGui::EndTabItem();
+			bindingTab.draw(renderingAreaPos, renderingAreaSize);
 		}
-		if (ImGui::BeginTabItem("Settings"))
-		{
-			ImGui::Text("This is the Avocado tab!\nblah blah blah blah blah");
-			ImGui::EndTabItem();
-		}
-		EndTabBar(); // Main
+		EndTabBar(); // BindingsTab
 		End();       // MainWindow
 
 		SDL_Rect bgDims{
@@ -524,11 +435,8 @@ bool Application::DrawLoop()
 		// Rendering
 		SDL_RenderClear(renderer);
 		Render();
-		if (showBackground && !_inputSelector.isShowing())
-		{
-			SDL_SetTextureBlendMode(texture, SDL_BlendMode::SDL_BLENDMODE_BLEND);
-			SDL_RenderCopy(renderer, texture, nullptr, &bgDims);
-		}
+		SDL_SetTextureBlendMode(texture, SDL_BlendMode::SDL_BLENDMODE_BLEND);
+		SDL_RenderCopy(renderer, texture, nullptr, &bgDims);
 		ImGui_ImplSDLRenderer_RenderDrawData(GetDrawData());
 		SDL_RenderPresent(renderer);
 	}
@@ -546,4 +454,116 @@ bool Application::DrawLoop()
 	WriteToConsole("QUIT");
 
 	return done;
+}
+
+Application::BindingTab::BindingTab(string_view name, const CmdRegistry& cmds, ButtonID chord)
+	: _name(name)
+	, _cmds(cmds)
+	, _chord(chord)
+{}
+
+void Application::BindingTab::draw(ImVec2 &renderingAreaPos, ImVec2& renderingAreaSize)
+{
+	if (ImGui::BeginTabItem(_name.data()))
+	{
+		auto drawlabel = [this](ButtonID btn)
+		{
+			AlignTextToFramePadding();
+			Text(enum_name(btn).data());
+			if (IsItemHovered())
+			{
+				SetTooltip(_cmds.GetHelp(enum_name(btn)).data());
+			}
+		};
+		auto mainWindowSize = ImGui::GetContentRegionAvail();
+
+		// Left
+		BeginChild("Left Bindings", { mainWindowSize.x * 1.f / 5.f, 0.f }, false, ImGuiWindowFlags_AlwaysAutoResize);
+		ImVec2 buttonSize = ImVec2{ 0.f, 0.f };
+		bool disabled = SettingsManager::get<TriggerMode>(SettingID::ZL_MODE)->value() == TriggerMode::NO_FULL;
+		if (disabled)
+			BeginDisabled();
+		drawButton(ButtonID::ZLF, buttonSize);
+		if (disabled)
+			EndDisabled();
+		SameLine();
+		drawlabel(ButtonID::ZLF);
+		drawCombo(*SettingsManager::get<TriggerMode>(SettingID::ZL_MODE));
+		if (IsItemHovered())
+			SetTooltip(_cmds.GetHelp(enum_name(SettingID::ZL_MODE)).data());
+		drawButton(ButtonID::ZL, buttonSize);
+		SameLine();
+		drawlabel(ButtonID::ZL);
+		drawButton(ButtonID::L, buttonSize);
+		SameLine();
+		drawlabel(ButtonID::L);
+		drawButton(ButtonID::UP, buttonSize);
+		SameLine();
+		drawlabel(ButtonID::UP);
+		drawButton(ButtonID::LEFT, buttonSize);
+		SameLine();
+		drawlabel(ButtonID::LEFT);
+		drawButton(ButtonID::RIGHT, buttonSize);
+		SameLine();
+		drawlabel(ButtonID::RIGHT);
+		drawButton(ButtonID::DOWN, buttonSize);
+		SameLine();
+		drawlabel(ButtonID::DOWN);
+		drawButton(ButtonID::L3, buttonSize);
+		SameLine();
+		drawlabel(ButtonID::L3);
+		drawCombo(*SettingsManager::get<StickMode>(SettingID::LEFT_STICK_MODE));
+		if (IsItemHovered())
+			SetTooltip(_cmds.GetHelp(enum_name(SettingID::LEFT_STICK_MODE)).data());
+		EndChild();
+		ImGui::SameLine();
+
+		// Right
+		ImGui::BeginGroup();
+		BeginChild("Top buttons", { mainWindowSize.x * 3.f / 5.f, 60.f });
+		drawButton(ButtonID::MINUS, buttonSize);
+		SameLine();
+		drawButton(ButtonID::TOUCH, buttonSize);
+		SameLine();
+		drawCombo(*SettingsManager::get<TriggerMode>(SettingID::TOUCHPAD_DUAL_STAGE_MODE), ImGuiComboFlags_NoPreview);
+		SameLine();
+		drawButton(ButtonID::CAPTURE, buttonSize);
+		SameLine();
+		drawButton(ButtonID::PLUS, buttonSize);
+		EndChild();
+
+		renderingAreaSize = { mainWindowSize.x * 3.f / 5.f, GetContentRegionAvail().y };
+		BeginChild("Rendering window", renderingAreaSize, false);
+		renderingAreaPos = ImGui::GetWindowPos();
+		EndChild();
+		EndGroup();
+
+		SameLine();
+		BeginChild("Right Bindings");
+		disabled = SettingsManager::get<TriggerMode>(SettingID::ZL_MODE)->value() == TriggerMode::NO_FULL;
+		if (disabled)
+			BeginDisabled();
+		drawButton(ButtonID::ZRF, buttonSize);
+		if (disabled)
+			EndDisabled();
+		drawCombo(*SettingsManager::get<TriggerMode>(SettingID::ZR_MODE));
+		drawButton(ButtonID::ZR, buttonSize);
+		drawButton(ButtonID::R, buttonSize);
+		drawButton(ButtonID::N, buttonSize);
+		drawButton(ButtonID::E, buttonSize);
+		drawButton(ButtonID::W, buttonSize);
+		drawButton(ButtonID::S, buttonSize);
+		drawButton(ButtonID::R3, buttonSize);
+		drawCombo(*SettingsManager::get<StickMode>(SettingID::RIGHT_STICK_MODE));
+		if (IsItemHovered())
+			SetTooltip(_cmds.GetHelp(enum_name(SettingID::RIGHT_STICK_MODE)).data());
+		EndChild();
+		if (_showPopup != ButtonID::INVALID)
+		{
+			_inputSelector.show(_showPopup);
+			_showPopup = ButtonID::INVALID;
+		}
+		_inputSelector.draw();
+		ImGui::EndTabItem();
+	}
 }

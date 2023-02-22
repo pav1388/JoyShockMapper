@@ -1,13 +1,14 @@
-#include "dimgui/InputSelector.h" 
+#include "dimgui/InputSelector.h"
 #include "imgui.h"
 #include "JSMVariable.hpp"
+#include "SettingsManager.h"
 #include <regex>
 #include <span>
+#include <ranges>
 
 using namespace ImGui;
 using namespace magic_enum;
 extern vector<JSMButton> mappings;
-static constexpr std::string_view popup = "Pick an input";
 
 template<typename T>
 void drawCombo(string_view name, T& setting)
@@ -33,8 +34,11 @@ void drawCombo(string_view name, T& setting)
 
 void InputSelector::show(ButtonID btn)
 {
-	speedpopup = btn;
-	OpenPopup(popup.data(), ImGuiPopupFlags_AnyPopup);
+	targetButton = btn;
+	stringstream ss;
+	ss << "Pick an input for " << enum_name(btn) << "##"
+	   << "InputSelector";
+	OpenPopup(ss.str().c_str(), ImGuiPopupFlags_AnyPopup);
 	tabList.clear();
 	auto currentLabel = mappings[enum_integer(btn)].label();
 	if (!currentLabel.empty())
@@ -67,11 +71,7 @@ void InputSelector::show(ButtonID btn)
 		  results[4].str()[0] == '_'  ? Mapping::EventModifier::HoldPress :
 		                                Mapping::EventModifier::INVALID;
 
-		tabList.push_back(MappingTabItem{
-		  .act = actMod,
-		  .evt = evtMod,
-		  .keyCode = key,
-		});
+		tabList.emplace_back(key, evtMod, actMod);
 
 		command = results[5];
 	}
@@ -82,29 +82,35 @@ void InputSelector::draw()
 	ImVec2 center = GetMainViewport()->GetCenter();
 	center.x /= 3.f;
 	center.y /= 3.f;
-	SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-	ImVec2 dims = GetWindowSize();
-	dims.x /= 2.f;
-	dims.y /= 2.f;
-	SetNextWindowSize(dims, ImGuiCond_Appearing);
-	SetNextWindowBgAlpha(1.0f);
-	if (BeginPopupModal(popup.data(), nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+	SetNextWindowPos(center, ImGuiCond_Appearing);
+	SetNextWindowBgAlpha(1.f);
+	stringstream ss;
+	ss << "Pick an input for " << enum_name(targetButton? *targetButton : ButtonID::INVALID) << "##"
+	   << "InputSelector";
+	if (BeginPopupModal(ss.str().c_str(), nullptr, ImGuiWindowFlags_AlwaysAutoResize))
 	{
 		Mapping currentMapping;
 
 		size_t count = 0;
-		for (auto const& map : tabList)
+		if (tabList.empty())
 		{
-			Mapping::EventModifier actualEvt = map.evt;
-			if (actualEvt == Mapping::EventModifier::Auto)
+			currentMapping = Mapping::NO_MAPPING;
+		}
+		else
+		{
+			for (auto const& map : tabList)
 			{
-				actualEvt = count == 0 ? (tabList.size() == 1 ? Mapping::EventModifier::StartPress : Mapping::EventModifier::TapPress) :
-				                         (count == 1 ? Mapping::EventModifier::HoldPress : Mapping::EventModifier::Auto);
-			}
+				Mapping::EventModifier actualEvt = map.evt();
+				if (actualEvt == Mapping::EventModifier::Auto)
+				{
+					actualEvt = count == 0 ? (tabList.size() == 1 ? Mapping::EventModifier::StartPress : Mapping::EventModifier::TapPress) :
+											 (count == 1 ? Mapping::EventModifier::HoldPress : Mapping::EventModifier::Auto);
+				}
 
-			currentMapping.AddMapping(map.keyCode, actualEvt, map.act);
-			currentMapping.AppendToCommand(map.keyCode, map.evt, map.act);
-			++count;
+				currentMapping.AddMapping(map.keyCode(), actualEvt, map.act());
+				currentMapping.AppendToCommand(map.keyCode(), map.evt(), map.act());
+				++count;
+			}
 		}
 
 		Text(currentMapping.description().data());
@@ -115,11 +121,8 @@ void InputSelector::draw()
 			// Note that we submit it before the regular tabs, but because of the ImGuiTabItemFlags_Trailing flag it will always appear at the end.
 			if (TabItemButton("+", ImGuiTabItemFlags_Trailing | ImGuiTabItemFlags_NoTooltip))
 			{
-				tabList.push_back(MappingTabItem()); // Add new tab
-				if (tabList.size() >= 3)
-				{
-					tabList.back().evt = Mapping::EventModifier::StartPress;
-				}
+				Mapping::EventModifier defEvent = tabList.size() >= 3 ? Mapping::EventModifier::StartPress : Mapping::EventModifier::Auto;
+				tabList.emplace_back(KeyCode("NONE"), defEvent, Mapping::ActionModifier::None); // Add new tab
 			}
 
 			// Submit our regular tabs
@@ -128,7 +131,11 @@ void InputSelector::draw()
 			{
 				bool open = true;
 				stringstream tabtitle;
-				tabtitle << tabItem->keyCode.name << "###"
+				if (tabItem->keyCode().code == COMMAND_ACTION)
+					tabtitle << '\"' << tabItem->keyCode().name << '\"';
+				else
+					tabtitle << tabItem->keyCode().name;
+				tabtitle << "###"
 				         << "MappingTabItem_" << i;
 				if (BeginTabItem(tabtitle.str().c_str(), &open, ImGuiTabItemFlags_None))
 				{
@@ -148,25 +155,36 @@ void InputSelector::draw()
 		{
 			TableNextRow();
 			TableSetColumnIndex(0);
-			if (Button("Cancel", { -FLT_MIN , 0.f}))
+			if (Button("Save", { -FLT_MIN, 0.f }))
 			{
-				speedpopup = std::nullopt;
+				mappings[enum_integer(*targetButton)].set(currentMapping);
+				mappings[enum_integer(*targetButton)].updateLabel(label);
+				targetButton = std::nullopt;
+				CloseCurrentPopup();
+			}
+
+			TableSetColumnIndex(1);
+			if (Button("Clear", { -FLT_MIN, 0.f }))
+			{
+				mappings[enum_integer(*targetButton)].set(Mapping::NO_MAPPING);
+				mappings[enum_integer(*targetButton)].updateLabel("");
+				targetButton = std::nullopt;
 				CloseCurrentPopup();
 			}
 			else if (IsItemHovered())
 			{
-				SetTooltip(mappings[enum_integer(*speedpopup)].value().description().data());
+				SetTooltip(mappings[enum_integer(*targetButton)].defaultValue().description().data());
 			}
-
-			TableSetColumnIndex(1);
-			Dummy({ -FLT_MIN , 0.f});
 			TableSetColumnIndex(2);
-			if (Button("Save", { -FLT_MIN , 0.f}))
+
+			if (Button("Cancel", { -FLT_MIN, 0.f }))
 			{
-				mappings[enum_integer(*speedpopup)].set(currentMapping);
-				mappings[enum_integer(*speedpopup)].updateLabel(label);
-				speedpopup = std::nullopt;
+				targetButton = std::nullopt;
 				CloseCurrentPopup();
+			}
+			else if (IsItemHovered())
+			{
+				SetTooltip(mappings[enum_integer(*targetButton)].value().description().data());
 			}
 			EndTable();
 		}
@@ -175,10 +193,8 @@ void InputSelector::draw()
 }
 
 template<size_t rows, size_t cols>
-void drawSelectableGrid(InputSelector::MappingTabItem *tab, const string_view labelGrid[rows][cols], std::function<ImVec2(string_view)> getSize)
+void InputSelector::MappingTabItem::drawSelectableGrid(const string_view labelGrid[rows][cols], std::function<ImVec2(string_view)> getSize)
 {
-	// static float scale = 1.f;
-	// SliderFloat("scale", &scale, 0.1f, 3.f);
 	for (auto row : span(labelGrid, rows))
 	{
 		for (int x = 0; auto k : span(row, cols))
@@ -190,26 +206,51 @@ void drawSelectableGrid(InputSelector::MappingTabItem *tab, const string_view la
 				SameLine();
 			}
 			auto size = getSize(k);
-
-			if (Selectable(k.data(), tab->keyCode.name == k, ImGuiSelectableFlags_DontClosePopups, size))
+			bool disable = k == " ";
+			if(disable)
+				BeginDisabled();
+			if (Selectable(k.data(), _keyCode.name == k, ImGuiSelectableFlags_DontClosePopups, size))
 			{
-				tab->keyCode = KeyCode(k);
+				_keyCode = KeyCode(k);
 			}
+			if (disable)
+				EndDisabled();
 			++x;
 		}
 	}
 }
+static array<const char*, enum_integer(ControllerScheme::INVALID)> arr;
+static constexpr array<const char*, enum_integer(ControllerScheme::INVALID)>& controllerSchemeNames()
+{
+	ranges::for_each_n(enum_entries<ControllerScheme>().begin(), arr.size(),
+	  [i = 0](auto& pair) mutable
+	  {
+		  arr[i++] = pair.second.data();
+	  });
+	return arr;
+};
 
+InputSelector::MappingTabItem::MappingTabItem(KeyCode keyCode, Mapping::EventModifier evt, Mapping::ActionModifier act)
+  : _keyCode(keyCode)
+	, _evt(evt)
+	, _act(act)
+{
+
+}
 
 void InputSelector::MappingTabItem::draw()
 {
-	if (CollapsingHeader("Modifiers", ImGuiTreeNodeFlags_None))
+	SetNextItemOpen(_activeHeader == MODIFIERS, ImGuiCond_Always);
+	if (CollapsingHeader("Modifiers"))
 	{
-		drawCombo("Action Modifiers", act);
-		drawCombo("Event Modifiers", evt);
+		_activeHeader = MODIFIERS;
+		drawCombo("Action Modifiers", _act);
+		drawCombo("Event Modifiers", _evt);
 	}
-	if (CollapsingHeader("Mouse", ImGuiTreeNodeFlags_None))
+	SetNextItemOpen(_activeHeader == MOUSE, ImGuiCond_Always);
+	if (CollapsingHeader("Mouse"))
 	{
+		_activeHeader = MOUSE;
 		static constexpr size_t MS_ROWS = 3;
 		static constexpr size_t MS_COLS = 3;
 		static constexpr string_view mouse[MS_ROWS][MS_COLS] = {
@@ -226,10 +267,12 @@ void InputSelector::MappingTabItem::draw()
 			}
 			return size;
 		};
-		drawSelectableGrid<MS_ROWS, MS_COLS>(this, mouse, sizing);
+		drawSelectableGrid<MS_ROWS, MS_COLS>(mouse, sizing);
 	}
-	if (CollapsingHeader("Keyboard", ImGuiTreeNodeFlags_None))
+	SetNextItemOpen(_activeHeader == KEYBOARD, ImGuiCond_Always);
+	if (CollapsingHeader("Keyboard"))
 	{
+		_activeHeader = KEYBOARD;
 		static constexpr size_t KB_ROWS = 6;
 		static constexpr size_t KB_COLS = 14;
 		static constexpr string_view keyboard[KB_ROWS][KB_COLS] = {
@@ -263,10 +306,12 @@ void InputSelector::MappingTabItem::draw()
 			return size;
 		};
 
-		drawSelectableGrid<KB_ROWS, KB_COLS>(this, keyboard, sizing);
+		drawSelectableGrid<KB_ROWS, KB_COLS>(keyboard, sizing);
 	}
-	if (CollapsingHeader("More keyboard", ImGuiTreeNodeFlags_None))
+	SetNextItemOpen(_activeHeader == MORE_KEYBOARD, ImGuiCond_Always);
+	if (CollapsingHeader("More keyboard"))
 	{
+		_activeHeader = MORE_KEYBOARD;
 		static constexpr size_t XKB_ROWS = 5;
 		static constexpr size_t XKB_COLS = 7;
 		static constexpr string_view extra_keyboard[XKB_ROWS][XKB_COLS] = {
@@ -285,9 +330,9 @@ void InputSelector::MappingTabItem::draw()
 			{ "VOLUME_DOWN", "SCREENSHOT", "N0", "DECIMAL", "" },
 		};
 
-		//static float vdsize = 1.0f, n0size = 1.0f;
-		//SliderFloat("vdsize", &vdsize, 0.1f, 3.0f);
-		//SliderFloat("sssize", &n0size, 0.1f, 3.0f);
+		// static float vdsize = 1.0f, n0size = 1.0f;
+		// SliderFloat("vdsize", &vdsize, 0.1f, 3.0f);
+		// SliderFloat("sssize", &n0size, 0.1f, 3.0f);
 
 		auto sizing = [](string_view k)
 		{
@@ -303,18 +348,104 @@ void InputSelector::MappingTabItem::draw()
 			return size;
 		};
 
-		drawSelectableGrid<XKB_ROWS, XKB_COLS>(this, extra_keyboard, sizing);
+		drawSelectableGrid<XKB_ROWS, XKB_COLS>(extra_keyboard, sizing);
 	}
-	if (CollapsingHeader("Gyro management", ImGuiTreeNodeFlags_None))
+	SetNextItemOpen(_activeHeader == CONSOLE, ImGuiCond_Always);
+	if (CollapsingHeader("Console Command"))
 	{
-		Text("IsItemHovered: %d", IsItemHovered());
-		for (int i = 0; i < 5; i++)
-			Text("Some content %d", i);
+		_activeHeader = CONSOLE;
+		static string command(256, '\0');
+		if (InputText("Command", command.data(), command.size(), ImGuiInputTextFlags_EnterReturnsTrue))
+		{
+			stringstream ss;
+			ss << '\"' << command.c_str() << '\"';
+			KeyCode commandAction = KeyCode(ss.str());
+			Mapping testCommand;
+			if (testCommand.AddMapping(commandAction, Mapping::EventModifier::StartPress))
+			{
+				_keyCode = commandAction; 
+			}
+		}
+	}		
+	SetNextItemOpen(_activeHeader == GYRO, ImGuiCond_Always);
+	if (CollapsingHeader("Gyro management"))
+	{
+		_activeHeader = GYRO;
+		static constexpr size_t GYRO_ROWS = 3;
+		static constexpr size_t GYRO_COLS = 3;
+		static constexpr string_view gyro[GYRO_ROWS][GYRO_COLS] = {
+			{ "GYRO_ON", "GYRO_OFF", "CALIBRATE" },
+			{ "GYRO_INVERT", "GYRO_INV_X", "GYRO_INV_Y" },
+			{ "GYRO_TRACKBALL", "GYRO_TRACK_X", "GYRO_TRACK_Y" },
+		};
+		/*static float scale =  100.f;
+		SliderFloat("scale", &scale, 50.f, 500.f);*/
+		auto sizing = [](string_view k)
+		{
+			ImVec2 size(100, 40);
+			return size;
+		};
+		drawSelectableGrid<GYRO_ROWS, GYRO_COLS>(gyro, sizing);
 	}
-	if (CollapsingHeader("Virtual Controller", ImGuiTreeNodeFlags_None))
+	SetNextItemOpen(_activeHeader == CONTROLLER, ImGuiCond_Always);
+	if (CollapsingHeader("Virtual Controller"))
 	{
-		Text("IsItemHovered: %d", IsItemHovered());
-		for (int i = 0; i < 5; i++)
-			Text("Some content %d", i);
+		_activeHeader = CONTROLLER;
+		ControllerScheme vc = SettingsManager::getV<ControllerScheme>(SettingID::VIRTUAL_CONTROLLER)->value();
+		int currentSelection = *enum_index(vc);
+		if (vc == ControllerScheme::NONE)
+		{
+			if (ListBox("VIRTUAL_CONTROLLER", &currentSelection, controllerSchemeNames().data(), controllerSchemeNames().size(), controllerSchemeNames().size()))
+			{
+				SettingsManager::getV<ControllerScheme>(SettingID::VIRTUAL_CONTROLLER)->set(enum_value<ControllerScheme>(currentSelection));
+			}
+		}
+		else
+		{
+			if (Combo("VIRTUAL_CONTROLLER", &currentSelection, controllerSchemeNames().data(), controllerSchemeNames().size()))
+			{
+				SettingsManager::getV<ControllerScheme>(SettingID::VIRTUAL_CONTROLLER)->set(enum_value<ControllerScheme>(currentSelection));
+			}
+			if (vc == ControllerScheme::XBOX)
+			{
+				static constexpr size_t XBOX_ROWS = 5;
+				static constexpr size_t XBOX_COLS = 6;
+				static constexpr string_view xbox[XBOX_ROWS][XBOX_COLS] = {
+					{ "X_LT", "X_LB", "X_GUIDE", " ", "X_RB", "X_RT" },
+					{ "X_LS", " ", "X_BACK", "X_START", "X_Y", "" },
+					{ " ", "X_UP", " ", "X_X", " ", "X_B" },
+					{ "X_LEFT", " ", "X_RIGHT", " ", "X_A", "" },
+					{ " ", "X_DOWN", " ", "X_RS", " ", "" },
+				};
+				//static float scale =  100.f;
+				//SliderFloat("scale", &scale, 10.f, 200.f);
+				auto sizing = [](string_view k)
+				{
+					ImVec2 size(75, 40);
+					return size;
+				};
+				drawSelectableGrid<XBOX_ROWS, XBOX_COLS>(xbox, sizing);
+			}
+			if (vc == ControllerScheme::DS4)
+			{
+				static constexpr size_t DS4_ROWS = 5;
+				static constexpr size_t DS4_COLS = 6;
+				static constexpr string_view ds4[DS4_ROWS][DS4_COLS] = {
+					{ "PS_L2", "PS_L1", "PS_HOME", "PS_PAD_CLICK", "PS_R1", "PS_R2" },
+					{ " ", "PS_UP", "PS_SHARE", "PS_OPTIONS", "PS_TRIANGLE", "" },
+					{ "PS_LEFT", " ", "PS_RIGHT", "PS_SQUARE", " ", "PS_CIRCLE" },
+					{ " ", "PS_DOWN", " ", " ", "PS_CROSS", "" },
+					{ " ", " ", "PS_L3", "PS_R3", " ", "" },
+				};
+				// static float scale =  100.f;
+				// SliderFloat("scale", &scale, 10.f, 200.f);
+				auto sizing = [](string_view k)
+				{
+					ImVec2 size(85, 40);
+					return size;
+				};
+				drawSelectableGrid<DS4_ROWS, DS4_COLS>(ds4, sizing);
+			}
+		}
 	}
 }

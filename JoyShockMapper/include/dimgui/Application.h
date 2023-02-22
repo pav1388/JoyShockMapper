@@ -26,15 +26,25 @@ public:
 
 	bool DrawLoop();
 
-	void drawButton(ButtonID btn, ImVec2 size = ImVec2{ 0, 0 }, bool enabled = true);
 
 private:
+
+	struct BindingTab
+	{
+		BindingTab(string_view name, const CmdRegistry &cmds, ButtonID chord = ButtonID::NONE);
+		void draw(ImVec2 &renderingAreaPos, ImVec2 &renderingAreaSize);
+		void drawButton(ButtonID btn, ImVec2 size = ImVec2{ 0, 0 });
+		const string_view _name;
+		const ButtonID _chord;
+		static InputSelector _inputSelector;
+		const CmdRegistry &_cmds;
+		ButtonID _showPopup = ButtonID::INVALID;
+	};
+	vector<BindingTab> _tabs;
 	const CmdRegistry &_cmds;
-	InputSelector _inputSelector;
-	std::atomic_bool done = false;
+	atomic_bool done = false;
 	bool show_demo_window = false;
 	SDL_Window* window = nullptr;
 	SDL_Renderer* renderer = nullptr;
-	std::future<bool> threadDone;
-
+	future<bool> threadDone;
 };
