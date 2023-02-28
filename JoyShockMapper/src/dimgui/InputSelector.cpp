@@ -10,6 +10,41 @@ using namespace ImGui;
 using namespace magic_enum;
 extern vector<JSMButton> mappings;
 
+enum InputSelector::MappingTabItem::Header InputSelector::MappingTabItem::_activeHeader = InputSelector::MappingTabItem::Header::MODIFIERS;
+
+static array<const char*, enum_integer(ControllerScheme::INVALID)> ctrlrSchemeNames;
+static constexpr array<const char*, enum_integer(ControllerScheme::INVALID)>& controllerSchemeNames()
+{
+	ranges::for_each_n(enum_entries<ControllerScheme>().begin(), ctrlrSchemeNames.size(),
+	  [i = 0](auto& pair) mutable
+	  {
+		  ctrlrSchemeNames[i++] = pair.second.data();
+	  });
+	return ctrlrSchemeNames;
+};
+
+static array<const char*, enum_integer(Mapping::EventModifier::INVALID)> evtModNames;
+static constexpr array<const char*, enum_integer(Mapping::EventModifier::INVALID)>& eventModifierNames()
+{
+	ranges::for_each_n(enum_entries<Mapping::EventModifier>().begin(), evtModNames.size(),
+	  [i = 0](auto& pair) mutable
+	  {
+		  evtModNames[i++] = pair.second.data();
+	  });
+	return evtModNames;
+};
+
+static array<const char*, enum_integer(Mapping::ActionModifier::INVALID)> actModNames;
+static constexpr array<const char*, enum_integer(Mapping::ActionModifier::INVALID)>& actModifierNames()
+{
+	ranges::for_each_n(enum_entries<Mapping::ActionModifier>().begin(), actModNames.size(),
+	  [i = 0](auto& pair) mutable
+	  {
+		  actModNames[i++] = pair.second.data();
+	  });
+	return actModNames;
+}
+
 template<typename T>
 void drawCombo(string_view name, T& setting)
 {
@@ -219,16 +254,6 @@ void InputSelector::MappingTabItem::drawSelectableGrid(const string_view labelGr
 		}
 	}
 }
-static array<const char*, enum_integer(ControllerScheme::INVALID)> arr;
-static constexpr array<const char*, enum_integer(ControllerScheme::INVALID)>& controllerSchemeNames()
-{
-	ranges::for_each_n(enum_entries<ControllerScheme>().begin(), arr.size(),
-	  [i = 0](auto& pair) mutable
-	  {
-		  arr[i++] = pair.second.data();
-	  });
-	return arr;
-};
 
 InputSelector::MappingTabItem::MappingTabItem(KeyCode keyCode, Mapping::EventModifier evt, Mapping::ActionModifier act)
   : _keyCode(keyCode)
@@ -244,8 +269,15 @@ void InputSelector::MappingTabItem::draw()
 	if (CollapsingHeader("Modifiers"))
 	{
 		_activeHeader = MODIFIERS;
-		drawCombo("Action Modifiers", _act);
-		drawCombo("Event Modifiers", _evt);
+		int evt = 0, act = 0;
+		if (ListBox("Event Modifiers", &evt, eventModifierNames().data(), eventModifierNames().size(), eventModifierNames().size()))
+		{
+			_evt = *enum_cast<Mapping::EventModifier>(evt);
+		}
+		if (ListBox("Action Modifiers", &act, actModifierNames().data(), actModifierNames().size(), actModifierNames().size()))
+		{
+			_act = *enum_cast<Mapping::ActionModifier>(act);
+		}
 	}
 	SetNextItemOpen(_activeHeader == MOUSE, ImGuiCond_Always);
 	if (CollapsingHeader("Mouse"))

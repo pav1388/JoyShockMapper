@@ -34,8 +34,7 @@ private:
 		Mapping::ActionModifier _act = Mapping::ActionModifier::None;
 		Mapping::EventModifier _evt = Mapping::EventModifier::Auto;
 		KeyCode _keyCode = KeyCode("NONE");
-		enum Header
-		{
+		static enum Header {
 			MODIFIERS,
 			MOUSE,
 			KEYBOARD,
@@ -43,7 +42,7 @@ private:
 			CONSOLE,
 			GYRO,
 			CONTROLLER,
-		} _activeHeader = Header::MODIFIERS;
+		} _activeHeader;
 	};
 
 	std::optional<ButtonID> targetButton;

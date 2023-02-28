@@ -1670,6 +1670,7 @@ static float handleFlickStick(float calX, float calY, float lastCalX, float last
 
 		// alright, but what happens if we've set gyro to one stick and flick stick to another?
 		// Nic: FS is mouse output and gyrostick is stick output. The game handles the merging (or not)
+		// Depends on the game, some take simultaneous input better than others. Players are aware of that. -Nic
 		GyroOutput gyroOutput = jc->getSetting<GyroOutput>(SettingID::GYRO_OUTPUT);
 		if (gyroOutput == flickStickOutput)
 		{
@@ -1809,7 +1810,7 @@ void processStick(shared_ptr<JoyShock> jc, float stickX, float stickY, float las
 			float normY = stickY / stickLength;
 			// use screen resolution
 			float mouseX = (float)jc->getSetting(SettingID::SCREEN_RESOLUTION_X) * 0.5f + 0.5f + normX * mouse_ring_radius;
-			float mouseY = (float)jc->getSetting(SettingID::SCREEN_RESOLUTION_Y) * 0.5f + 0.5f - normY * mouse_ring_radius;
+			float mouseY = (float)jc->getSetting(SettingID::SCREEN_RESOLUTION_X) * 0.5f + 0.5f - normY * mouse_ring_radius;
 			// normalize
 			mouseX = mouseX / jc->getSetting(SettingID::SCREEN_RESOLUTION_X);
 			mouseY = mouseY / jc->getSetting(SettingID::SCREEN_RESOLUTION_Y);
@@ -3443,6 +3444,7 @@ ControllerScheme UpdateVirtualController(ControllerScheme prevScheme, Controller
 				}
 				if (!success)
 				{
+					js.second->_context->_vigemController.release();
 					break;
 				}
 			}
@@ -3844,7 +3846,10 @@ void initJsmSettings(CmdRegistry *commandRegistry)
 	commandRegistry->add((new JSMAssignment<float>(*stick_power))
 	                       ->SetHelp("Power curve for stick input when in AIM mode. 1 for linear, 0 for no curve (full strength once out of deadzone). Higher numbers make more of the stick's range appear like a very slight tilt."));
 
-	SettingsManager::add(new JSMSetting<FloatXY>(SettingID::STICK_SENS, { 360.0f, 360.0f })); // stick_sens
+	auto stick_sens = new JSMSetting<FloatXY>(SettingID::STICK_SENS, { 360.0f, 360.0f });
+	SettingsManager::add(stick_sens);
+	commandRegistry->add((new JSMAssignment<FloatXY>(*stick_sens))
+	                      ->SetHelp("Stick sensitivity when using classic AIM mode."));
 
 	auto real_world_calibration = new JSMSetting<float>(SettingID::REAL_WORLD_CALIBRATION, 40.0f);
 	real_world_calibration->setFilter(&filterFloat);

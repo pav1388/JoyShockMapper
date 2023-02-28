@@ -35,7 +35,7 @@ static void HelpMarker(string_view desc)
 Application::Application(const CmdRegistry& cmds)
   : _cmds(cmds)
 {
-	  _tabs.emplace_back("Core Bindings", _cmds);
+	_tabs.emplace_back("Core Bindings", _cmds);
 }
 
 std::string_view getButtonLabel(ButtonID id)
@@ -47,7 +47,9 @@ template<typename T>
 void drawCombo(JSMSetting<T>& setting, ImGuiComboFlags flags = 0)
 {
 	SetNextItemWidth(150.f);
-	if (BeginCombo(enum_name(setting._id).data(), enum_name(setting.value()).data(), flags))
+	string name("##");
+	name.append(enum_name(setting.value()).data());
+	if (BeginCombo(name.c_str(), enum_name(setting.value()).data(), flags))
 	{
 		for (auto [enumVal, enumStr] : enum_entries<T>())
 		{
@@ -77,10 +79,16 @@ void drawCombo(JSMSetting<T>& setting, ImGuiComboFlags flags = 0)
 				if (setting._id != SettingID::MOTION_STICK_MODE &&
 				  (enumVal == StickMode::LEFT_STEER_X || enumVal == StickMode::RIGHT_STEER_X))
 				{
+					// steer stick mode is only valid for the motion stick, don't add to other combo boxes
+					continue;
+				}
+				if (enumVal == StickMode::INNER_RING || enumVal == StickMode::OUTER_RING)
+				{
+					// Don't add legacy commands to UI. Use setting "XXXX_RING_MODE = [INNER|OUTER]" instead
 					continue;
 				}
 			}
-			if(disabled)
+			if (disabled)
 				BeginDisabled();
 			if (Selectable(enumStr.data(), enumVal == setting.value()))
 			{
@@ -90,7 +98,7 @@ void drawCombo(JSMSetting<T>& setting, ImGuiComboFlags flags = 0)
 			// Set the initial focus when opening the combo (scrolling + keyboard navigation focus)
 			if (enumVal == setting.value())
 				SetItemDefaultFocus();
-			if(disabled)
+			if (disabled)
 				EndDisabled();
 		}
 		EndCombo();
@@ -99,11 +107,17 @@ void drawCombo(JSMSetting<T>& setting, ImGuiComboFlags flags = 0)
 
 void Application::BindingTab::drawButton(ButtonID btn, ImVec2 size)
 {
-	std::stringstream description;
-	description << mappings[enum_integer(btn)].value().description(); // Button label to display
-	description << "###" << enum_name(btn);                           // Button ID for ImGui
+	std::stringstream labelID;
+	string desc(mappings[enum_integer(btn)].value().description());
+	for (auto pos = desc.find("and"); pos != string::npos; pos = desc.find("and", pos))
+	{
+		desc.insert(pos, "\n");
+		pos += 2;
+	}
+	labelID << desc;                    // Button label to display
+	labelID << "###" << enum_name(btn); // Button ID for ImGui
 
-	if (Button(description.str().data(), size))
+	if (Button(labelID.str().data(), size))
 	{
 		_showPopup = btn;
 	}
@@ -119,8 +133,13 @@ void Application::BindingTab::drawButton(ButtonID btn, ImVec2 size)
 		{
 			_showPopup = btn;
 		}
+		if (MenuItem("Clear", ""))
+		{
+			mappings[enum_integer(btn)].set(Mapping::NO_MAPPING);
+			mappings[enum_integer(btn)].updateLabel("");
+		}
 		MenuItem("Chord this button", "Middle Click", false, false);
-		if( BeginMenu("Simultaneous Press with"))
+		if (BeginMenu("Simultaneous Press with"))
 		{
 			for (auto pair = enum_entries<ButtonID>().begin(); pair->first < ButtonID::SIZE; ++pair)
 			{
@@ -136,24 +155,22 @@ void Application::BindingTab::drawButton(ButtonID btn, ImVec2 size)
 			}
 			EndMenu();
 		}
-		float hold_press_time = SettingsManager::get<float>(SettingID::HOLD_PRESS_TIME)->value();
-		if (InputFloat(enum_name(SettingID::HOLD_PRESS_TIME).data(), &hold_press_time, 0.f, 0.f, "%.3f", ImGuiInputTextFlags_EnterReturnsTrue))
-		{
-			SettingsManager::get<float>(SettingID::HOLD_PRESS_TIME)->set(hold_press_time);
-		}
-		if (IsItemHovered())
-		{
-			SetTooltip(_cmds.GetHelp(enum_name(SettingID::HOLD_PRESS_TIME)).data());
-		}
-		float sim_press_window = SettingsManager::getV<float>(SettingID::SIM_PRESS_WINDOW)->value();
-		if (InputFloat(enum_name(SettingID::SIM_PRESS_WINDOW).data(), &sim_press_window, 0.f, 0.f, "%.3f", ImGuiInputTextFlags_EnterReturnsTrue))
-		{
-			SettingsManager::getV<float>(SettingID::SIM_PRESS_WINDOW)->set(sim_press_window);
-		}
-		if (IsItemHovered())
-		{
-			SetTooltip(_cmds.GetHelp(enum_name(SettingID::SIM_PRESS_WINDOW)).data());
-		}
+		drawLabel(SettingID::HOLD_PRESS_TIME);
+		SameLine();
+		drawAnyFloat(SettingID::HOLD_PRESS_TIME);
+
+		drawLabel(SettingID::TURBO_PERIOD);
+		SameLine();
+		drawAnyFloat(SettingID::TURBO_PERIOD);
+
+		drawLabel(SettingID::DBL_PRESS_WINDOW);
+		SameLine();
+		drawAnyFloat(SettingID::DBL_PRESS_WINDOW);
+
+		drawLabel(SettingID::SIM_PRESS_WINDOW);
+		SameLine();
+		drawAnyFloat(SettingID::SIM_PRESS_WINDOW);
+
 		EndPopup();
 	}
 }
@@ -175,7 +192,6 @@ bool Application::DrawLoop()
 	// Setup window
 	SDL_WindowFlags window_flags = (SDL_WindowFlags)(SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI); //  | SDL_WINDOW_BORDERLESS | SDL_WINDOW_FULLSCREEN_DESKTOP
 	window = SDL_CreateWindow("JoyShockMapper", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1280, 720, window_flags);
-
 
 	// Setup SDL_Renderer instance
 	renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_PRESENTVSYNC | SDL_RENDERER_ACCELERATED);
@@ -250,7 +266,7 @@ bool Application::DrawLoop()
 		if (done)
 			break;
 
-		auto &style = GetStyle();
+		auto& style = GetStyle();
 		style.Alpha = 1.0f;
 
 		// Start the Dear ImGui frame
@@ -258,7 +274,7 @@ bool Application::DrawLoop()
 		ImGui_ImplSDL2_NewFrame();
 		NewFrame();
 
-		PushStyleColor(ImGuiCol_WindowBg, {0.f, 0.f, 0.f, 0.f});
+		PushStyleColor(ImGuiCol_WindowBg, { 0.f, 0.f, 0.f, 0.f });
 		DockSpaceOverViewport(GetMainViewport(), ImGuiDockNodeFlags_PassthruCentralNode);
 		PopStyleColor();
 
@@ -457,107 +473,691 @@ bool Application::DrawLoop()
 }
 
 Application::BindingTab::BindingTab(string_view name, const CmdRegistry& cmds, ButtonID chord)
-	: _name(name)
-	, _cmds(cmds)
-	, _chord(chord)
-{}
+  : _name(name)
+  , _cmds(cmds)
+  , _chord(chord)
+{
+}
 
-void Application::BindingTab::draw(ImVec2 &renderingAreaPos, ImVec2& renderingAreaSize)
+void Application::BindingTab::drawLabel(ButtonID btn)
+{
+	AlignTextToFramePadding();
+	Text(enum_name(btn).data());
+	if (IsItemHovered())
+	{
+		SetTooltip(_cmds.GetHelp(enum_name(btn)).data());
+	}
+};
+void Application::BindingTab::drawLabel(SettingID stg)
+{
+	AlignTextToFramePadding();
+	Text(enum_name(stg).data());
+	if (IsItemHovered())
+	{
+		SetTooltip(_cmds.GetHelp(enum_name(stg)).data());
+	}
+};
+void Application::BindingTab::drawLabel(string_view cmd)
+{
+	AlignTextToFramePadding();
+	Text(cmd.data());
+	if (IsItemHovered())
+	{
+		SetTooltip(_cmds.GetHelp(cmd).data());
+	}
+}
+
+void Application::BindingTab::drawAnyFloat(SettingID stg)
+{
+	auto setting = SettingsManager::get<float>(stg);
+	auto value = setting->value();
+	stringstream ss;
+	ss << "##" << enum_name(stg);
+	if (InputFloat(ss.str().data(), &value, 0.f, 0.f, "%3f", ImGuiInputTextFlags_EnterReturnsTrue))
+	{
+		setting->set(value);
+	}
+}
+
+void Application::BindingTab::drawPercentFloat(SettingID stg)
+{
+	auto setting = SettingsManager::get<float>(stg);
+	float value = setting->value();
+	stringstream ss;
+	ss << "##" << enum_name(stg);
+	if (SliderFloat(ss.str().data(), &value, 0.f, 1.f, "%.2f", ImGuiInputTextFlags_EnterReturnsTrue))
+	{
+		setting->set(value);
+	}
+}
+
+void Application::BindingTab::drawAny2Floats(SettingID stg)
+{
+	auto setting = SettingsManager::get<FloatXY>(stg);
+	FloatXY value = setting->value();
+	stringstream ss;
+	ss << "##" << enum_name(stg);
+	if (InputFloat2(ss.str().data(), &value.first, "%.0f", ImGuiInputTextFlags_EnterReturnsTrue))
+	{
+		setting->set(value);
+	}
+}
+
+void Application::BindingTab::draw(ImVec2& renderingAreaPos, ImVec2& renderingAreaSize)
 {
 	if (ImGui::BeginTabItem(_name.data()))
 	{
-		auto drawlabel = [this](ButtonID btn)
-		{
-			AlignTextToFramePadding();
-			Text(enum_name(btn).data());
-			if (IsItemHovered())
-			{
-				SetTooltip(_cmds.GetHelp(enum_name(btn)).data());
-			}
-		};
 		auto mainWindowSize = ImGui::GetContentRegionAvail();
+
+		// static int sizingPolicy = 0;
+		// int sizingPolicies[] = { ImGuiTableFlags_SizingFixedFit, ImGuiTableFlags_SizingFixedSame, ImGuiTableFlags_SizingStretchProp, ImGuiTableFlags_SizingStretchSame };
+		// Combo("Sizing policy", &sizingPolicy, "FixedFit\0FixedSame\0StretchProp\0StretchSame");
 
 		// Left
 		BeginChild("Left Bindings", { mainWindowSize.x * 1.f / 5.f, 0.f }, false, ImGuiWindowFlags_AlwaysAutoResize);
-		ImVec2 buttonSize = ImVec2{ 0.f, 0.f };
-		bool disabled = SettingsManager::get<TriggerMode>(SettingID::ZL_MODE)->value() == TriggerMode::NO_FULL;
-		if (disabled)
-			BeginDisabled();
-		drawButton(ButtonID::ZLF, buttonSize);
-		if (disabled)
-			EndDisabled();
-		SameLine();
-		drawlabel(ButtonID::ZLF);
-		drawCombo(*SettingsManager::get<TriggerMode>(SettingID::ZL_MODE));
-		if (IsItemHovered())
-			SetTooltip(_cmds.GetHelp(enum_name(SettingID::ZL_MODE)).data());
-		drawButton(ButtonID::ZL, buttonSize);
-		SameLine();
-		drawlabel(ButtonID::ZL);
-		drawButton(ButtonID::L, buttonSize);
-		SameLine();
-		drawlabel(ButtonID::L);
-		drawButton(ButtonID::UP, buttonSize);
-		SameLine();
-		drawlabel(ButtonID::UP);
-		drawButton(ButtonID::LEFT, buttonSize);
-		SameLine();
-		drawlabel(ButtonID::LEFT);
-		drawButton(ButtonID::RIGHT, buttonSize);
-		SameLine();
-		drawlabel(ButtonID::RIGHT);
-		drawButton(ButtonID::DOWN, buttonSize);
-		SameLine();
-		drawlabel(ButtonID::DOWN);
-		drawButton(ButtonID::L3, buttonSize);
-		SameLine();
-		drawlabel(ButtonID::L3);
-		drawCombo(*SettingsManager::get<StickMode>(SettingID::LEFT_STICK_MODE));
-		if (IsItemHovered())
-			SetTooltip(_cmds.GetHelp(enum_name(SettingID::LEFT_STICK_MODE)).data());
+		if (BeginTable("LeftTable", 2, ImGuiTableFlags_SizingStretchSame))
+		{
+			TableNextRow();
+			TableSetColumnIndex(0);
+			drawLabel(ButtonID::ZLF);
+			TableSetColumnIndex(1);
+			bool disabled = SettingsManager::get<TriggerMode>(SettingID::ZL_MODE)->value() == TriggerMode::NO_FULL;
+			if (disabled)
+				BeginDisabled();
+			drawButton(ButtonID::ZLF);
+			if (disabled)
+				EndDisabled();
+
+			TableNextRow();
+			TableSetColumnIndex(0);
+			drawLabel(SettingID::ZL_MODE);
+			TableSetColumnIndex(1);
+			drawCombo(*SettingsManager::get<TriggerMode>(SettingID::ZL_MODE));
+
+			TableNextRow();
+			TableSetColumnIndex(0);
+			drawLabel(ButtonID::ZL);
+			TableSetColumnIndex(1);
+			drawButton(ButtonID::ZL);
+
+			TableNextRow();
+			TableSetColumnIndex(0);
+			drawLabel(ButtonID::L);
+			TableSetColumnIndex(1);
+			drawButton(ButtonID::L);
+
+			TableNextRow();
+			TableSetColumnIndex(0);
+			drawLabel(ButtonID::UP);
+			TableSetColumnIndex(1);
+			drawButton(ButtonID::UP);
+
+			TableNextRow();
+			TableSetColumnIndex(0);
+			drawLabel(ButtonID::LEFT);
+			TableSetColumnIndex(1);
+			drawButton(ButtonID::LEFT);
+
+			TableNextRow();
+			TableSetColumnIndex(0);
+			drawLabel(ButtonID::RIGHT);
+			TableSetColumnIndex(1);
+			drawButton(ButtonID::RIGHT);
+
+			TableNextRow();
+			TableSetColumnIndex(0);
+			drawLabel(ButtonID::DOWN);
+			TableSetColumnIndex(1);
+			drawButton(ButtonID::DOWN);
+
+			TableNextRow();
+			TableSetColumnIndex(0);
+			drawLabel(ButtonID::LSL);
+			TableSetColumnIndex(1);
+			drawButton(ButtonID::LSL);
+
+			TableNextRow();
+			TableSetColumnIndex(0);
+			drawLabel(ButtonID::LSR);
+			TableSetColumnIndex(1);
+			drawButton(ButtonID::LSR);
+
+			TableNextRow();
+			TableSetColumnIndex(0);
+			drawLabel(ButtonID::L3);
+			TableSetColumnIndex(1);
+			drawButton(ButtonID::L3);
+
+			TableNextRow();
+			TableSetColumnIndex(0);
+			drawCombo(*SettingsManager::get<RingMode>(SettingID::LEFT_RING_MODE), ImGuiComboFlags_NoPreview);
+			if (IsItemHovered())
+				SetTooltip(_cmds.GetHelp(enum_name(SettingID::LEFT_RING_MODE)).data());
+			SameLine();
+			drawLabel(ButtonID::LRING);
+			TableSetColumnIndex(1);
+			drawButton(ButtonID::LRING);
+
+			TableNextRow();
+			TableSetColumnIndex(0);
+			drawLabel(SettingID::LEFT_STICK_MODE);
+			TableSetColumnIndex(1);
+			drawCombo(*SettingsManager::get<StickMode>(SettingID::LEFT_STICK_MODE));
+
+			StickMode leftStickMode = SettingsManager::get<StickMode>(SettingID::LEFT_STICK_MODE)->value();
+			if (leftStickMode == StickMode::NO_MOUSE || leftStickMode == StickMode::OUTER_RING || leftStickMode == StickMode::INNER_RING)
+			{
+				TableNextRow();
+				TableSetColumnIndex(0);
+				drawLabel(ButtonID::LUP);
+				TableSetColumnIndex(1);
+				drawButton(ButtonID::LUP);
+
+				TableNextRow();
+				TableSetColumnIndex(0);
+				drawLabel(ButtonID::LLEFT);
+				TableSetColumnIndex(1);
+				drawButton(ButtonID::LLEFT);
+
+				TableNextRow();
+				TableSetColumnIndex(0);
+				drawLabel(ButtonID::LRIGHT);
+				TableSetColumnIndex(1);
+				drawButton(ButtonID::LRIGHT);
+
+				TableNextRow();
+				TableSetColumnIndex(0);
+				drawLabel(ButtonID::LDOWN);
+				TableSetColumnIndex(1);
+				drawButton(ButtonID::LDOWN);
+			}
+			else if (leftStickMode == StickMode::FLICK || leftStickMode == StickMode::FLICK_ONLY || leftStickMode == StickMode::ROTATE_ONLY)
+			{
+				TableNextRow();
+				TableSetColumnIndex(0);
+				drawLabel(SettingID::FLICK_SNAP_MODE);
+				TableSetColumnIndex(1);
+				drawCombo(*SettingsManager::get<FlickSnapMode>(SettingID::FLICK_SNAP_MODE));
+
+				TableNextRow();
+				TableSetColumnIndex(0);
+				drawLabel(SettingID::FLICK_SNAP_STRENGTH);
+				TableSetColumnIndex(1);
+				drawPercentFloat(SettingID::FLICK_SNAP_STRENGTH);
+
+				TableNextRow();
+				TableSetColumnIndex(0);
+				drawLabel(SettingID::FLICK_DEADZONE_ANGLE);
+				TableSetColumnIndex(1);
+				drawAnyFloat(SettingID::FLICK_DEADZONE_ANGLE);
+
+				TableNextRow();
+				TableSetColumnIndex(0);
+				drawLabel(SettingID::FLICK_STICK_OUTPUT);
+				TableSetColumnIndex(1);
+				auto& fsOut = *SettingsManager::get<GyroOutput>(SettingID::FLICK_STICK_OUTPUT);
+				drawCombo(fsOut);
+
+				if (fsOut == GyroOutput::MOUSE)
+				{
+					TableNextRow();
+					TableSetColumnIndex(0);
+					drawLabel(SettingID::FLICK_TIME);
+					TableSetColumnIndex(1);
+					drawAnyFloat(SettingID::FLICK_TIME);
+
+					TableNextRow();
+					TableSetColumnIndex(0);
+					drawLabel(SettingID::FLICK_TIME_EXPONENT);
+					TableSetColumnIndex(1);
+					drawAnyFloat(SettingID::FLICK_TIME_EXPONENT);
+
+					TableNextRow();
+					TableSetColumnIndex(0);
+					drawLabel(SettingID::REAL_WORLD_CALIBRATION);
+					TableSetColumnIndex(1);
+					drawAnyFloat(SettingID::REAL_WORLD_CALIBRATION);
+
+					TableNextRow();
+					TableSetColumnIndex(0);
+					drawLabel(SettingID::IN_GAME_SENS);
+					TableSetColumnIndex(1);
+					drawAnyFloat(SettingID::IN_GAME_SENS);
+				}
+				else // LEFT_STICK, RIGHT_STICK, PS_MOTION
+				{
+					TableNextRow();
+					TableSetColumnIndex(0);
+					drawLabel(SettingID::VIRTUAL_STICK_CALIBRATION);
+					TableSetColumnIndex(1);
+					drawAnyFloat(SettingID::VIRTUAL_STICK_CALIBRATION);
+				}
+			}
+			else if (leftStickMode == StickMode::AIM)
+			{
+				TableNextRow();
+				TableSetColumnIndex(0);
+				drawLabel(SettingID::STICK_POWER);
+				TableSetColumnIndex(1);
+				drawAnyFloat(SettingID::STICK_POWER);
+
+				TableNextRow();
+				TableSetColumnIndex(0);
+				drawLabel(SettingID::STICK_SENS);
+				TableSetColumnIndex(1);
+				drawAny2Floats(SettingID::STICK_SENS);
+
+				TableNextRow();
+				TableSetColumnIndex(0);
+				drawLabel(SettingID::REAL_WORLD_CALIBRATION);
+				TableSetColumnIndex(1);
+				drawAnyFloat(SettingID::REAL_WORLD_CALIBRATION);
+
+				TableNextRow();
+				TableSetColumnIndex(0);
+				drawLabel(SettingID::IN_GAME_SENS);
+				TableSetColumnIndex(1);
+				drawAnyFloat(SettingID::IN_GAME_SENS);
+
+				TableNextRow();
+				TableSetColumnIndex(0);
+				drawLabel(SettingID::STICK_ACCELERATION_RATE);
+				TableSetColumnIndex(1);
+				drawAnyFloat(SettingID::STICK_ACCELERATION_RATE);
+
+				TableNextRow();
+				TableSetColumnIndex(0);
+				drawLabel(SettingID::STICK_ACCELERATION_CAP);
+				TableSetColumnIndex(1);
+				drawAnyFloat(SettingID::STICK_ACCELERATION_CAP);
+			}
+			else if (leftStickMode == StickMode::MOUSE_AREA)
+			{
+				TableNextRow();
+				TableSetColumnIndex(0);
+				drawLabel(SettingID::MOUSE_RING_RADIUS);
+				TableSetColumnIndex(1);
+				drawAnyFloat(SettingID::MOUSE_RING_RADIUS);
+			}
+			else if (leftStickMode == StickMode::MOUSE_RING)
+			{
+				TableNextRow();
+				TableSetColumnIndex(0);
+				drawLabel(SettingID::MOUSE_RING_RADIUS);
+				TableSetColumnIndex(1);
+				drawAnyFloat(SettingID::MOUSE_RING_RADIUS);
+
+				TableNextRow();
+				TableSetColumnIndex(0);
+				drawLabel(SettingID::SCREEN_RESOLUTION_X);
+				TableSetColumnIndex(1);
+				drawAnyFloat(SettingID::SCREEN_RESOLUTION_X);
+
+				TableNextRow();
+				TableSetColumnIndex(0);
+				drawLabel(SettingID::SCREEN_RESOLUTION_X);
+				TableSetColumnIndex(1);
+				drawAnyFloat(SettingID::SCREEN_RESOLUTION_X);
+			}
+			else if (leftStickMode == StickMode::SCROLL_WHEEL)
+			{
+				TableNextRow();
+				TableSetColumnIndex(0);
+				drawLabel(SettingID::SCROLL_SENS);
+				TableSetColumnIndex(1);
+				drawAnyFloat(SettingID::SCROLL_SENS);
+
+				TableNextRow();
+				TableSetColumnIndex(0);
+				drawLabel(ButtonID::LLEFT);
+				TableSetColumnIndex(1);
+				drawButton(ButtonID::LLEFT);
+
+				TableNextRow();
+				TableSetColumnIndex(0);
+				drawLabel(ButtonID::LRIGHT);
+				TableSetColumnIndex(1);
+				drawButton(ButtonID::LRIGHT);
+			}
+			// Handle Controller ones
+			else
+			{
+				Text("%s, Lorem ipsum dolor sit amet, consectetur adipiscing elit...", enum_name(leftStickMode).data());
+			}
+
+			EndTable();
+		}
 		EndChild();
+
 		ImGui::SameLine();
 
 		// Right
-		ImGui::BeginGroup();
-		BeginChild("Top buttons", { mainWindowSize.x * 3.f / 5.f, 60.f });
-		drawButton(ButtonID::MINUS, buttonSize);
-		SameLine();
-		drawButton(ButtonID::TOUCH, buttonSize);
-		SameLine();
-		drawCombo(*SettingsManager::get<TriggerMode>(SettingID::TOUCHPAD_DUAL_STAGE_MODE), ImGuiComboFlags_NoPreview);
-		SameLine();
-		drawButton(ButtonID::CAPTURE, buttonSize);
-		SameLine();
-		drawButton(ButtonID::PLUS, buttonSize);
+		BeginGroup();
+		BeginChild("Top buttons", { mainWindowSize.x * 3.f / 5.f, 60.f }, ImGuiWindowFlags_None);
+		if (BeginTable("TopTable", 6, ImGuiTableFlags_SizingStretchSame))
+		{
+			TableNextRow();
+			TableSetColumnIndex(0);
+			drawLabel("-");
+			TableSetColumnIndex(1);
+			drawLabel(ButtonID::TOUCH);
+			SameLine();
+			drawCombo(*SettingsManager::get<TriggerMode>(SettingID::TOUCHPAD_DUAL_STAGE_MODE), ImGuiComboFlags_NoPreview);
+			if (IsItemHovered())
+				SetTooltip(_cmds.GetHelp(enum_name(SettingID::TOUCHPAD_DUAL_STAGE_MODE)).data());
+			TableSetColumnIndex(2);
+			drawLabel(ButtonID::CAPTURE);
+			TableSetColumnIndex(3);
+			drawLabel(ButtonID::HOME);
+			TableSetColumnIndex(4);
+			drawLabel(ButtonID::MIC);
+			TableSetColumnIndex(5);
+			drawLabel("+");
+
+			TableNextRow();
+			TableSetColumnIndex(0);
+			drawButton(ButtonID::MINUS);
+			TableSetColumnIndex(1);
+			drawButton(ButtonID::TOUCH);
+			TableSetColumnIndex(2);
+			bool disabled = SettingsManager::get<TriggerMode>(SettingID::TOUCHPAD_DUAL_STAGE_MODE)->value() == TriggerMode::NO_FULL;
+			if (disabled)
+				BeginDisabled();
+			drawButton(ButtonID::CAPTURE);
+			if (disabled)
+				EndDisabled();
+			TableSetColumnIndex(3);
+			drawButton(ButtonID::HOME);
+			TableSetColumnIndex(4);
+			drawButton(ButtonID::MIC);
+			TableSetColumnIndex(5);
+			drawButton(ButtonID::PLUS);
+
+			EndTable();
+		}
 		EndChild();
 
 		renderingAreaSize = { mainWindowSize.x * 3.f / 5.f, GetContentRegionAvail().y };
 		BeginChild("Rendering window", renderingAreaSize, false);
 		renderingAreaPos = ImGui::GetWindowPos();
-		EndChild();
+		EndChild(); // Top buttons
 		EndGroup();
 
 		SameLine();
 		BeginChild("Right Bindings");
-		disabled = SettingsManager::get<TriggerMode>(SettingID::ZL_MODE)->value() == TriggerMode::NO_FULL;
-		if (disabled)
-			BeginDisabled();
-		drawButton(ButtonID::ZRF, buttonSize);
-		if (disabled)
-			EndDisabled();
-		drawCombo(*SettingsManager::get<TriggerMode>(SettingID::ZR_MODE));
-		drawButton(ButtonID::ZR, buttonSize);
-		drawButton(ButtonID::R, buttonSize);
-		drawButton(ButtonID::N, buttonSize);
-		drawButton(ButtonID::E, buttonSize);
-		drawButton(ButtonID::W, buttonSize);
-		drawButton(ButtonID::S, buttonSize);
-		drawButton(ButtonID::R3, buttonSize);
-		drawCombo(*SettingsManager::get<StickMode>(SettingID::RIGHT_STICK_MODE));
-		if (IsItemHovered())
-			SetTooltip(_cmds.GetHelp(enum_name(SettingID::RIGHT_STICK_MODE)).data());
+		if (BeginTable("RightTable", 2, ImGuiTableFlags_SizingStretchSame))
+		{
+			TableNextRow();
+			TableSetColumnIndex(0);
+			bool disabled = SettingsManager::get<TriggerMode>(SettingID::ZL_MODE)->value() == TriggerMode::NO_FULL;
+			if (disabled)
+				BeginDisabled();
+			drawButton(ButtonID::ZRF);
+			if (disabled)
+				EndDisabled();
+			TableSetColumnIndex(1);
+			drawLabel(ButtonID::ZRF);
+
+			TableNextRow();
+			TableSetColumnIndex(0);
+			drawCombo(*SettingsManager::get<TriggerMode>(SettingID::ZR_MODE));
+			TableSetColumnIndex(1);
+			drawLabel(SettingID::ZR_MODE);
+
+			TableNextRow();
+			TableSetColumnIndex(0);
+			drawButton(ButtonID::ZR);
+			TableSetColumnIndex(1);
+			drawLabel(ButtonID::ZR);
+
+			TableNextRow();
+			TableSetColumnIndex(0);
+			drawButton(ButtonID::R);
+			TableSetColumnIndex(1);
+			drawLabel(ButtonID::R);
+
+			TableNextRow();
+			TableSetColumnIndex(0);
+			drawButton(ButtonID::N);
+			TableSetColumnIndex(1);
+			drawLabel(ButtonID::N);
+
+			TableNextRow();
+			TableSetColumnIndex(0);
+			drawButton(ButtonID::E);
+			TableSetColumnIndex(1);
+			drawLabel(ButtonID::E);
+
+			TableNextRow();
+			TableSetColumnIndex(0);
+			drawButton(ButtonID::W);
+			TableSetColumnIndex(1);
+			drawLabel(ButtonID::W);
+
+			TableNextRow();
+			TableSetColumnIndex(0);
+			drawButton(ButtonID::S);
+			TableSetColumnIndex(1);
+			drawLabel(ButtonID::S);
+
+			TableNextRow();
+			TableSetColumnIndex(0);
+			drawButton(ButtonID::RSR);
+			TableSetColumnIndex(1);
+			drawLabel(ButtonID::RSR);
+
+			TableNextRow();
+			TableSetColumnIndex(0);
+			drawButton(ButtonID::RSL);
+			TableSetColumnIndex(1);
+			drawLabel(ButtonID::RSL);
+
+			TableNextRow();
+			TableSetColumnIndex(0);
+			drawButton(ButtonID::R3);
+			TableSetColumnIndex(1);
+			drawLabel(ButtonID::R3);
+
+			TableNextRow();
+			TableSetColumnIndex(0);
+			drawButton(ButtonID::RRING);
+			TableSetColumnIndex(1);
+			drawLabel(ButtonID::RRING);
+			SameLine();
+			drawCombo(*SettingsManager::get<RingMode>(SettingID::RIGHT_RING_MODE), ImGuiComboFlags_NoPreview);
+			if (IsItemHovered())
+				SetTooltip(_cmds.GetHelp(enum_name(SettingID::RIGHT_RING_MODE)).data());
+
+			TableNextRow();
+			TableSetColumnIndex(0);
+			drawCombo(*SettingsManager::get<StickMode>(SettingID::RIGHT_STICK_MODE));
+			TableSetColumnIndex(1);
+			drawLabel(SettingID::RIGHT_RING_MODE);
+
+			StickMode rightStickMode = SettingsManager::get<StickMode>(SettingID::RIGHT_STICK_MODE)->value();
+			if (rightStickMode == StickMode::NO_MOUSE || rightStickMode == StickMode::OUTER_RING || rightStickMode == StickMode::INNER_RING)
+			{
+				TableNextRow();
+				TableSetColumnIndex(0);
+				drawButton(ButtonID::RUP);
+				TableSetColumnIndex(1);
+				drawLabel(ButtonID::RUP);
+
+				TableNextRow();
+				TableSetColumnIndex(0);
+				drawButton(ButtonID::RLEFT);
+				TableSetColumnIndex(1);
+				drawLabel(ButtonID::RLEFT);
+
+				TableNextRow();
+				TableSetColumnIndex(0);
+				drawButton(ButtonID::RRIGHT);
+				TableSetColumnIndex(1);
+				drawLabel(ButtonID::RRIGHT);
+
+				TableNextRow();
+				TableSetColumnIndex(0);
+				drawButton(ButtonID::RDOWN);
+				TableSetColumnIndex(1);
+				drawLabel(ButtonID::RDOWN);
+			}
+			else if (rightStickMode == StickMode::FLICK || rightStickMode == StickMode::FLICK_ONLY || rightStickMode == StickMode::ROTATE_ONLY)
+			{
+				TableNextRow();
+				TableSetColumnIndex(0);
+				drawCombo(*SettingsManager::get<FlickSnapMode>(SettingID::FLICK_SNAP_MODE));
+				TableSetColumnIndex(1);
+				drawLabel(SettingID::FLICK_SNAP_MODE);
+
+				TableNextRow();
+				TableSetColumnIndex(0);
+				drawPercentFloat(SettingID::FLICK_SNAP_STRENGTH);
+				TableSetColumnIndex(1);
+				drawLabel(SettingID::FLICK_SNAP_STRENGTH);
+
+				TableNextRow();
+				TableSetColumnIndex(0);
+				drawAnyFloat(SettingID::FLICK_DEADZONE_ANGLE);
+				TableSetColumnIndex(1);
+				drawLabel(SettingID::FLICK_DEADZONE_ANGLE);
+
+				TableNextRow();
+				TableSetColumnIndex(0);
+				auto& fsOut = *SettingsManager::get<GyroOutput>(SettingID::FLICK_STICK_OUTPUT);
+				drawCombo(fsOut);
+				TableSetColumnIndex(1);
+				drawLabel(SettingID::FLICK_STICK_OUTPUT);
+
+				if (fsOut == GyroOutput::MOUSE)
+				{
+					TableNextRow();
+					TableSetColumnIndex(0);
+					drawAnyFloat(SettingID::FLICK_TIME);
+					TableSetColumnIndex(1);
+					drawLabel(SettingID::FLICK_TIME);
+
+					TableNextRow();
+					TableSetColumnIndex(0);
+					drawAnyFloat(SettingID::FLICK_TIME_EXPONENT);
+					TableSetColumnIndex(1);
+					drawLabel(SettingID::FLICK_TIME_EXPONENT);
+
+					TableNextRow();
+					TableSetColumnIndex(0);
+					drawAnyFloat(SettingID::REAL_WORLD_CALIBRATION);
+					TableSetColumnIndex(1);
+					drawLabel(SettingID::REAL_WORLD_CALIBRATION);
+
+					TableNextRow();
+					TableSetColumnIndex(0);
+					drawAnyFloat(SettingID::IN_GAME_SENS);
+					TableSetColumnIndex(1);
+					drawLabel(SettingID::IN_GAME_SENS);
+				}
+				else // LEFT_STICK, RIGHT_STICK, PS_MOTION
+				{
+					TableNextRow();
+					TableSetColumnIndex(0);
+					drawAnyFloat(SettingID::VIRTUAL_STICK_CALIBRATION);
+					TableSetColumnIndex(1);
+					drawLabel(SettingID::VIRTUAL_STICK_CALIBRATION);
+				}
+			}
+			else if (rightStickMode == StickMode::AIM)
+			{
+				TableNextRow();
+				TableSetColumnIndex(0);
+				drawAnyFloat(SettingID::STICK_POWER);
+				TableSetColumnIndex(1);
+				drawLabel(SettingID::STICK_POWER);
+
+				TableNextRow();
+				TableSetColumnIndex(0);
+				drawAny2Floats(SettingID::STICK_SENS);
+				TableSetColumnIndex(1);
+				drawLabel(SettingID::STICK_SENS);
+
+				TableNextRow();
+				TableSetColumnIndex(0);
+				drawAnyFloat(SettingID::REAL_WORLD_CALIBRATION);
+				TableSetColumnIndex(1);
+				drawLabel(SettingID::REAL_WORLD_CALIBRATION);
+
+				TableNextRow();
+				TableSetColumnIndex(0);
+				drawAnyFloat(SettingID::IN_GAME_SENS);
+				TableSetColumnIndex(1);
+				drawLabel(SettingID::IN_GAME_SENS);
+
+				TableNextRow();
+				TableSetColumnIndex(0);
+				drawAnyFloat(SettingID::STICK_ACCELERATION_RATE);
+				TableSetColumnIndex(1);
+				drawLabel(SettingID::STICK_ACCELERATION_RATE);
+
+				TableNextRow();
+				TableSetColumnIndex(0);
+				drawAnyFloat(SettingID::STICK_ACCELERATION_CAP);
+				TableSetColumnIndex(1);
+				drawLabel(SettingID::STICK_ACCELERATION_CAP);
+			}
+			else if (rightStickMode == StickMode::MOUSE_AREA)
+			{
+				TableNextRow();
+				TableSetColumnIndex(0);
+				drawAnyFloat(SettingID::MOUSE_RING_RADIUS);
+				TableSetColumnIndex(1);
+				drawLabel(SettingID::MOUSE_RING_RADIUS);
+			}
+			else if (rightStickMode == StickMode::MOUSE_RING)
+			{
+				TableNextRow();
+				TableSetColumnIndex(0);
+				drawAnyFloat(SettingID::MOUSE_RING_RADIUS);
+				TableSetColumnIndex(1);
+				drawLabel(SettingID::MOUSE_RING_RADIUS);
+
+				TableNextRow();
+				TableSetColumnIndex(0);
+				drawAnyFloat(SettingID::SCREEN_RESOLUTION_X);
+				TableSetColumnIndex(1);
+				drawLabel(SettingID::SCREEN_RESOLUTION_X);
+
+				TableNextRow();
+				TableSetColumnIndex(0);
+				drawAnyFloat(SettingID::SCREEN_RESOLUTION_X);
+				TableSetColumnIndex(1);
+				drawLabel(SettingID::SCREEN_RESOLUTION_X);
+			}
+			else if (rightStickMode == StickMode::SCROLL_WHEEL)
+			{
+				TableNextRow();
+				TableSetColumnIndex(0);
+				drawAnyFloat(SettingID::SCROLL_SENS);
+				TableSetColumnIndex(1);
+				drawLabel(SettingID::SCROLL_SENS);
+
+				TableNextRow();
+				TableSetColumnIndex(0);
+				drawButton(ButtonID::RLEFT);
+				TableSetColumnIndex(1);
+				drawLabel(ButtonID::RLEFT);
+
+				TableNextRow();
+				TableSetColumnIndex(0);
+				drawButton(ButtonID::RRIGHT);
+				TableSetColumnIndex(1);
+				drawLabel(ButtonID::RRIGHT);
+			}
+			// Handle Controller ones
+			else
+			{
+				Text("%s, Lorem ipsum dolor sit amet, consectetur adipiscing elit...", enum_name(rightStickMode).data());
+			}
+			EndTable();
+		}
 		EndChild();
+
 		if (_showPopup != ButtonID::INVALID)
 		{
 			_inputSelector.show(_showPopup);

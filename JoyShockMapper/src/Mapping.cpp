@@ -143,10 +143,6 @@ bool Mapping::AddMapping(KeyCode key, EventModifier evtMod, ActionModifier actMo
 	{
 		return false;
 	}
-	if (key.code == NO_HOLD_MAPPED)
-	{
-		return true;
-	}
 	if (key.code == CALIBRATE)
 	{
 		apply = bind(&EventActionIf::StartCalibration, placeholders::_1);
