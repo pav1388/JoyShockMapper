@@ -4136,6 +4136,7 @@ void initJsmSettings(CmdRegistry *commandRegistry)
 	                       ->SetHelp("Scrolling sensitivity for sticks."));
 
 	auto autoloadSwitch = new JSMVariable<Switch>(Switch::ON);
+	autoLoadThread.reset(new JSM::AutoLoad(commandRegistry, autoloadSwitch->value() == Switch::ON)); // Start by default
 	autoloadSwitch->setFilter(&filterInvalidValue<Switch, Switch::INVALID>)->addOnChangeListener(bind(&UpdateThread, autoLoadThread.get(), placeholders::_1));
 	SettingsManager::add(SettingID::AUTOLOAD, autoloadSwitch);
 	auto *autoloadCmd = new JSMAssignment<Switch>("AUTOLOAD", *autoloadSwitch);
@@ -4402,7 +4403,6 @@ int main(int argc, char *argv[])
 	CmdRegistry commandRegistry;
 	initJsmSettings(&commandRegistry);
 	minimizeThread.reset(new PollingThread("Minimize thread", &MinimizePoll, nullptr, 1000, SettingsManager::getV<Switch>(SettingID::HIDE_MINIMIZED)->value() == Switch::ON)); // Start by default
-	autoLoadThread.reset(new JSM::AutoLoad(&commandRegistry, SettingsManager::getV<Switch>(SettingID::AUTOLOAD)->value() == Switch::ON));                                      // Start by default
 
 	for (int i = argc - 1; i >= 0; --i)
 	{

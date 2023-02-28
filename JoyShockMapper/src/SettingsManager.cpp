@@ -1,6 +1,7 @@
 #include "SettingsManager.h"
 #include <algorithm>
 #include <ranges>
+#include <set>
 
 SettingsManager::SettingsMap SettingsManager::_settings;
 
@@ -18,7 +19,11 @@ void SettingsManager::resetAllSettings()
 	};
 	static constexpr auto exceptions = [](SettingsMap::value_type &kvPair)
 	{
-		return kvPair.first != SettingID::JSM_DIRECTORY;
+		static std::set<SettingID> exceptions = {
+			SettingID::AUTOLOAD,
+			SettingID::JSM_DIRECTORY,
+		};
+		return exceptions.find(kvPair.first) == exceptions.end();
 	};
 	ranges::for_each(_settings | views::filter(exceptions), callReset);
 }

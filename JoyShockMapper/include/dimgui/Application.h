@@ -37,7 +37,7 @@ private:
 		void drawLabel(ButtonID btn);
 		void drawLabel(SettingID stg);
 		void drawLabel(string_view cmd);
-		void drawAnyFloat(SettingID stg);
+		void drawAnyFloat(SettingID stg, bool labeled = false);
 		void drawPercentFloat(SettingID stg);
 		void drawAny2Floats(SettingID stg);
 		const string_view _name;

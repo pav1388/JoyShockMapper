@@ -138,6 +138,11 @@ void Application::BindingTab::drawButton(ButtonID btn, ImVec2 size)
 			mappings[enum_integer(btn)].set(Mapping::NO_MAPPING);
 			mappings[enum_integer(btn)].updateLabel("");
 		}
+		if (MenuItem("Set Double Press", "", false, false))
+		{
+			auto simMap = mappings[enum_integer(btn)].atSimPress(btn);
+			// TODO: set simMap to some value using the input selector and create a display for it somewhere in the UI
+		}
 		MenuItem("Chord this button", "Middle Click", false, false);
 		if (BeginMenu("Simultaneous Press with"))
 		{
@@ -149,27 +154,37 @@ void Application::BindingTab::drawButton(ButtonID btn, ImVec2 size)
 					if (MenuItem(pair->second.data(), nullptr, false, false))
 					{
 						auto simMap = mappings[enum_integer(btn)].atSimPress(pair->first);
-						// TODO: set simMap to some value using the input selectore and create a display for it somewhere in the UI
+						// TODO: set simMap to some value using the input selector and create a display for it somewhere in the UI
 					}
 				}
 			}
 			EndMenu();
 		}
-		drawLabel(SettingID::HOLD_PRESS_TIME);
-		SameLine();
-		drawAnyFloat(SettingID::HOLD_PRESS_TIME);
-
-		drawLabel(SettingID::TURBO_PERIOD);
-		SameLine();
-		drawAnyFloat(SettingID::TURBO_PERIOD);
-
-		drawLabel(SettingID::DBL_PRESS_WINDOW);
-		SameLine();
-		drawAnyFloat(SettingID::DBL_PRESS_WINDOW);
-
-		drawLabel(SettingID::SIM_PRESS_WINDOW);
-		SameLine();
-		drawAnyFloat(SettingID::SIM_PRESS_WINDOW);
+		drawAnyFloat(SettingID::HOLD_PRESS_TIME, true);
+		if (IsItemHovered())
+		{
+			SetTooltip(_cmds.GetHelp(enum_name(SettingID::HOLD_PRESS_TIME)).data());
+		}
+		drawAnyFloat(SettingID::TURBO_PERIOD, true);
+		if (IsItemHovered())
+		{
+			SetTooltip(_cmds.GetHelp(enum_name(SettingID::TURBO_PERIOD)).data());
+		}
+		drawAnyFloat(SettingID::DBL_PRESS_WINDOW, true);
+		if (IsItemHovered())
+		{
+			SetTooltip(_cmds.GetHelp(enum_name(SettingID::DBL_PRESS_WINDOW)).data());
+		}
+		auto setting = SettingsManager::getV<float>(SettingID::SIM_PRESS_WINDOW);
+		auto value = setting->value();
+		if (InputFloat(enum_name(SettingID::SIM_PRESS_WINDOW).data(), &value, 0.f, 0.f, "%.3f", ImGuiInputTextFlags_EnterReturnsTrue))
+		{
+			setting->set(value);
+		}
+		if (IsItemHovered())
+		{
+			SetTooltip(_cmds.GetHelp(enum_name(SettingID::SIM_PRESS_WINDOW)).data());
+		}
 
 		EndPopup();
 	}
@@ -302,29 +317,41 @@ bool Application::DrawLoop()
 				{
 				}
 				Separator();
-				if (MenuItem("On Startup", nullptr, nullptr, false))
+				if (MenuItem("On Startup"))
 				{
+					WriteToConsole("OnStartup.txt");
 				}
-				if (MenuItem("On Reset", nullptr, nullptr, false))
+				if (MenuItem("On Reset"))
 				{
+					WriteToConsole("OnReset.txt");
 				}
 				if (BeginMenu("Templates"))
 				{
-					if (MenuItem("_2DMouse", nullptr, nullptr, false))
+					string gyroConfigsFolder{ GYRO_CONFIGS_FOLDER() };
+					for (auto file : ListDirectory(gyroConfigsFolder.c_str()))
 					{
-					}
-					if (MenuItem("_3DMouse", nullptr, nullptr, false))
-					{
+						string fullPathName = ".\\GyroConfigs\\" + file;
+						auto noext = file.substr(0, file.find_last_of('.'));
+						if (MenuItem(noext.c_str()))
+						{
+							WriteToConsole(string(fullPathName.begin(), fullPathName.end()));
+							SettingsManager::getV<Switch>(SettingID::AUTOLOAD)->set(Switch::OFF);
+						}
 					}
 					EndMenu();
 				}
 				if (BeginMenu("AutoLoad"))
 				{
-					if (MenuItem("game1", nullptr, nullptr, false))
+					string autoloadFolder{ AUTOLOAD_FOLDER() };
+					for (auto file : ListDirectory(autoloadFolder.c_str()))
 					{
-					}
-					if (MenuItem("game2", nullptr, nullptr, false))
-					{
+						string fullPathName = ".\\AutoLoad\\" + file;
+						auto noext = file.substr(0, file.find_last_of('.'));
+						if (MenuItem(noext.c_str()))
+						{
+							WriteToConsole(string(fullPathName.begin(), fullPathName.end()));
+							SettingsManager::getV<Switch>(SettingID::AUTOLOAD)->set(Switch::OFF);
+						}
 					}
 					EndMenu();
 				}
@@ -407,6 +434,35 @@ bool Application::DrawLoop()
 					ShowConsole();
 				}
 				HelpMarker(_cmds.GetHelp("CALIBRATE_TRIGGERS"));
+				EndMenu();
+			}
+			if (BeginMenu("Settings"))
+			{
+				auto tickTime = SettingsManager::getV<float>(SettingID::TICK_TIME);
+				float tt = tickTime->value();
+				if (InputFloat(enum_name(SettingID::TICK_TIME).data(), &tt, 0.f, 0.f, "%.3f", ImGuiInputTextFlags_EnterReturnsTrue))
+				{
+					tickTime->set(tt);
+				}
+				HelpMarker(_cmds.GetHelp(enum_name(SettingID::TICK_TIME).data()));
+
+				auto autoload = SettingsManager::getV<Switch>(SettingID::AUTOLOAD);
+				bool al = autoload->value() == Switch::ON;
+				if (Checkbox(enum_name(SettingID::AUTOLOAD).data(), &al))
+				{
+					autoload->set(al ? Switch::ON : Switch::OFF);
+				}
+				HelpMarker(_cmds.GetHelp(enum_name(SettingID::AUTOLOAD).data()));
+
+				string dir = SettingsManager::getV<PathString>(SettingID::JSM_DIRECTORY)->value();
+				dir.resize(256, '\0');
+				if (InputText("JSM_DIRECTORY", dir.data(), dir.size(), ImGuiInputTextFlags_EnterReturnsTrue))
+				{
+					dir.resize(strlen(dir.c_str()));
+					SettingsManager::getV<PathString>(SettingID::JSM_DIRECTORY)->set(dir);
+				}
+				HelpMarker(_cmds.GetHelp("JSM_DIRECTORY"));
+
 				EndMenu();
 			}
 			if (BeginMenu("Debug"))
@@ -507,13 +563,15 @@ void Application::BindingTab::drawLabel(string_view cmd)
 	}
 }
 
-void Application::BindingTab::drawAnyFloat(SettingID stg)
+void Application::BindingTab::drawAnyFloat(SettingID stg, bool labeled)
 {
 	auto setting = SettingsManager::get<float>(stg);
 	auto value = setting->value();
 	stringstream ss;
-	ss << "##" << enum_name(stg);
-	if (InputFloat(ss.str().data(), &value, 0.f, 0.f, "%3f", ImGuiInputTextFlags_EnterReturnsTrue))
+	if (!labeled)
+		ss << "##";
+	ss << enum_name(stg);
+	if (InputFloat(ss.str().data(), &value, 0.f, 0.f, "%.3f", ImGuiInputTextFlags_EnterReturnsTrue))
 	{
 		setting->set(value);
 	}
@@ -637,6 +695,18 @@ void Application::BindingTab::draw(ImVec2& renderingAreaPos, ImVec2& renderingAr
 			drawLabel(ButtonID::LRING);
 			TableSetColumnIndex(1);
 			drawButton(ButtonID::LRING);
+
+			TableNextRow();
+			TableSetColumnIndex(0);
+			drawLabel(SettingID::LEFT_STICK_DEADZONE_INNER);
+			TableSetColumnIndex(1);
+			drawPercentFloat(SettingID::LEFT_STICK_DEADZONE_INNER);
+
+			TableNextRow();
+			TableSetColumnIndex(0);
+			drawLabel(SettingID::LEFT_STICK_DEADZONE_OUTER);
+			TableSetColumnIndex(1);
+			drawPercentFloat(SettingID::LEFT_STICK_DEADZONE_OUTER);
 
 			TableNextRow();
 			TableSetColumnIndex(0);
@@ -795,9 +865,9 @@ void Application::BindingTab::draw(ImVec2& renderingAreaPos, ImVec2& renderingAr
 
 				TableNextRow();
 				TableSetColumnIndex(0);
-				drawLabel(SettingID::SCREEN_RESOLUTION_X);
+				drawLabel(SettingID::SCREEN_RESOLUTION_Y);
 				TableSetColumnIndex(1);
-				drawAnyFloat(SettingID::SCREEN_RESOLUTION_X);
+				drawAnyFloat(SettingID::SCREEN_RESOLUTION_Y);
 			}
 			else if (leftStickMode == StickMode::SCROLL_WHEEL)
 			{
@@ -805,7 +875,7 @@ void Application::BindingTab::draw(ImVec2& renderingAreaPos, ImVec2& renderingAr
 				TableSetColumnIndex(0);
 				drawLabel(SettingID::SCROLL_SENS);
 				TableSetColumnIndex(1);
-				drawAnyFloat(SettingID::SCROLL_SENS);
+				drawAny2Floats(SettingID::SCROLL_SENS);
 
 				TableNextRow();
 				TableSetColumnIndex(0);
@@ -970,6 +1040,18 @@ void Application::BindingTab::draw(ImVec2& renderingAreaPos, ImVec2& renderingAr
 
 			TableNextRow();
 			TableSetColumnIndex(0);
+			drawPercentFloat(SettingID::RIGHT_STICK_DEADZONE_INNER);
+			TableSetColumnIndex(1);
+			drawLabel(SettingID::RIGHT_STICK_DEADZONE_INNER);
+
+			TableNextRow();
+			TableSetColumnIndex(0);
+			drawPercentFloat(SettingID::RIGHT_STICK_DEADZONE_OUTER);
+			TableSetColumnIndex(1);
+			drawLabel(SettingID::RIGHT_STICK_DEADZONE_OUTER);
+
+			TableNextRow();
+			TableSetColumnIndex(0);
 			drawCombo(*SettingsManager::get<StickMode>(SettingID::RIGHT_STICK_MODE));
 			TableSetColumnIndex(1);
 			drawLabel(SettingID::RIGHT_RING_MODE);
@@ -1125,15 +1207,15 @@ void Application::BindingTab::draw(ImVec2& renderingAreaPos, ImVec2& renderingAr
 
 				TableNextRow();
 				TableSetColumnIndex(0);
-				drawAnyFloat(SettingID::SCREEN_RESOLUTION_X);
+				drawAnyFloat(SettingID::SCREEN_RESOLUTION_Y);
 				TableSetColumnIndex(1);
-				drawLabel(SettingID::SCREEN_RESOLUTION_X);
+				drawLabel(SettingID::SCREEN_RESOLUTION_Y);
 			}
 			else if (rightStickMode == StickMode::SCROLL_WHEEL)
 			{
 				TableNextRow();
 				TableSetColumnIndex(0);
-				drawAnyFloat(SettingID::SCROLL_SENS);
+				drawAny2Floats(SettingID::SCROLL_SENS);
 				TableSetColumnIndex(1);
 				drawLabel(SettingID::SCROLL_SENS);
 
