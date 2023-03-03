@@ -45,6 +45,7 @@ private:
 		static InputSelector _inputSelector;
 		const CmdRegistry &_cmds;
 		ButtonID _showPopup = ButtonID::INVALID;
+		SettingID _stickConfigPopup = SettingID::INVALID;
 	};
 	vector<BindingTab> _tabs;
 	const CmdRegistry &_cmds;
