@@ -55,7 +55,7 @@ void drawCombo(JSMVariable<T>& variable, ImGuiComboFlags flags = 0, string_view 
 	stringstream name;
 	if (!label.empty())
 		name << label;
-	name << "##"  << &variable; // id
+	name << "##" << &variable; // id
 	if (BeginCombo(name.str().c_str(), enum_name(variable.value()).data(), flags))
 	{
 		for (auto [enumVal, enumStr] : enum_entries<T>())
@@ -278,9 +278,8 @@ bool Application::DrawLoop()
 
 	// int (SDLCALL * SDL_EventFilter) (void *userdata, SDL_Event * event);
 	SDL_SetEventFilter([](void* userdata, SDL_Event* evt) -> int
-	{ 
-		return evt->type >= SDL_JOYAXISMOTION && evt->type <= SDL_CONTROLLERSENSORUPDATE ? FALSE : TRUE;
-	}, nullptr);
+	  { return evt->type >= SDL_JOYAXISMOTION && evt->type <= SDL_CONTROLLERSENSORUPDATE ? FALSE : TRUE; },
+	  nullptr);
 	// Main loop
 	while (!done)
 	{
@@ -411,12 +410,11 @@ bool Application::DrawLoop()
 				if (MenuItem("Calibrate All Controllers"))
 				{
 					auto t = std::thread([]()
-						{
+					  {
 							WriteToConsole("RESTART_GYRO_CALIBRATION");
 							int32_t ms = duration * 1000.f;
 							Sleep(ms); // ms
-							WriteToConsole("FINISH_GYRO_CALIBRATION");
-						});
+							WriteToConsole("FINISH_GYRO_CALIBRATION"); });
 					t.detach();
 				}
 				HelpMarker(_cmds.GetHelp("RESTART_GYRO_CALIBRATION"));
@@ -526,7 +524,7 @@ bool Application::DrawLoop()
 		Begin("MainWindow", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar);
 
 		bool showBackground = BeginTabBar("BindingsTab");
-		for (auto &bindingTab : _tabs)
+		for (auto& bindingTab : _tabs)
 		{
 			bindingTab.draw(renderingAreaPos, renderingAreaSize);
 		}
@@ -743,6 +741,8 @@ void Application::BindingTab::draw(ImVec2& renderingAreaPos, ImVec2& renderingAr
 			SameLine();
 			if (Button("..."))
 				_stickConfigPopup = SettingID::LEFT_STICK_MODE;
+			if (IsItemHovered())
+				SetTooltip("More left stick settings");
 
 			StickMode leftStickMode = SettingsManager::get<StickMode>(SettingID::LEFT_STICK_MODE)->value();
 			if (leftStickMode == StickMode::NO_MOUSE || leftStickMode == StickMode::OUTER_RING || leftStickMode == StickMode::INNER_RING)
@@ -809,7 +809,7 @@ void Application::BindingTab::draw(ImVec2& renderingAreaPos, ImVec2& renderingAr
 				TableNextColumn();
 				drawButton(ButtonID::LRIGHT);
 			}
-			EndTable();	
+			EndTable();
 		}
 		EndChild();
 
@@ -954,22 +954,12 @@ void Application::BindingTab::draw(ImVec2& renderingAreaPos, ImVec2& renderingAr
 
 			TableNextRow();
 			TableNextColumn();
-			drawPercentFloat(SettingID::RIGHT_STICK_DEADZONE_INNER);
-			TableNextColumn();
-			drawLabel(SettingID::RIGHT_STICK_DEADZONE_INNER);
-
-			TableNextRow();
-			TableNextColumn();
-			drawPercentFloat(SettingID::RIGHT_STICK_DEADZONE_OUTER);
-			TableNextColumn();
-			drawLabel(SettingID::RIGHT_STICK_DEADZONE_OUTER);
-
-			TableNextRow();
-			TableNextColumn();
 			drawCombo(*SettingsManager::get<StickMode>(SettingID::RIGHT_STICK_MODE));
 			SameLine();
 			if (Button("..."))
 				_stickConfigPopup = SettingID::RIGHT_STICK_MODE;
+			if (IsItemHovered())
+				SetTooltip("More right stick settings");
 			TableNextColumn();
 			drawLabel(SettingID::RIGHT_RING_MODE);
 
@@ -1051,13 +1041,26 @@ void Application::BindingTab::draw(ImVec2& renderingAreaPos, ImVec2& renderingAr
 		_inputSelector.draw();
 		if (ImGui::BeginPopup("StickConfig"))
 		{
-			drawLabel(SettingID::LEFT_STICK_DEADZONE_INNER);
-			SameLine();
-			drawPercentFloat(SettingID::LEFT_STICK_DEADZONE_INNER);
+			if (_stickConfigPopup == SettingID::RIGHT_STICK_MODE)
+			{
+				drawLabel(SettingID::RIGHT_STICK_DEADZONE_INNER);
+				SameLine();
+				drawPercentFloat(SettingID::RIGHT_STICK_DEADZONE_INNER);
 
-			drawLabel(SettingID::LEFT_STICK_DEADZONE_OUTER);
-			SameLine();
-			drawPercentFloat(SettingID::LEFT_STICK_DEADZONE_OUTER);
+				drawLabel(SettingID::RIGHT_STICK_DEADZONE_OUTER);
+				SameLine();
+				drawPercentFloat(SettingID::RIGHT_STICK_DEADZONE_OUTER);
+			}
+			else if (_stickConfigPopup == SettingID::LEFT_STICK_MODE)
+			{
+				drawLabel(SettingID::LEFT_STICK_DEADZONE_INNER);
+				SameLine();
+				drawPercentFloat(SettingID::LEFT_STICK_DEADZONE_INNER);
+
+				drawLabel(SettingID::LEFT_STICK_DEADZONE_OUTER);
+				SameLine();
+				drawPercentFloat(SettingID::LEFT_STICK_DEADZONE_OUTER);
+			}
 
 			auto stickMode = SettingsManager::get<StickMode>(_stickConfigPopup)->value();
 			if (stickMode == StickMode::FLICK || stickMode == StickMode::FLICK_ONLY || stickMode == StickMode::ROTATE_ONLY)
@@ -1071,7 +1074,7 @@ void Application::BindingTab::draw(ImVec2& renderingAreaPos, ImVec2& renderingAr
 				drawPercentFloat(SettingID::FLICK_SNAP_STRENGTH);
 
 				drawLabel(SettingID::FLICK_DEADZONE_ANGLE);
-				SameLine();				
+				SameLine();
 				drawAnyFloat(SettingID::FLICK_DEADZONE_ANGLE);
 
 				auto& fsOut = *SettingsManager::get<GyroOutput>(SettingID::FLICK_STICK_OUTPUT);
@@ -1103,7 +1106,7 @@ void Application::BindingTab::draw(ImVec2& renderingAreaPos, ImVec2& renderingAr
 				drawAnyFloat(SettingID::STICK_ACCELERATION_RATE);
 
 				drawLabel(SettingID::STICK_ACCELERATION_CAP);
-				SameLine();				
+				SameLine();
 				drawAnyFloat(SettingID::STICK_ACCELERATION_CAP);
 			}
 
@@ -1134,7 +1137,7 @@ void Application::BindingTab::draw(ImVec2& renderingAreaPos, ImVec2& renderingAr
 				drawAnyFloat(SettingID::LEFT_STICK_UNDEADZONE_OUTER);
 
 				drawLabel(SettingID::VIRTUAL_STICK_CALIBRATION);
-				SameLine();				
+				SameLine();
 				drawAnyFloat(SettingID::VIRTUAL_STICK_CALIBRATION);
 			}
 			else if (stickMode == StickMode::RIGHT_STICK)
@@ -1144,49 +1147,49 @@ void Application::BindingTab::draw(ImVec2& renderingAreaPos, ImVec2& renderingAr
 				drawAnyFloat(SettingID::RIGHT_STICK_UNDEADZONE_INNER);
 
 				drawLabel(SettingID::RIGHT_STICK_UNDEADZONE_OUTER);
-				SameLine();				
+				SameLine();
 				drawAnyFloat(SettingID::RIGHT_STICK_UNDEADZONE_OUTER);
 
 				drawLabel(SettingID::VIRTUAL_STICK_CALIBRATION);
-				SameLine();				
+				SameLine();
 				drawAnyFloat(SettingID::VIRTUAL_STICK_CALIBRATION);
 			}
 			else if (stickMode >= StickMode::LEFT_ANGLE_TO_X && stickMode <= StickMode::RIGHT_ANGLE_TO_Y)
 			{
 				drawLabel(SettingID::ANGLE_TO_AXIS_DEADZONE_INNER);
-				SameLine();	
+				SameLine();
 				drawAnyFloat(SettingID::ANGLE_TO_AXIS_DEADZONE_INNER);
 
 				drawLabel(SettingID::ANGLE_TO_AXIS_DEADZONE_OUTER);
-				SameLine();				
+				SameLine();
 				drawAnyFloat(SettingID::ANGLE_TO_AXIS_DEADZONE_OUTER);
 
 				if (stickMode == StickMode::LEFT_ANGLE_TO_X || stickMode == StickMode::LEFT_ANGLE_TO_Y) // isLeft
-				{	
+				{
 					drawLabel(SettingID::LEFT_STICK_UNDEADZONE_INNER);
-					SameLine();	
+					SameLine();
 					drawAnyFloat(SettingID::LEFT_STICK_UNDEADZONE_INNER);
 
 					drawLabel(SettingID::LEFT_STICK_UNDEADZONE_OUTER);
-					SameLine();					
+					SameLine();
 					drawAnyFloat(SettingID::LEFT_STICK_UNDEADZONE_OUTER);
 
 					drawLabel(SettingID::LEFT_STICK_UNPOWER);
-					SameLine();					
+					SameLine();
 					drawAnyFloat(SettingID::LEFT_STICK_UNPOWER);
 				}
 				else // isRight!
-				{	
+				{
 					drawLabel(SettingID::RIGHT_STICK_UNDEADZONE_INNER);
-					SameLine();	
+					SameLine();
 					drawAnyFloat(SettingID::RIGHT_STICK_UNDEADZONE_INNER);
 
 					drawLabel(SettingID::RIGHT_STICK_UNDEADZONE_OUTER);
-					SameLine();					
+					SameLine();
 					drawAnyFloat(SettingID::RIGHT_STICK_UNDEADZONE_OUTER);
 
 					drawLabel(SettingID::RIGHT_STICK_UNPOWER);
-					SameLine();					
+					SameLine();
 					drawAnyFloat(SettingID::RIGHT_STICK_UNPOWER);
 				}
 			}
@@ -1197,39 +1200,39 @@ void Application::BindingTab::draw(ImVec2& renderingAreaPos, ImVec2& renderingAr
 				drawAnyFloat(SettingID::WIND_STICK_RANGE);
 
 				drawLabel(SettingID::WIND_STICK_POWER);
-				SameLine();				
+				SameLine();
 				drawAnyFloat(SettingID::WIND_STICK_POWER);
 
 				drawLabel(SettingID::UNWIND_RATE);
-				SameLine();				
+				SameLine();
 				drawAnyFloat(SettingID::UNWIND_RATE);
 
 				if (stickMode == StickMode::LEFT_WIND_X) // isLeft
-				{	
+				{
 					drawLabel(SettingID::LEFT_STICK_UNDEADZONE_INNER);
-					SameLine();	
+					SameLine();
 					drawAnyFloat(SettingID::LEFT_STICK_UNDEADZONE_INNER);
 
 					drawLabel(SettingID::LEFT_STICK_UNDEADZONE_OUTER);
-					SameLine();					
+					SameLine();
 					drawAnyFloat(SettingID::LEFT_STICK_UNDEADZONE_OUTER);
 
 					drawLabel(SettingID::LEFT_STICK_UNPOWER);
-					SameLine();					
+					SameLine();
 					drawAnyFloat(SettingID::LEFT_STICK_UNPOWER);
 				}
 				else // isRight!
 				{
 					drawLabel(SettingID::RIGHT_STICK_UNDEADZONE_INNER);
-					SameLine();	
+					SameLine();
 					drawAnyFloat(SettingID::RIGHT_STICK_UNDEADZONE_INNER);
 
 					drawLabel(SettingID::RIGHT_STICK_UNDEADZONE_OUTER);
-					SameLine();					
+					SameLine();
 					drawAnyFloat(SettingID::RIGHT_STICK_UNDEADZONE_OUTER);
 
 					drawLabel(SettingID::RIGHT_STICK_UNPOWER);
-					SameLine();					
+					SameLine();
 					drawAnyFloat(SettingID::RIGHT_STICK_UNPOWER);
 				}
 			}
