@@ -4211,10 +4211,10 @@ void initJsmSettings(CmdRegistry *commandRegistry)
 	commandRegistry->add((new JSMAssignment<TriggerMode>(*touch_ds_mode))
 	                       ->SetHelp("Dual stage mode for the touchpad TOUCH and CAPTURE (i.e. click) bindings."));
 
-	auto rumble_enable = new JSMSetting<Switch>(SettingID::RUMBLE, Switch::ON);
+	auto rumble_enable = new JSMVariable<Switch>(Switch::ON);
 	rumble_enable->setFilter(&filterInvalidValue<Switch, Switch::INVALID>);
-	SettingsManager::add(rumble_enable);
-	commandRegistry->add((new JSMAssignment<Switch>(*rumble_enable))
+	SettingsManager::add(SettingID::RUMBLE, rumble_enable);
+	commandRegistry->add((new JSMAssignment<Switch>(magic_enum::enum_name(SettingID::RUMBLE).data(), *rumble_enable))
 	                       ->SetHelp("Disable the rumbling feature from vigem. Valid values are ON and OFF."));
 
 	auto adaptive_trigger = new JSMSetting<Switch>(SettingID::ADAPTIVE_TRIGGER, Switch::ON);

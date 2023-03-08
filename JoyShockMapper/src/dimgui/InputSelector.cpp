@@ -286,9 +286,9 @@ void InputSelector::MappingTabItem::draw()
 		static constexpr size_t MS_ROWS = 3;
 		static constexpr size_t MS_COLS = 3;
 		static constexpr string_view mouse[MS_ROWS][MS_COLS] = {
-			{ "LMOUSE", "SCROLLUP", "RMOUSE" },
-			{ "FMOUSE", "MMOUSE", "" },
-			{ "BMOUSE", "SCROLLDOWN", "" },
+			{ "LMOUSE", "MMOUSE", "RMOUSE" },
+			{ "SCROLLUP", "SCROLLDOWN", "" },
+			{ "FMOUSE", "BMOUSE", "" },
 		};
 		auto sizing = [](string_view k)
 		{

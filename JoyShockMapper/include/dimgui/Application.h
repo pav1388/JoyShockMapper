@@ -12,6 +12,8 @@
 
 enum class ButtonID;
 class CmdRegistry;
+template<typename T>
+class JSMVariable;
 
 class Application
 {
@@ -28,6 +30,10 @@ public:
 
 
 private:
+	static void HelpMarker(string_view cmd);
+
+	template<typename T>
+	static void drawCombo(SettingID stg, ImGuiComboFlags flags = ImGuiComboFlags_NoArrowButton, bool labeled = false);
 
 	struct BindingTab
 	{
@@ -38,8 +44,8 @@ private:
 		void drawLabel(SettingID stg);
 		void drawLabel(string_view cmd);
 		void drawAnyFloat(SettingID stg, bool labeled = false);
-		void drawPercentFloat(SettingID stg);
-		void drawAny2Floats(SettingID stg);
+		void drawPercentFloat(SettingID stg, bool labeled = false);
+		void drawAny2Floats(SettingID stg, bool labeled = false);
 		const string_view _name;
 		const ButtonID _chord;
 		static InputSelector _inputSelector;
@@ -47,8 +53,8 @@ private:
 		ButtonID _showPopup = ButtonID::INVALID;
 		SettingID _stickConfigPopup = SettingID::INVALID;
 	};
+	static const CmdRegistry *_cmds;
 	vector<BindingTab> _tabs;
-	const CmdRegistry &_cmds;
 	atomic_bool done = false;
 	bool show_demo_window = false;
 	SDL_Window* window = nullptr;
