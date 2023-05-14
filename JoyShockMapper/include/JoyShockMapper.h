@@ -353,6 +353,7 @@ enum class StickMode
 	RIGHT_STEER_X,
 	LEFT_WIND_X,
 	RIGHT_WIND_X,
+	HYBRID_AIM,
 	INVALID
 };
 enum class FlickSnapMode
