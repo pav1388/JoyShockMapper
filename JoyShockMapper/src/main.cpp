@@ -2519,7 +2519,7 @@ void processStick(shared_ptr<JoyShock> jc, float stickX, float stickY, float las
 							counter--;
 						steps++;
 					}
-					jc->edgePushAmount = radial(cumulativeVX, cumulativeVY, rawX, -rawY) / steps;
+					jc->edgePushAmount += radial(cumulativeVX, cumulativeVY, rawX, -rawY) / steps;
 				}
 			}
 		}
