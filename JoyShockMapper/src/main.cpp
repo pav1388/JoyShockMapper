@@ -150,14 +150,13 @@ JSMSetting<float> unwind_rate = JSMSetting<float>(SettingID::UNWIND_RATE, 1800.f
 JSMSetting<GyroOutput> gyro_output = JSMSetting<GyroOutput>(SettingID::GYRO_OUTPUT, GyroOutput::MOUSE);
 JSMSetting<GyroOutput> flick_stick_output = JSMSetting<GyroOutput>(SettingID::FLICK_STICK_OUTPUT, GyroOutput::MOUSE);
 
-/*
-JSMSetting<float> hybrid_deadzone_inner = JSMSetting<float>(SettingID::HYBRID_DEADZONE_INNER, 0.15f);
-JSMSetting<float> hybrid_deadzone_outer = 1 - JSMSetting<float>(SettingID::HYBRID_DEADZONE_OUTER, 0.05f);
-float hybrid_livezone = hybrid_deadzone_outer - hybrid_deadzone_inner;
-JSMSetting<float> hybrid_factor_proportional = JSMSetting<float>(SettingID::HYBRID_FACTOR_PROPORTIONAL, 1.0f);
-JSMSetting<float> hybrid_factor_integral = JSMSetting<float>(SettingID::HYBRID_FACTOR_INTEGRAL, 1.0f);
-JSMSetting<bool> hybrid_clipping_is_radial = JSMSetting<bool>(SettingID::HYBRID_CLIPPING_IS_RADIAL, true);
-*/
+JSMSetting<float> clipping_threshhold = JSMSetting<float>(SettingID::CLIPPING_THRESHHOLD, 200.f);
+JSMSetting<float> clipping_ramp_up = JSMSetting<float>(SettingID::CLIPPING_RAMP_UP, 200.f);
+JSMSetting<float> sticklike_factor = JSMSetting<float>(SettingID::STICKLIKE_FACTOR, 80.f);
+JSMSetting<float> mouselike_factor = JSMSetting<float>(SettingID::MOUSELIKE_FACTOR, 80.f);
+JSMSetting<Switch> clipping_is_active = JSMSetting<Switch>(SettingID::CLIPPING_IS_ACTIVE, Switch::ON);
+JSMSetting<Switch> clipping_is_radial = JSMSetting<Switch>(SettingID::CLIPPING_IS_RADIAL, Switch::OFF);
+
 
 JSMVariable<PathString> currentWorkingDir = JSMVariable<PathString>(PathString());
 vector<JSMButton> grid_mappings; // array of virtual buttons on the touchpad grid
@@ -449,26 +448,16 @@ public:
 	AdaptiveTriggerSetting right_effect;
 	AdaptiveTriggerSetting unused_effect;
 
-	bool clippingIsActive = true;
-	bool clippingIsRadial = false;
-	float clippingThreshhold = 600.0f;
-	float clippingRampUp = 600.0f;
-	float factor_integral = 80.0f;
-	float factor_proportional = 80.0f;
-	float outer_deadzone = 0.05f;
-	float inner_deadzone = 0.15f;
-
-
 	bool inClippingZone = false;
 	float edgePushAmount = 0.0f;
 	const static int smoothingSteps = 8;
 	float previousOutputX[smoothingSteps] = {};
 	float previousOutputY[smoothingSteps] = {};
-	float previousOutputInward[smoothingSteps] = {};
+	float previousOutputRadial[smoothingSteps] = {};
 	float previousVelocitiesX[smoothingSteps] = {};
 	float previousVelocitiesY[smoothingSteps] = {};
 	int smoothingCounter = 0;
-	float smoothingDistance = 0.1f;
+	float smoothingDistance = 0.2f;
 
 
 	JoyShock(int uniqueHandle, int controllerSplitType, shared_ptr<DigitalButton::Context> sharedButtonCommon = nullptr)
@@ -682,6 +671,12 @@ public:
 			case SettingID::FLICK_STICK_OUTPUT:
 				opt = GetOptionalSetting<E>(flick_stick_output, *activeChord);
 				break;
+			case SettingID::CLIPPING_IS_ACTIVE:
+				opt = GetOptionalSetting<E>(clipping_is_active, *activeChord);
+				break;
+			case SettingID::CLIPPING_IS_RADIAL:
+				opt = GetOptionalSetting<E>(clipping_is_radial, *activeChord);
+				break;
 			}
 			if (opt)
 				return *opt;
@@ -851,6 +846,18 @@ public:
 				break;
 			case SettingID::UNWIND_RATE:
 				opt = unwind_rate.get(*activeChord);
+				break;
+			case SettingID::CLIPPING_THRESHHOLD:
+				opt = clipping_threshhold.get(*activeChord);
+				break;
+			case SettingID::CLIPPING_RAMP_UP:
+				opt = clipping_ramp_up.get(*activeChord);
+				break;
+			case SettingID::STICKLIKE_FACTOR:
+				opt = sticklike_factor.get(*activeChord);
+				break;
+			case SettingID::MOUSELIKE_FACTOR:
+				opt = mouselike_factor.get(*activeChord);
 				break;
 			}
 			if (opt)
@@ -2468,7 +2475,6 @@ void processStick(shared_ptr<JoyShock> jc, float stickX, float stickY, float las
 	}
 	else if (stickMode == StickMode::HYBRID_AIM)
 	{
-		// prepare new values
 		float velocityX = rawX - rawLastX;
 		float velocityY = -rawY + rawLastY;
 		float velocityRadial = radial(velocityX, velocityY, rawX, -rawY);
@@ -2479,13 +2485,13 @@ void processStick(shared_ptr<JoyShock> jc, float stickX, float stickY, float las
 		bool outputIsInward = false;
 
 		// check deadzones
-		if (deflection > jc->inner_deadzone)
+		if (deflection > innerDeadzone)
 		{
 
-			magnitude = (deflection - jc->inner_deadzone) / (1.0f - jc->inner_deadzone - jc->outer_deadzone);
+			magnitude = (deflection - innerDeadzone) / (outerDeadzone - innerDeadzone);
 			jc->inClippingZone = true;
 			// check outer_deadzone
-			if (deflection > 1.0f - jc->outer_deadzone)
+			if (deflection > outerDeadzone)
 			{
 				// clip outward radial velocity
 				if (velocityRadial > 0.0f)
@@ -2496,7 +2502,7 @@ void processStick(shared_ptr<JoyShock> jc, float stickX, float stickY, float las
 				}
 				magnitude = 1.0f;
 				// check entering
-				if (deflection_old <= 1.0f - jc->outer_deadzone)
+				if (deflection_old <= outerDeadzone)
 				{
 					//change it so it smoothes not by time but by distance so fast movements are more accurate
 					float cumulativeVX = 0.0f;
@@ -2533,26 +2539,23 @@ void processStick(shared_ptr<JoyShock> jc, float stickX, float stickY, float las
 			{
 				jc->inClippingZone = false;
 			}
-			bool debug = jc->inClippingZone;
-
 		}
 
 		// compute output
+		float sticklikeFactor = jc->getSetting(SettingID::STICKLIKE_FACTOR);
+		float mouselikeFactor = jc->getSetting(SettingID::MOUSELIKE_FACTOR);
 		float magnitudeX = magnitude * cos(angle);
 		float magnitudeY = magnitude * sin(angle);
-		float outputX = jc->factor_integral * magnitudeX * deltaTime;
-		float outputY = jc->factor_integral * magnitudeY * deltaTime;
-		outputX += jc->factor_proportional * magnitudeX * jc->edgePushAmount;
-		outputY += jc->factor_proportional * magnitudeY * jc->edgePushAmount;
-		outputX += jc->factor_proportional * velocityX;
-		outputY += jc->factor_proportional * velocityY;
+		float outputX = sticklikeFactor * magnitudeX * deltaTime;
+		float outputY = sticklikeFactor * magnitudeY * deltaTime;
+		outputX += mouselikeFactor * magnitudeX * jc->edgePushAmount;
+		outputY += mouselikeFactor * magnitudeY * jc->edgePushAmount;
+		outputX += mouselikeFactor * velocityX;
+		outputY += mouselikeFactor * velocityY;
 
 
-		float outputInward = radial(outputX, outputY, rawX, -rawY);
-		if (outputInward < 0.f)
-			outputIsInward = true;
-		else
-			outputInward = 0.f;
+		float outputRadial = radial(outputX, outputY, rawX, -rawY);
+		
 
 		// for smoothing edgePush and clipping on returning to center
 		if (jc->smoothingCounter < jc->smoothingSteps - 1)
@@ -2565,30 +2568,33 @@ void processStick(shared_ptr<JoyShock> jc, float stickX, float stickY, float las
 		}
 		jc->previousVelocitiesX[jc->smoothingCounter] = velocityX;
 		jc->previousVelocitiesY[jc->smoothingCounter] = velocityY;
-		jc->previousOutputInward[jc->smoothingCounter] = outputInward;
+		jc->previousOutputRadial[jc->smoothingCounter] = outputRadial;
 		jc->previousOutputX[jc->smoothingCounter] = outputX;
 		jc->previousOutputY[jc->smoothingCounter] = outputY;
 		
 		// clip output while returning to center
-		if (jc->clippingIsActive && jc->inClippingZone)
+		if (jc->getSetting<Switch>(SettingID::CLIPPING_IS_ACTIVE) == Switch::ON && jc->inClippingZone)
 		{			
-			if (outputIsInward)
+			float averageOutputRadial = 0;
+			for (int i = 0; i < jc->smoothingSteps; i++)
+			{
+				averageOutputRadial += jc->previousOutputRadial[i];
+			}
+			averageOutputRadial /= jc->smoothingSteps;
+
+			if (averageOutputRadial < 0.f)
 			{				
-				if (jc->clippingIsRadial)
-				{
-					float averageOutputInward = 0;
-					for (int i = 0; i < jc->smoothingSteps; i++)
-					{
-						averageOutputInward += jc->previousOutputInward[i];
-					}
-					averageOutputInward /= jc->smoothingSteps;
-					float fraction = ( (-averageOutputInward / deltaTime) - jc->clippingThreshhold) / jc->clippingRampUp;
+				float clippingThreshhold = jc->getSetting(SettingID::CLIPPING_THRESHHOLD);
+				float clippingRampUp = jc->getSetting(SettingID::CLIPPING_RAMP_UP);
+				if (jc->getSetting<Switch>(SettingID::CLIPPING_IS_RADIAL) == Switch::ON)
+				{					
+					float fraction = ( (-averageOutputRadial / deltaTime) - clippingThreshhold) / clippingRampUp;
 					if (fraction < 0.f)
 						fraction = 0.f;
 					if (fraction > 1.f)
 						fraction = 1.f;
-					outputX += cos(angle) * (-1 + fraction) * outputInward;
-					outputY += sin(angle) * (-1 + fraction) * outputInward;
+					outputX += cos(angle) * (-1 + fraction) * outputRadial;
+					outputY += sin(angle) * (-1 + fraction) * outputRadial;
 				}
 				else
 				{
@@ -2600,7 +2606,7 @@ void processStick(shared_ptr<JoyShock> jc, float stickX, float stickY, float las
 						averageOutputY += jc->previousOutputY[i];
 					}
 					float averageOutput = sqrt(averageOutputX * averageOutputX + averageOutputY * averageOutputY) / jc->smoothingSteps;
-					float fraction = ( (averageOutput / deltaTime) - jc->clippingThreshhold) / jc->clippingRampUp;
+					float fraction = ( (averageOutput / deltaTime) - clippingThreshhold) / clippingRampUp;
 					if (fraction < 0.f)
 						fraction = 0.f;
 					if (fraction > 1.f)
@@ -2611,7 +2617,6 @@ void processStick(shared_ptr<JoyShock> jc, float stickX, float stickY, float las
 				//outputX = 0.f; //for debugging
 				//outputY = 0.f;
 			}		
-
 		}
 		moveMouse(outputX, outputY);
     }

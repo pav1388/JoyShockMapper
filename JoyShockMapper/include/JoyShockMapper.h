@@ -293,6 +293,13 @@ enum class SettingID
 	UNWIND_RATE,
 	GYRO_OUTPUT,
 	FLICK_STICK_OUTPUT,
+	CLIPPING_IS_ACTIVE,
+	CLIPPING_IS_RADIAL,
+	CLIPPING_THRESHHOLD,
+	CLIPPING_RAMP_UP,
+	STICKLIKE_FACTOR,
+	MOUSELIKE_FACTOR
+
 };
 
 // constexpr are like #define but with respect to typeness
