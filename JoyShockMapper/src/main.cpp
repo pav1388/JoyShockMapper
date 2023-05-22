@@ -152,7 +152,7 @@ JSMSetting<GyroOutput> flick_stick_output = JSMSetting<GyroOutput>(SettingID::FL
 
 JSMSetting<float> clipping_threshhold = JSMSetting<float>(SettingID::CLIPPING_THRESHHOLD, 200.f);
 JSMSetting<float> clipping_ramp_up = JSMSetting<float>(SettingID::CLIPPING_RAMP_UP, 200.f);
-JSMSetting<float> sticklike_factor = JSMSetting<float>(SettingID::STICKLIKE_FACTOR, 80.f);
+JSMSetting<float> sticklike_factor = JSMSetting<float>(SettingID::STICKLIKE_FACTOR, 500.f);
 JSMSetting<float> mouselike_factor = JSMSetting<float>(SettingID::MOUSELIKE_FACTOR, 80.f);
 JSMSetting<Switch> clipping_is_active = JSMSetting<Switch>(SettingID::CLIPPING_IS_ACTIVE, Switch::ON);
 JSMSetting<Switch> clipping_is_radial = JSMSetting<Switch>(SettingID::CLIPPING_IS_RADIAL, Switch::OFF);
@@ -2558,6 +2558,7 @@ void processStick(shared_ptr<JoyShock> jc, float stickX, float stickY, float las
 		
 
 		// for smoothing edgePush and clipping on returning to center
+		// probably only needed as deltaTime is faster than the controller's polling rate
 		if (jc->smoothingCounter < jc->smoothingSteps - 1)
 		{
 			jc->smoothingCounter++;
@@ -2573,7 +2574,8 @@ void processStick(shared_ptr<JoyShock> jc, float stickX, float stickY, float las
 		jc->previousOutputY[jc->smoothingCounter] = outputY;
 		
 		// clip output while returning to center
-		if (jc->getSetting<Switch>(SettingID::CLIPPING_IS_ACTIVE) == Switch::ON && jc->inClippingZone)
+		/*
+		if (jc->getSetting<Switch>(SettingID::CLIPPING_IS_ACTIVE) == Switch::ON && jc->inClippingZone && false) //false for testing
 		{			
 			float averageOutputRadial = 0;
 			for (int i = 0; i < jc->smoothingSteps; i++)
@@ -2618,6 +2620,28 @@ void processStick(shared_ptr<JoyShock> jc, float stickX, float stickY, float las
 				//outputY = 0.f;
 			}		
 		}
+		*/
+
+		//simple output deadzone everywhere
+		
+		float averageOutputX = 0.f; //TEST
+		float averageOutputY = 0.f;
+		for (int i = 0; i < jc->smoothingSteps; i++)
+		{
+			averageOutputX += jc->previousOutputX[i];
+			averageOutputY += jc->previousOutputY[i];
+		}
+		float averageOutput = sqrt(averageOutputX * averageOutputX + averageOutputY * averageOutputY) / jc->smoothingSteps;
+		float angleOutput = atan2f(outputY, outputX);
+		float output = sqrt(outputX * outputX + outputY * outputY);
+		if (averageOutput < jc->getSetting(SettingID::CLIPPING_THRESHHOLD) * deltaTime) //
+			output = 0.f;
+		else
+			output -= jc->getSetting(SettingID::CLIPPING_THRESHHOLD) * deltaTime;
+		outputX = output * cos(angleOutput);
+		outputY = output * sin(angleOutput);
+		
+
 		moveMouse(outputX, outputY);
     }
 }

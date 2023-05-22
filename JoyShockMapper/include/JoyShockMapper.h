@@ -299,7 +299,6 @@ enum class SettingID
 	CLIPPING_RAMP_UP,
 	STICKLIKE_FACTOR,
 	MOUSELIKE_FACTOR
-
 };
 
 // constexpr are like #define but with respect to typeness
