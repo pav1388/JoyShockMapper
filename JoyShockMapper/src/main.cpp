@@ -158,8 +158,8 @@ JSMSetting<float> unwind_rate = JSMSetting<float>(SettingID::UNWIND_RATE, 1800.f
 JSMSetting<GyroOutput> gyro_output = JSMSetting<GyroOutput>(SettingID::GYRO_OUTPUT, GyroOutput::MOUSE);
 JSMSetting<GyroOutput> flick_stick_output = JSMSetting<GyroOutput>(SettingID::FLICK_STICK_OUTPUT, GyroOutput::MOUSE);
 
-JSMSetting<float> sticklike_factor = JSMSetting<float>(SettingID::STICKLIKE_FACTOR, 160.f);
-JSMSetting<float> mouselike_factor = JSMSetting<float>(SettingID::MOUSELIKE_FACTOR, 80.f);
+JSMSetting<float> sticklike_factor = JSMSetting<float>(SettingID::STICKLIKE_FACTOR, 180.f);
+JSMSetting<float> mouselike_factor = JSMSetting<float>(SettingID::MOUSELIKE_FACTOR, 90.f);
 JSMSetting<Switch> return_deadzone_is_active = JSMSetting<Switch>(SettingID::RETURN_DEADZONE_IS_ACTIVE, Switch::ON);
 JSMSetting<Switch> edge_push_is_active = JSMSetting<Switch>(SettingID::EDGE_PUSH_IS_ACTIVE, Switch::ON);
 JSMSetting<float> return_deadzone_angle = JSMSetting<float>(SettingID::RETURN_DEADZONE_ANGLE, 45.f);
