@@ -4547,7 +4547,7 @@ int main(int argc, char *argv[])
 	commandRegistry.Add((new JSMAssignment<float>(max_gyro_threshold))
 	                      ->SetHelp("Degrees per second at and above which to apply maximum gyro sensitivity."));
 	commandRegistry.Add((new JSMAssignment<float>(stick_power))
-	                      ->SetHelp("Power curve for stick input when in AIM mode. 1 for linear, 0 for no curve (full strength once out of deadzone). Higher numbers make more of the stick's range appear like a very slight tilt."));
+	                      ->SetHelp("Power curve for stick input when in AIM or HYBRID_AIM mode. 1 for linear, 0 for no curve (full strength once out of deadzone). Higher numbers make more of the stick's range appear like a very slight tilt."));
 	commandRegistry.Add((new JSMAssignment<FloatXY>(stick_sens))
 	                      ->SetHelp("Stick sensitivity when using classic AIM mode."));
 	commandRegistry.Add((new JSMAssignment<float>(real_world_calibration))
@@ -4789,7 +4789,7 @@ int main(int argc, char *argv[])
 	commandRegistry.Add((new JSMAssignment<float>(mouselike_factor))
 	                      ->SetHelp("Stick sensitivity of the relative movement when in HYBRID_AIM mode. Like the sensitivity of a mouse."));
 	commandRegistry.Add((new JSMAssignment<Switch>(return_deadzone_is_active))
-	                      ->SetHelp("Wether or not there is a return deadzone when in HYBRID_AIM mode.\n"\
+	                      ->SetHelp("Whether or not there is a return deadzone when in HYBRID_AIM mode.\n"\
 									"This deadzone is determined by the angle of the output from the stick position to the center.\n"
 									"It is fully active upto RETURN_DEADZONE_ANGLE and tapers off until RETURN_DEADZONE_CUTOFF_ANGLE.\n"
 									"When in DEADZONE_INNER it transitions to an output deadzone based on the distance to the center so the relative part of the input smoothly fades back in."));
