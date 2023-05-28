@@ -596,11 +596,11 @@ It is recommended to keep STICK_DEADZONE_OUTER as small as possible for the best
 
 The other settings of this mode are:
 
-* **STICKLIKE\_FACTOR** (default 180) - How fast the camera is moved by the position of the stick. Currently this is an arbitrary number and a calibration is not implemented for this.
-* **MOUSELIKE\_FACTOR** (default 90) - How fast the camera is moved by the movement of the stick. Like the above, no calibration implemented yet.
+* **STICKLIKE\_FACTOR** (default 180.0) - How fast the camera is moved by the position of the stick. Currently this is an arbitrary number and a calibration is not implemented for this. In the future this should represent degrees per second like STICK_SENS. 
+* **MOUSELIKE\_FACTOR** (default 90.0) - How fast the camera is moved by the movement of the stick. Like the above, no calibration implemented yet. In the future this should represent degrees per one full travel of the stick from center to full deflection.
 * **RETURN\_DEADZONE\_IS\_ACTIVE** (default ON) - There are two possibly quite different ways this input mode can function. When this setting is set to ON, the mode may feel more like a traditional stick, when its set to OFF, the mode may feel way more responsive but it is difficult to make the output hold still because of the behavior inherent to this input method.
-* **RETURN\_DEADZONE\_ANGLE** (default 45) - The angle to the center from the current stick position where the output is set to zero.
-* **RETURN\_DEADZONE\_CUTOFF\_ANGLE** (default 90) - The angle to the center where the return deadzone has no effect anymore. Between RETURN_DEADZONE_ANGLE and this, the output slowly returns to normal. 
+* **RETURN\_DEADZONE\_ANGLE** (default 45.0 degrees) - The angle to the center from the current stick position where the output is set to zero.
+* **RETURN\_DEADZONE\_CUTOFF\_ANGLE** (default 90.0 degrees) - The angle to the center where the return deadzone has no effect anymore. Between RETURN_DEADZONE_ANGLE and this, the output slowly returns to normal. 
 * **EDGE\_PUSH\_IS\_ACTIVE** (default ON) - Whether or not the mouse-like movement is to be continued when hitting the edge of the stick (entering the outer deadzone). If so, it functions similar to the stick-like component until it is reset either by entering the return deadzone or inner deadzone, but is at most the value at the smallest deflection since the push.
 
 #### 3.3 FLICK mode and variants
