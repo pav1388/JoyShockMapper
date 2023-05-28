@@ -158,13 +158,12 @@ JSMSetting<float> unwind_rate = JSMSetting<float>(SettingID::UNWIND_RATE, 1800.f
 JSMSetting<GyroOutput> gyro_output = JSMSetting<GyroOutput>(SettingID::GYRO_OUTPUT, GyroOutput::MOUSE);
 JSMSetting<GyroOutput> flick_stick_output = JSMSetting<GyroOutput>(SettingID::FLICK_STICK_OUTPUT, GyroOutput::MOUSE);
 
-JSMSetting<float> clipping_ramp_up = JSMSetting<float>(SettingID::CLIPPING_RAMP_UP, 200.f);
 JSMSetting<float> sticklike_factor = JSMSetting<float>(SettingID::STICKLIKE_FACTOR, 160.f);
 JSMSetting<float> mouselike_factor = JSMSetting<float>(SettingID::MOUSELIKE_FACTOR, 80.f);
 JSMSetting<Switch> return_deadzone_is_active = JSMSetting<Switch>(SettingID::RETURN_DEADZONE_IS_ACTIVE, Switch::ON);
 JSMSetting<Switch> edge_push_is_active = JSMSetting<Switch>(SettingID::EDGE_PUSH_IS_ACTIVE, Switch::ON);
-JSMSetting<float> angle_return_deadzone = JSMSetting<float>(SettingID::ANGLE_RETURN_DEADZONE, 45.f);
-JSMSetting<float> angle_return_deadzone_cutoff = JSMSetting<float>(SettingID::ANGLE_RETURN_DEADZONE_CUTOFF, 90.f);
+JSMSetting<float> return_deadzone_angle = JSMSetting<float>(SettingID::RETURN_DEADZONE_ANGLE, 45.f);
+JSMSetting<float> return_deadzone_cutoff_angle = JSMSetting<float>(SettingID::RETURN_DEADZONE_ANGLE_CUTOFF, 90.f);
 
 
 JSMVariable<PathString> currentWorkingDir = JSMVariable<PathString>(PathString());
@@ -855,20 +854,17 @@ public:
 			case SettingID::UNWIND_RATE:
 				opt = unwind_rate.get(*activeChord);
 				break;
-			case SettingID::CLIPPING_RAMP_UP:
-				opt = clipping_ramp_up.get(*activeChord);
-				break;
 			case SettingID::STICKLIKE_FACTOR:
 				opt = sticklike_factor.get(*activeChord);
 				break;
 			case SettingID::MOUSELIKE_FACTOR:
 				opt = mouselike_factor.get(*activeChord);
 				break;
-			case SettingID::ANGLE_RETURN_DEADZONE:
-				opt = angle_return_deadzone.get(*activeChord);
+			case SettingID::RETURN_DEADZONE_ANGLE:
+				opt = return_deadzone_angle.get(*activeChord);
 				break;
-			case SettingID::ANGLE_RETURN_DEADZONE_CUTOFF:
-				opt = angle_return_deadzone_cutoff.get(*activeChord);
+			case SettingID::RETURN_DEADZONE_ANGLE_CUTOFF:
+				opt = return_deadzone_cutoff_angle.get(*activeChord);
 				break;
 			}
 			if (opt)
@@ -1640,8 +1636,8 @@ static void resetAllMappings()
 	mouselike_factor.Reset();
 	return_deadzone_is_active.Reset();
 	edge_push_is_active.Reset();
-	angle_return_deadzone.Reset();
-	angle_return_deadzone_cutoff.Reset();
+	return_deadzone_angle.Reset();
+	return_deadzone_cutoff_angle.Reset();
 
 	for_each(grid_mappings.begin(), grid_mappings.end(), [](auto &map) { map.Reset(); });
 
@@ -2561,12 +2557,10 @@ void processStick(shared_ptr<JoyShock> jc, float stickX, float stickY, float las
 		// compute output
 		float sticklikeFactor = jc->getSetting(SettingID::STICKLIKE_FACTOR);
 		float mouselikeFactor = jc->getSetting(SettingID::MOUSELIKE_FACTOR);
-		float magnitudeX = magnitude * cos(angle);
-		float magnitudeY = magnitude * sin(angle);
-		float outputX = sticklikeFactor * magnitudeX * deltaTime;
-		float outputY = sticklikeFactor * magnitudeY * deltaTime;
-		outputX += mouselikeFactor * magnitudeX * jc->smallestMagnitude * jc->edgePushAmount;
-		outputY += mouselikeFactor * magnitudeY * jc->smallestMagnitude * jc->edgePushAmount;
+		float outputX = sticklikeFactor * pow(magnitude, jc->getSetting(SettingID::STICK_POWER)) * cos(angle) * deltaTime;
+		float outputY = sticklikeFactor * pow(magnitude, jc->getSetting(SettingID::STICK_POWER)) * sin(angle) * deltaTime;
+		outputX += mouselikeFactor * pow(jc->smallestMagnitude, jc->getSetting(SettingID::STICK_POWER)) * cos(angle) * jc->edgePushAmount;
+		outputY += mouselikeFactor * pow(jc->smallestMagnitude, jc->getSetting(SettingID::STICK_POWER)) * sin(angle) * jc->edgePushAmount;
 		outputX += mouselikeFactor * velocityX;
 		outputY += mouselikeFactor * velocityY;
 		
@@ -2608,8 +2602,8 @@ void processStick(shared_ptr<JoyShock> jc, float stickX, float stickY, float las
 			averageOutputRadial /= jc->smoothingSteps;
 			float returnDeadzone1 = 1.f;
 			float angleOutputToCenter = 0;
-			const float returningDeadzone = jc->getSetting(SettingID::ANGLE_RETURN_DEADZONE) / 180.f * PI;
-			const float returningCutoff = jc->getSetting(SettingID::ANGLE_RETURN_DEADZONE_CUTOFF) / 180.f * PI;
+			const float returningDeadzone = jc->getSetting(SettingID::RETURN_DEADZONE_ANGLE) / 180.f * PI;
+			const float returningCutoff = jc->getSetting(SettingID::RETURN_DEADZONE_ANGLE_CUTOFF) / 180.f * PI;
 
 			if (averageOutputRadial < 0.f)
 			{
@@ -4499,6 +4493,13 @@ int main(int argc, char *argv[])
 	unwind_rate.SetFilter(&filterPositive);
 	gyro_output.SetFilter(&filterGyroOutput);
 	flick_stick_output.SetFilter(&filterInvalidValue<GyroOutput, GyroOutput::INVALID>);
+	/////////////////////////////////////////////////////
+	sticklike_factor.SetFilter(&filterFloat);
+	mouselike_factor.SetFilter(&filterFloat);
+	return_deadzone_is_active.SetFilter(&filterInvalidValue<Switch, Switch::INVALID>);
+	edge_push_is_active.SetFilter(&filterInvalidValue<Switch, Switch::INVALID>);
+	return_deadzone_angle.SetFilter(&filterFloat);
+	return_deadzone_cutoff_angle.SetFilter(&filterFloat);
 
 	// light_bar needs no filter or listener. The callback polls and updates the color.
 	for (int i = argc - 1; i >= 0; --i)
@@ -4790,11 +4791,11 @@ int main(int argc, char *argv[])
 	commandRegistry.Add((new JSMAssignment<Switch>(return_deadzone_is_active))
 	                      ->SetHelp("Wether or not there is a return deadzone when in HYBRID_AIM mode.\n"\
 									"This deadzone is determined by the angle of the output from the stick position to the center.\n"
-									"It is fully active upto ANGLE_RETURN_DEADZONE and tapers off until ANGLE_RETURN_DEADZONE_CUTOFF.\n"
+									"It is fully active upto RETURN_DEADZONE_ANGLE and tapers off until RETURN_DEADZONE_CUTOFF_ANGLE.\n"
 									"When in DEADZONE_INNER it transitions to an output deadzone based on the distance to the center so the relative part of the input smoothly fades back in."));
-	commandRegistry.Add((new JSMAssignment<float>(angle_return_deadzone))
+	commandRegistry.Add((new JSMAssignment<float>(return_deadzone_angle))
 	                      ->SetHelp("When in HYBRID_AIM mode, angle to the center in which the return deadzone is fully active.\nValid values range from 0 to 90"));
-	commandRegistry.Add((new JSMAssignment<float>(angle_return_deadzone_cutoff))
+	commandRegistry.Add((new JSMAssignment<float>(return_deadzone_cutoff_angle))
 	                      ->SetHelp("When in HYBRID_AIM, angle to the center in which the return deadzone is still partially active.\nValid values range from 0 to 90"));
 	commandRegistry.Add((new JSMAssignment<Switch>(edge_push_is_active))
 	                      ->SetHelp("When in HYBRID_AIM, if the the relative movement of the stick shall be continued beyond the edge of the stick."));
