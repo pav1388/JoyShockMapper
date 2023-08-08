@@ -180,6 +180,10 @@ void Application::BindingTab::drawButton(ButtonID btn, ImVec2 size)
 		drawAnyFloat(SettingID::TURBO_PERIOD, true);
 		drawAnyFloat(SettingID::DBL_PRESS_WINDOW, true);
 		drawAnyFloat(SettingID::SIM_PRESS_WINDOW, true);
+		if (btn == ButtonID::LEAN_LEFT || btn == ButtonID::LEAN_RIGHT)
+		{
+			drawAnyFloat(SettingID::LEAN_THRESHOLD, true);
+		}
 		EndPopup();
 	}
 }
@@ -467,13 +471,21 @@ bool Application::DrawLoop()
 				drawCombo<ControllerScheme>(SettingID::VIRTUAL_CONTROLLER, 0, "VIRTUAL_CONTROLLER");
 				HelpMarker("VIRTUAL_CONTROLLER");
 
-				auto rumbleEnable = SettingsManager::getV<Switch>(SettingID::RUMBLE);
+				auto rumbleEnable = SettingsManager::get<Switch>(SettingID::RUMBLE);
 				bool value = rumbleEnable->value() == Switch::ON;
 				if (Checkbox("RUMBLE", &value))
 				{
 					rumbleEnable->set(value ? Switch::ON : Switch::OFF);
 				}
 				HelpMarker("RUMBLE");
+
+				auto adaptiveTriggers = SettingsManager::get<Switch>(SettingID::ADAPTIVE_TRIGGER);
+				value = rumbleEnable->value() == Switch::ON;
+				if (Checkbox("ADAPTIVE_TRIGGER", &value))
+				{
+					adaptiveTriggers->set(value ? Switch::ON : Switch::OFF);
+				}
+				HelpMarker("ADAPTIVE_TRIGGER");
 
 				auto autoload = SettingsManager::getV<Switch>(SettingID::AUTOLOAD);
 				bool al = autoload->value() == Switch::ON;
@@ -699,6 +711,10 @@ void Application::BindingTab::draw(ImVec2& renderingAreaPos, ImVec2& renderingAr
 			drawLabel(SettingID::ZL_MODE);
 			TableNextColumn();
 			drawCombo<TriggerMode>(SettingID::ZL_MODE);
+			if (IsItemClicked(ImGuiMouseButton_Right))
+			{
+				_stickConfigPopup = SettingID::ZL_MODE;
+			}
 
 			TableNextRow();
 			TableNextColumn();
@@ -769,7 +785,7 @@ void Application::BindingTab::draw(ImVec2& renderingAreaPos, ImVec2& renderingAr
 			drawLabel(SettingID::LEFT_STICK_MODE);
 			TableNextColumn();
 			drawCombo<StickMode>(SettingID::LEFT_STICK_MODE);
-			if (IsItemClicked(ImGuiButtonFlags_MouseButtonRight >> 1))
+			if (IsItemClicked(ImGuiMouseButton_Right))
 			{
 				_stickConfigPopup = SettingID::RIGHT_STICK_MODE;
 			}
@@ -920,7 +936,10 @@ void Application::BindingTab::draw(ImVec2& renderingAreaPos, ImVec2& renderingAr
 			TableNextRow();
 			TableNextColumn();
 			drawCombo<TriggerMode>(SettingID::ZR_MODE);
-			// TODO:: TRIGGER_THRESHOLD, ADAPTIVE_TRIGGER LEFT_TRIGGER_EFFECT|OFFSET|RANGEcontext menu for triggers
+			if (IsItemClicked(ImGuiMouseButton_Right))
+			{
+				_stickConfigPopup = SettingID::ZL_MODE;
+			}
 			TableNextColumn();
 			drawLabel(SettingID::ZR_MODE);
 
@@ -991,7 +1010,7 @@ void Application::BindingTab::draw(ImVec2& renderingAreaPos, ImVec2& renderingAr
 			TableNextRow();
 			TableNextColumn();
 			drawCombo<StickMode>(SettingID::RIGHT_STICK_MODE);
-			if (IsItemClicked(ImGuiButtonFlags_MouseButtonRight >> 1))
+			if (IsItemClicked(ImGuiMouseButton_Right))
 			{
 				_stickConfigPopup = SettingID::RIGHT_STICK_MODE;
 			}
@@ -1083,7 +1102,7 @@ void Application::BindingTab::draw(ImVec2& renderingAreaPos, ImVec2& renderingAr
 			drawButton(ButtonID::LEAN_RIGHT);
 			TableNextColumn();
 			drawCombo<GyroOutput>(SettingID::GYRO_OUTPUT);
-			if (IsItemClicked(ImGuiButtonFlags_MouseButtonRight >> 1))
+			if (IsItemClicked(ImGuiMouseButton_Right))
 			{
 				OpenPopup("GyroSensContext");
 			}
@@ -1132,7 +1151,7 @@ void Application::BindingTab::draw(ImVec2& renderingAreaPos, ImVec2& renderingAr
 			drawButton(ButtonID::MRING);
 			TableNextColumn();
 			drawCombo<StickMode>(SettingID::MOTION_STICK_MODE);
-			if (IsItemClicked(ImGuiButtonFlags_MouseButtonRight >> 1))
+			if (IsItemClicked(ImGuiMouseButton_Right))
 			{
 				_stickConfigPopup = SettingID::MOTION_STICK_MODE;
 			}
@@ -1280,8 +1299,8 @@ void Application::BindingTab::draw(ImVec2& renderingAreaPos, ImVec2& renderingAr
 			_inputSelector.show(_showPopup);
 			_showPopup = ButtonID::INVALID;
 		}
-
 		_inputSelector.draw();
+
 		if (ImGui::BeginPopup("StickConfig"))
 		{
 			// TODO: LEFT_STICK_VIRTUAL_SCALE, RIGHT_STICK_VIRTUAL_SCALE
@@ -1315,110 +1334,87 @@ void Application::BindingTab::draw(ImVec2& renderingAreaPos, ImVec2& renderingAr
 				SameLine();
 				drawAnyFloat(SettingID::MOTION_DEADZONE_OUTER);
 			}
-
-			auto stickMode = SettingsManager::get<StickMode>(_stickConfigPopup)->value();
-			if (stickMode == StickMode::FLICK || stickMode == StickMode::FLICK_ONLY || stickMode == StickMode::ROTATE_ONLY)
+			else if (_stickConfigPopup == SettingID::ZL_MODE)
 			{
-				drawLabel(SettingID::FLICK_SNAP_MODE);
-				SameLine();
-				drawCombo<FlickSnapMode>(SettingID::FLICK_SNAP_MODE);
-
-				drawLabel(SettingID::FLICK_SNAP_STRENGTH);
-				SameLine();
-				drawPercentFloat(SettingID::FLICK_SNAP_STRENGTH);
-
-				drawLabel(SettingID::FLICK_DEADZONE_ANGLE);
-				SameLine();
-				drawAnyFloat(SettingID::FLICK_DEADZONE_ANGLE);
-
-				auto& fsOut = *SettingsManager::get<GyroOutput>(SettingID::FLICK_STICK_OUTPUT);
-				if (fsOut == GyroOutput::MOUSE)
+				bool hairTrigger = SettingsManager::get<float>(SettingID::TRIGGER_THRESHOLD)->value() == -1.f;
+				if (Checkbox("Hair Trigger", &hairTrigger))
 				{
-					drawLabel(SettingID::FLICK_TIME);
-					SameLine();
-					drawAnyFloat(SettingID::FLICK_TIME);
-
-					drawLabel(SettingID::FLICK_TIME_EXPONENT);
-					SameLine();
-					drawAnyFloat(SettingID::FLICK_TIME_EXPONENT);
+					if (hairTrigger)
+						SettingsManager::get<float>(SettingID::TRIGGER_THRESHOLD)->set(-1.f);
+					else
+						SettingsManager::get<float>(SettingID::TRIGGER_THRESHOLD)->reset();
 				}
-				else // LEFT_STICK, RIGHT_STICK, PS_MOTION
+				if (!hairTrigger)
+					drawPercentFloat(SettingID::TRIGGER_THRESHOLD, TRUE);
+			}
+
+			if (auto setting = SettingsManager::get<StickMode>(_stickConfigPopup); setting)
+			{
+				auto stickMode = setting->value();
+				if (stickMode == StickMode::FLICK || stickMode == StickMode::FLICK_ONLY || stickMode == StickMode::ROTATE_ONLY)
 				{
-					drawLabel(SettingID::VIRTUAL_STICK_CALIBRATION);
+					drawLabel(SettingID::FLICK_SNAP_MODE);
 					SameLine();
-					drawAnyFloat(SettingID::VIRTUAL_STICK_CALIBRATION);
+					drawCombo<FlickSnapMode>(SettingID::FLICK_SNAP_MODE);
+
+					drawLabel(SettingID::FLICK_SNAP_STRENGTH);
+					SameLine();
+					drawPercentFloat(SettingID::FLICK_SNAP_STRENGTH);
+
+					drawLabel(SettingID::FLICK_DEADZONE_ANGLE);
+					SameLine();
+					drawAnyFloat(SettingID::FLICK_DEADZONE_ANGLE);
+
+					auto& fsOut = *SettingsManager::get<GyroOutput>(SettingID::FLICK_STICK_OUTPUT);
+					if (fsOut == GyroOutput::MOUSE)
+					{
+						drawLabel(SettingID::FLICK_TIME);
+						SameLine();
+						drawAnyFloat(SettingID::FLICK_TIME);
+
+						drawLabel(SettingID::FLICK_TIME_EXPONENT);
+						SameLine();
+						drawAnyFloat(SettingID::FLICK_TIME_EXPONENT);
+					}
+					else // LEFT_STICK, RIGHT_STICK, PS_MOTION
+					{
+						drawLabel(SettingID::VIRTUAL_STICK_CALIBRATION);
+						SameLine();
+						drawAnyFloat(SettingID::VIRTUAL_STICK_CALIBRATION);
+					}
 				}
-			}
-			else if (stickMode == StickMode::AIM)
-			{
-				drawLabel(SettingID::STICK_POWER);
-				SameLine();
-				drawAnyFloat(SettingID::STICK_POWER);
+				else if (stickMode == StickMode::AIM)
+				{
+					drawLabel(SettingID::STICK_POWER);
+					SameLine();
+					drawAnyFloat(SettingID::STICK_POWER);
 
-				drawLabel(SettingID::STICK_ACCELERATION_RATE);
-				SameLine();
-				drawAnyFloat(SettingID::STICK_ACCELERATION_RATE);
+					drawLabel(SettingID::STICK_ACCELERATION_RATE);
+					SameLine();
+					drawAnyFloat(SettingID::STICK_ACCELERATION_RATE);
 
-				drawLabel(SettingID::STICK_ACCELERATION_CAP);
-				SameLine();
-				drawAnyFloat(SettingID::STICK_ACCELERATION_CAP);
-			}
+					drawLabel(SettingID::STICK_ACCELERATION_CAP);
+					SameLine();
+					drawAnyFloat(SettingID::STICK_ACCELERATION_CAP);
+				}
 
-			else if (stickMode == StickMode::MOUSE_RING)
-			{
-				drawLabel(SettingID::SCREEN_RESOLUTION_X);
-				SameLine();
-				drawAnyFloat(SettingID::SCREEN_RESOLUTION_X);
+				else if (stickMode == StickMode::MOUSE_RING)
+				{
+					drawLabel(SettingID::SCREEN_RESOLUTION_X);
+					SameLine();
+					drawAnyFloat(SettingID::SCREEN_RESOLUTION_X);
 
-				drawLabel(SettingID::SCREEN_RESOLUTION_Y);
-				SameLine();
-				drawAnyFloat(SettingID::SCREEN_RESOLUTION_Y);
-			}
-			else if (stickMode == StickMode::SCROLL_WHEEL)
-			{
-				drawLabel(SettingID::SCROLL_SENS);
-				SameLine();
-				drawAny2Floats(SettingID::SCROLL_SENS);
-			}
-			else if (stickMode == StickMode::LEFT_STICK)
-			{
-				drawLabel(SettingID::LEFT_STICK_UNDEADZONE_INNER);
-				SameLine();
-				drawAnyFloat(SettingID::LEFT_STICK_UNDEADZONE_INNER);
-
-				drawLabel(SettingID::LEFT_STICK_UNDEADZONE_OUTER);
-				SameLine();
-				drawAnyFloat(SettingID::LEFT_STICK_UNDEADZONE_OUTER);
-
-				drawLabel(SettingID::VIRTUAL_STICK_CALIBRATION);
-				SameLine();
-				drawAnyFloat(SettingID::VIRTUAL_STICK_CALIBRATION);
-			}
-			else if (stickMode == StickMode::RIGHT_STICK)
-			{
-				drawLabel(SettingID::RIGHT_STICK_UNDEADZONE_INNER);
-				SameLine();
-				drawAnyFloat(SettingID::RIGHT_STICK_UNDEADZONE_INNER);
-
-				drawLabel(SettingID::RIGHT_STICK_UNDEADZONE_OUTER);
-				SameLine();
-				drawAnyFloat(SettingID::RIGHT_STICK_UNDEADZONE_OUTER);
-
-				drawLabel(SettingID::VIRTUAL_STICK_CALIBRATION);
-				SameLine();
-				drawAnyFloat(SettingID::VIRTUAL_STICK_CALIBRATION);
-			}
-			else if (stickMode >= StickMode::LEFT_ANGLE_TO_X && stickMode <= StickMode::RIGHT_ANGLE_TO_Y)
-			{
-				drawLabel(SettingID::ANGLE_TO_AXIS_DEADZONE_INNER);
-				SameLine();
-				drawAnyFloat(SettingID::ANGLE_TO_AXIS_DEADZONE_INNER);
-
-				drawLabel(SettingID::ANGLE_TO_AXIS_DEADZONE_OUTER);
-				SameLine();
-				drawAnyFloat(SettingID::ANGLE_TO_AXIS_DEADZONE_OUTER);
-
-				if (stickMode == StickMode::LEFT_ANGLE_TO_X || stickMode == StickMode::LEFT_ANGLE_TO_Y) // isLeft
+					drawLabel(SettingID::SCREEN_RESOLUTION_Y);
+					SameLine();
+					drawAnyFloat(SettingID::SCREEN_RESOLUTION_Y);
+				}
+				else if (stickMode == StickMode::SCROLL_WHEEL)
+				{
+					drawLabel(SettingID::SCROLL_SENS);
+					SameLine();
+					drawAny2Floats(SettingID::SCROLL_SENS);
+				}
+				else if (stickMode == StickMode::LEFT_STICK)
 				{
 					drawLabel(SettingID::LEFT_STICK_UNDEADZONE_INNER);
 					SameLine();
@@ -1428,11 +1424,11 @@ void Application::BindingTab::draw(ImVec2& renderingAreaPos, ImVec2& renderingAr
 					SameLine();
 					drawAnyFloat(SettingID::LEFT_STICK_UNDEADZONE_OUTER);
 
-					drawLabel(SettingID::LEFT_STICK_UNPOWER);
+					drawLabel(SettingID::VIRTUAL_STICK_CALIBRATION);
 					SameLine();
-					drawAnyFloat(SettingID::LEFT_STICK_UNPOWER);
+					drawAnyFloat(SettingID::VIRTUAL_STICK_CALIBRATION);
 				}
-				else // isRight!
+				else if (stickMode == StickMode::RIGHT_STICK)
 				{
 					drawLabel(SettingID::RIGHT_STICK_UNDEADZONE_INNER);
 					SameLine();
@@ -1442,12 +1438,50 @@ void Application::BindingTab::draw(ImVec2& renderingAreaPos, ImVec2& renderingAr
 					SameLine();
 					drawAnyFloat(SettingID::RIGHT_STICK_UNDEADZONE_OUTER);
 
-					drawLabel(SettingID::RIGHT_STICK_UNPOWER);
+					drawLabel(SettingID::VIRTUAL_STICK_CALIBRATION);
 					SameLine();
-					drawAnyFloat(SettingID::RIGHT_STICK_UNPOWER);
+					drawAnyFloat(SettingID::VIRTUAL_STICK_CALIBRATION);
 				}
-			}
-			else if (stickMode == StickMode::LEFT_WIND_X || stickMode == StickMode::RIGHT_WIND_X)
+				else if (stickMode >= StickMode::LEFT_ANGLE_TO_X && stickMode <= StickMode::RIGHT_ANGLE_TO_Y)
+				{
+					drawLabel(SettingID::ANGLE_TO_AXIS_DEADZONE_INNER);
+					SameLine();
+					drawAnyFloat(SettingID::ANGLE_TO_AXIS_DEADZONE_INNER);
+
+					drawLabel(SettingID::ANGLE_TO_AXIS_DEADZONE_OUTER);
+					SameLine();
+					drawAnyFloat(SettingID::ANGLE_TO_AXIS_DEADZONE_OUTER);
+
+					if (stickMode == StickMode::LEFT_ANGLE_TO_X || stickMode == StickMode::LEFT_ANGLE_TO_Y) // isLeft
+					{
+						drawLabel(SettingID::LEFT_STICK_UNDEADZONE_INNER);
+						SameLine();
+						drawAnyFloat(SettingID::LEFT_STICK_UNDEADZONE_INNER);
+
+						drawLabel(SettingID::LEFT_STICK_UNDEADZONE_OUTER);
+						SameLine();
+						drawAnyFloat(SettingID::LEFT_STICK_UNDEADZONE_OUTER);
+
+						drawLabel(SettingID::LEFT_STICK_UNPOWER);
+						SameLine();
+						drawAnyFloat(SettingID::LEFT_STICK_UNPOWER);
+					}
+					else // isRight!
+					{
+						drawLabel(SettingID::RIGHT_STICK_UNDEADZONE_INNER);
+						SameLine();
+						drawAnyFloat(SettingID::RIGHT_STICK_UNDEADZONE_INNER);
+
+						drawLabel(SettingID::RIGHT_STICK_UNDEADZONE_OUTER);
+						SameLine();
+						drawAnyFloat(SettingID::RIGHT_STICK_UNDEADZONE_OUTER);
+
+						drawLabel(SettingID::RIGHT_STICK_UNPOWER);
+						SameLine();
+						drawAnyFloat(SettingID::RIGHT_STICK_UNPOWER);
+					}
+				}
+				else if (stickMode == StickMode::LEFT_WIND_X || stickMode == StickMode::RIGHT_WIND_X)
 			{
 				drawLabel(SettingID::WIND_STICK_RANGE);
 				SameLine();
@@ -1489,6 +1523,7 @@ void Application::BindingTab::draw(ImVec2& renderingAreaPos, ImVec2& renderingAr
 					SameLine();
 					drawAnyFloat(SettingID::RIGHT_STICK_UNPOWER);
 				}
+			}
 			}
 			EndPopup();
 		}
