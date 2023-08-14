@@ -36,6 +36,22 @@ unique_ptr<JslWrapper> jsl;
 unique_ptr<TrayIcon> tray;
 unique_ptr<Whitelister> whitelister;
 
+float radial(float vX, float vY, float X, float Y)
+{
+	if (X!=0.0f && Y!=0.0f)
+		return (vX * X + vY * Y) / sqrt(X * X + Y * Y);
+	else
+		return 0.0f;
+}
+
+float angleBasedDeadzone(float theta, float returnDeadzone, float returnDeadzoneCutoff)
+{
+	if (theta <= returnDeadzone)
+		return 0.f;
+	else if (theta <= returnDeadzoneCutoff)
+		return (theta - returnDeadzone) / returnDeadzoneCutoff;
+}
+
 class JoyShock;
 void joyShockPollCallback(int jcHandle, JOY_SHOCK_STATE state, JOY_SHOCK_STATE lastState, IMU_STATE imuState, IMU_STATE lastImuState, float deltaTime);
 void TouchCallback(int jcHandle, TOUCH_STATE newState, TOUCH_STATE prevState, float delta_time);
@@ -141,6 +157,14 @@ JSMSetting<float> wind_stick_power = JSMSetting<float>(SettingID::WIND_STICK_POW
 JSMSetting<float> unwind_rate = JSMSetting<float>(SettingID::UNWIND_RATE, 1800.f);
 JSMSetting<GyroOutput> gyro_output = JSMSetting<GyroOutput>(SettingID::GYRO_OUTPUT, GyroOutput::MOUSE);
 JSMSetting<GyroOutput> flick_stick_output = JSMSetting<GyroOutput>(SettingID::FLICK_STICK_OUTPUT, GyroOutput::MOUSE);
+
+JSMSetting<float> sticklike_factor = JSMSetting<float>(SettingID::STICKLIKE_FACTOR, 180.f);
+JSMSetting<float> mouselike_factor = JSMSetting<float>(SettingID::MOUSELIKE_FACTOR, 90.f);
+JSMSetting<Switch> return_deadzone_is_active = JSMSetting<Switch>(SettingID::RETURN_DEADZONE_IS_ACTIVE, Switch::ON);
+JSMSetting<Switch> edge_push_is_active = JSMSetting<Switch>(SettingID::EDGE_PUSH_IS_ACTIVE, Switch::ON);
+JSMSetting<float> return_deadzone_angle = JSMSetting<float>(SettingID::RETURN_DEADZONE_ANGLE, 45.f);
+JSMSetting<float> return_deadzone_cutoff_angle = JSMSetting<float>(SettingID::RETURN_DEADZONE_ANGLE_CUTOFF, 90.f);
+
 
 JSMVariable<PathString> currentWorkingDir = JSMVariable<PathString>(PathString());
 vector<JSMButton> grid_mappings; // array of virtual buttons on the touchpad grid
@@ -432,6 +456,17 @@ public:
 	AdaptiveTriggerSetting right_effect;
 	AdaptiveTriggerSetting unused_effect;
 
+	float edgePushAmount = 0.0f;
+	float smallestMagnitude = 0.f;
+	const static int smoothingSteps = 4;
+	float previousOutputX[smoothingSteps] = {};
+	float previousOutputY[smoothingSteps] = {};
+	float previousOutputRadial[smoothingSteps] = {};
+	float previousVelocitiesX[smoothingSteps] = {};
+	float previousVelocitiesY[smoothingSteps] = {};
+	int smoothingCounter = 0;
+
+
 	JoyShock(int uniqueHandle, int controllerSplitType, shared_ptr<DigitalButton::Context> sharedButtonCommon = nullptr)
 	  : handle(uniqueHandle)
 	  , controller_split_type(controllerSplitType)
@@ -643,6 +678,12 @@ public:
 			case SettingID::FLICK_STICK_OUTPUT:
 				opt = GetOptionalSetting<E>(flick_stick_output, *activeChord);
 				break;
+			case SettingID::RETURN_DEADZONE_IS_ACTIVE:
+				opt = GetOptionalSetting<E>(return_deadzone_is_active, *activeChord);
+				break;
+			case SettingID::EDGE_PUSH_IS_ACTIVE:
+				opt = GetOptionalSetting<E>(edge_push_is_active, *activeChord);
+				break;
 			}
 			if (opt)
 				return *opt;
@@ -812,6 +853,18 @@ public:
 				break;
 			case SettingID::UNWIND_RATE:
 				opt = unwind_rate.get(*activeChord);
+				break;
+			case SettingID::STICKLIKE_FACTOR:
+				opt = sticklike_factor.get(*activeChord);
+				break;
+			case SettingID::MOUSELIKE_FACTOR:
+				opt = mouselike_factor.get(*activeChord);
+				break;
+			case SettingID::RETURN_DEADZONE_ANGLE:
+				opt = return_deadzone_angle.get(*activeChord);
+				break;
+			case SettingID::RETURN_DEADZONE_ANGLE_CUTOFF:
+				opt = return_deadzone_cutoff_angle.get(*activeChord);
 				break;
 			}
 			if (opt)
@@ -1578,6 +1631,14 @@ static void resetAllMappings()
 	unwind_rate.Reset();
 	gyro_output.Reset();
 	flick_stick_output.Reset();
+	///////////////////////////////////////////////////////////////////////////
+	sticklike_factor.Reset();
+	mouselike_factor.Reset();
+	return_deadzone_is_active.Reset();
+	edge_push_is_active.Reset();
+	return_deadzone_angle.Reset();
+	return_deadzone_cutoff_angle.Reset();
+
 	for_each(grid_mappings.begin(), grid_mappings.end(), [](auto &map) { map.Reset(); });
 
 	os_mouse_speed = 1.0f;
@@ -2156,6 +2217,8 @@ void processStick(shared_ptr<JoyShock> jc, float stickX, float stickY, float las
 	float rawX = stickX;
 	float rawY = stickY;
 	float rawLength = sqrtf(rawX * rawX + rawY * rawY);
+	float rawLastX = lastX;
+	float rawLastY = lastY;
 	jc->processDeadZones(lastX, lastY, innerDeadzone, outerDeadzone);
 	bool pegged = jc->processDeadZones(stickX, stickY, innerDeadzone, outerDeadzone);
 	float absX = abs(stickX);
@@ -2211,22 +2274,13 @@ void processStick(shared_ptr<JoyShock> jc, float stickX, float stickY, float las
 	}
 	else if (stickMode == StickMode::MOUSE_AREA)
 	{
-		auto mouse_ring_radius = jc->getSetting(SettingID::MOUSE_RING_RADIUS);
-		if (stickX != 0.0f || stickY != 0.0f)
-		{
-			// use difference with last cal values
-			float mouseX = (stickX - lastAreaCal.x()) * mouse_ring_radius;
-			float mouseY = (stickY - lastAreaCal.y()) * -1 * mouse_ring_radius;
-			// do it!
-			moveMouse(mouseX, mouseY);
-			lastAreaCal = { stickX, stickY };
-		}
-		else
-		{
-			// Return to center
-			moveMouse(lastAreaCal.x() * -1 * mouse_ring_radius, lastAreaCal.y() * mouse_ring_radius);
-			lastAreaCal = { 0, 0 };
-		}
+		auto mouse_ring_radius = jc->getSetting(SettingID::MOUSE_RING_RADIUS);		
+		
+		float mouseX = (rawX - rawLastX) * mouse_ring_radius;
+		float mouseY = (rawY - rawLastY) * -1 * mouse_ring_radius;
+		// do it!
+		moveMouse(mouseX, mouseY);
+		
 	}
 	else if (stickMode == StickMode::MOUSE_RING)
 	{
@@ -2434,6 +2488,152 @@ void processStick(shared_ptr<JoyShock> jc, float stickX, float stickY, float las
 			}
 		}
 	}
+	else if (stickMode == StickMode::HYBRID_AIM)
+	{
+		float velocityX = rawX - rawLastX;
+		float velocityY = -rawY + rawLastY;
+		float velocity = sqrt(velocityX * velocityX + velocityY * velocityY);
+		float velocityRadial = radial(velocityX, velocityY, rawX, -rawY);
+		float deflection = rawLength;
+		float previousDeflection = sqrt(rawLastX * rawLastX + rawLastY * rawLastY);
+		float magnitude = 0;
+		float angle = atan2f(-rawY, rawX);
+		bool inDeadzone = false;
+
+		// check deadzones
+		if (deflection > innerDeadzone)
+		{
+			inDeadzone = false;
+			magnitude = (deflection - innerDeadzone) / (outerDeadzone - innerDeadzone);
+
+			// check outer_deadzone
+			if (deflection > outerDeadzone)
+			{
+				// clip outward radial velocity
+				if (velocityRadial > 0.0f)
+				{
+					float dotProduct = velocityX * sin(angle) + velocityY * -cos(angle);
+					velocityX = dotProduct * sin(angle);
+					velocityY = dotProduct * -cos(angle);
+				}
+				magnitude = 1.0f;
+
+				// check entering
+				if (previousDeflection <= outerDeadzone)
+				{
+					float averageVelocityX = 0.0f;
+					float averageVelocityY = 0.0f;
+					int steps = 0;
+					int counter = jc->smoothingCounter;
+					while (steps < jc->smoothingSteps) //sqrt(cumulativeVX * cumulativeVX + cumulativeVY * cumulativeVY) < jc->smoothingDistance && 
+					{
+						averageVelocityX += jc->previousVelocitiesX[counter];
+						averageVelocityY += jc->previousVelocitiesY[counter];
+						if (counter == 0)
+							counter = jc->smoothingSteps - 1;
+						else
+							counter--;
+						steps++;
+					}
+					////////////////////////////////////TEST
+					if (jc->getSetting<Switch>(SettingID::EDGE_PUSH_IS_ACTIVE) == Switch::ON)
+					{
+						jc->edgePushAmount *= jc->smallestMagnitude;
+						jc->edgePushAmount += radial(averageVelocityX, averageVelocityY, rawX, -rawY) / steps;
+						jc->smallestMagnitude = 1.f;
+					}
+				}
+			}
+		}
+		else
+		{
+			jc->edgePushAmount = 0.0f;
+			inDeadzone = true;			
+		}
+		////////////////////////////TEST
+		if (magnitude < jc->smallestMagnitude)
+			jc->smallestMagnitude = magnitude;
+
+		// compute output
+		float sticklikeFactor = jc->getSetting(SettingID::STICKLIKE_FACTOR);
+		float mouselikeFactor = jc->getSetting(SettingID::MOUSELIKE_FACTOR);
+		float outputX = sticklikeFactor * pow(magnitude, jc->getSetting(SettingID::STICK_POWER)) * cos(angle) * deltaTime;
+		float outputY = sticklikeFactor * pow(magnitude, jc->getSetting(SettingID::STICK_POWER)) * sin(angle) * deltaTime;
+		outputX += mouselikeFactor * pow(jc->smallestMagnitude, jc->getSetting(SettingID::STICK_POWER)) * cos(angle) * jc->edgePushAmount;
+		outputY += mouselikeFactor * pow(jc->smallestMagnitude, jc->getSetting(SettingID::STICK_POWER)) * sin(angle) * jc->edgePushAmount;
+		outputX += mouselikeFactor * velocityX;
+		outputY += mouselikeFactor * velocityY;
+		
+		// for smoothing edgePush and clipping on returning to center
+		// probably only needed as deltaTime is faster than the controller's polling rate 
+		// (was tested with xbox360 controller which has a polling rate of 125Hz)
+		if (jc->smoothingCounter < jc->smoothingSteps - 1)
+			jc->smoothingCounter++;
+		else
+			jc->smoothingCounter = 0;
+
+		jc->previousVelocitiesX[jc->smoothingCounter] = velocityX;
+		jc->previousVelocitiesY[jc->smoothingCounter] = velocityY;
+		float outputRadial = radial(outputX, outputY, rawX, -rawY);
+		jc->previousOutputRadial[jc->smoothingCounter] = outputRadial;
+		jc->previousOutputX[jc->smoothingCounter] = outputX;
+		jc->previousOutputY[jc->smoothingCounter] = outputY;
+
+		if (jc->getSetting<Switch>(SettingID::RETURN_DEADZONE_IS_ACTIVE) == Switch::ON)
+		{
+			////////////////////// TEST SPEED INDEPENDENT OUTPUT WHEN RETURNING TO CENTER
+			// 0 means deadzone fully active 1 means unaltered output
+			float averageOutputX = 0.f;
+			float averageOutputY = 0.f;
+			for (int i = 0; i < jc->smoothingSteps; i++)
+			{
+				averageOutputX += jc->previousOutputX[i];
+				averageOutputY += jc->previousOutputY[i];
+			}
+			float averageOutput = sqrt(averageOutputX * averageOutputX + averageOutputY * averageOutputY) / jc->smoothingSteps;
+			averageOutputX /= jc->smoothingSteps;
+			averageOutputY /= jc->smoothingSteps;
+
+			float averageOutputRadial = 0;
+			for (int i = 0; i < jc->smoothingSteps; i++)
+			{
+				averageOutputRadial += jc->previousOutputRadial[i];
+			}
+			averageOutputRadial /= jc->smoothingSteps;
+			float returnDeadzone1 = 1.f;
+			float angleOutputToCenter = 0;
+			const float returningDeadzone = jc->getSetting(SettingID::RETURN_DEADZONE_ANGLE) / 180.f * PI;
+			const float returningCutoff = jc->getSetting(SettingID::RETURN_DEADZONE_ANGLE_CUTOFF) / 180.f * PI;
+
+			if (averageOutputRadial < 0.f)
+			{
+				angleOutputToCenter = abs(PI - acosf((averageOutputX * rawLastX + averageOutputY * -rawLastY) / (averageOutput * previousDeflection))); /// STILL WRONG
+				returnDeadzone1 = angleBasedDeadzone(angleOutputToCenter, returningDeadzone, returningCutoff);
+			}
+			float returnDeadzone2 = 1.f;
+			if (inDeadzone)
+			{
+				if (averageOutputRadial < 0.f)
+				{
+					// if angle inward output deadzone based on tangent concentric circle
+					float angleEquivalent = abs(rawLastX * averageOutputY + -rawLastY * -averageOutputX) / averageOutput;
+					returnDeadzone2 = angleBasedDeadzone(angleEquivalent, returningDeadzone, returningCutoff);
+				}
+				else
+				{
+					// output deadzone based on distance to center
+					float angleEquivalent = asinf(previousDeflection / innerDeadzone);
+					returnDeadzone2 = angleBasedDeadzone(angleEquivalent, returningDeadzone, returningCutoff);
+				}
+			}
+			float returnDeadzone = std::min({ returnDeadzone1, returnDeadzone2 });
+			outputX *= returnDeadzone;
+			outputY *= returnDeadzone;
+			if (returnDeadzone == 0.f)
+				jc->edgePushAmount = 0.f;			
+		}
+		moveMouse(outputX, outputY);
+    }
 }
 
 void TouchStick::handleTouchStickChange(shared_ptr<JoyShock> js, bool down, short movX, short movY, float delta_time)
@@ -4293,6 +4493,13 @@ int main(int argc, char *argv[])
 	unwind_rate.SetFilter(&filterPositive);
 	gyro_output.SetFilter(&filterGyroOutput);
 	flick_stick_output.SetFilter(&filterInvalidValue<GyroOutput, GyroOutput::INVALID>);
+	/////////////////////////////////////////////////////
+	sticklike_factor.SetFilter(&filterFloat);
+	mouselike_factor.SetFilter(&filterFloat);
+	return_deadzone_is_active.SetFilter(&filterInvalidValue<Switch, Switch::INVALID>);
+	edge_push_is_active.SetFilter(&filterInvalidValue<Switch, Switch::INVALID>);
+	return_deadzone_angle.SetFilter(&filterFloat);
+	return_deadzone_cutoff_angle.SetFilter(&filterFloat);
 
 	// light_bar needs no filter or listener. The callback polls and updates the color.
 	for (int i = argc - 1; i >= 0; --i)
@@ -4340,7 +4547,7 @@ int main(int argc, char *argv[])
 	commandRegistry.Add((new JSMAssignment<float>(max_gyro_threshold))
 	                      ->SetHelp("Degrees per second at and above which to apply maximum gyro sensitivity."));
 	commandRegistry.Add((new JSMAssignment<float>(stick_power))
-	                      ->SetHelp("Power curve for stick input when in AIM mode. 1 for linear, 0 for no curve (full strength once out of deadzone). Higher numbers make more of the stick's range appear like a very slight tilt."));
+	                      ->SetHelp("Power curve for stick input when in AIM or HYBRID_AIM mode. 1 for linear, 0 for no curve (full strength once out of deadzone). Higher numbers make more of the stick's range appear like a very slight tilt."));
 	commandRegistry.Add((new JSMAssignment<FloatXY>(stick_sens))
 	                      ->SetHelp("Stick sensitivity when using classic AIM mode."));
 	commandRegistry.Add((new JSMAssignment<float>(real_world_calibration))
@@ -4576,6 +4783,22 @@ int main(int argc, char *argv[])
 	                      ->SetHelp("Whether gyro should be converted to mouse, left stick, or right stick movement. If you don't want to use gyro aiming, simply leave GYRO_SENS set to 0."));
 	commandRegistry.Add((new JSMAssignment<GyroOutput>(flick_stick_output))
 	                      ->SetHelp("Whether flick stick should be converted to a mouse, left stick, or right stick movement."));
+	//////////////////////////////////////////////////////////////////////////////////
+	commandRegistry.Add((new JSMAssignment<float>(sticklike_factor))
+	                      ->SetHelp("Stick sensitivity of the absolute movement when in HYBRID_AIM mode. Like STICK_SENS for AIM."));
+	commandRegistry.Add((new JSMAssignment<float>(mouselike_factor))
+	                      ->SetHelp("Stick sensitivity of the relative movement when in HYBRID_AIM mode. Like the sensitivity of a mouse."));
+	commandRegistry.Add((new JSMAssignment<Switch>(return_deadzone_is_active))
+	                      ->SetHelp("Whether or not there is a return deadzone when in HYBRID_AIM mode.\n"\
+									"This deadzone is determined by the angle of the output from the stick position to the center.\n"
+									"It is fully active upto RETURN_DEADZONE_ANGLE and tapers off until RETURN_DEADZONE_CUTOFF_ANGLE.\n"
+									"When in DEADZONE_INNER it transitions to an output deadzone based on the distance to the center so the relative part of the input smoothly fades back in."));
+	commandRegistry.Add((new JSMAssignment<float>(return_deadzone_angle))
+	                      ->SetHelp("When in HYBRID_AIM mode, angle to the center in which the return deadzone is fully active.\nValid values range from 0 to 90"));
+	commandRegistry.Add((new JSMAssignment<float>(return_deadzone_cutoff_angle))
+	                      ->SetHelp("When in HYBRID_AIM, angle to the center in which the return deadzone is still partially active.\nValid values range from 0 to 90"));
+	commandRegistry.Add((new JSMAssignment<Switch>(edge_push_is_active))
+	                      ->SetHelp("When in HYBRID_AIM, if the the relative movement of the stick shall be continued beyond the edge of the stick."));
 	
 	bool quit = false;
 	commandRegistry.Add((new JSMMacro("QUIT"))
