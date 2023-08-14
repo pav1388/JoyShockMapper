@@ -105,9 +105,15 @@ bool isNumLockKey(KeyCode key)
 
 bool isExtendedKey(KeyCode key)
 {
+<<<<<<< HEAD
+	return (key.code >= VK_LEFT && key.code <= VK_DOWN) ||
+	  (key.code > VK_RWIN && key.code <= VK_NUMPAD9) ||
+	  (key.code >= VK_BROWSER_BACK && key.code <= VK_LAUNCH_APP2);
+=======
 	return ((key.code >= VK_PRIOR && key.code <= VK_HELP) && key.code != VK_SNAPSHOT) ||
 		(key.code >= VK_LWIN && key.code <= VK_DIVIDE) ||
 		(key.code >= VK_BROWSER_BACK && key.code <= VK_LAUNCH_APP2);
+>>>>>>> master
 }
 
 // send key press
@@ -123,7 +129,11 @@ int pressKey(KeyCode vkKey, bool pressed)
 	input.type = INPUT_KEYBOARD;
 	input.ki.time = 0;
 	input.ki.dwFlags = pressed ? 0 : KEYEVENTF_KEYUP;
+<<<<<<< HEAD
+	if (isExtendedKey)
+=======
 	if (isExtendedKey(vkKey))
+>>>>>>> master
 	{
 		input.ki.dwFlags |= KEYEVENTF_EXTENDEDKEY;
 	}
@@ -332,7 +342,7 @@ std::string GetCWD()
 
 bool SetCWD(in_string newCWD)
 {
-	return SetCurrentDirectoryA(newCWD.data()) == TRUE;
+	return SetCurrentDirectoryA(newCWD.c_str()) == TRUE;
 }
 
 DWORD ShowOnlineHelp()

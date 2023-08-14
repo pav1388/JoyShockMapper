@@ -253,7 +253,11 @@ public:
 			SDL_Delay(tick_time);
 
 			std::lock_guard guard(controller_lock);
-			SDL_GameControllerUpdate();
+<<<<<<< HEAD
+			//SDL_GameControllerUpdate(); // Done through polling in Application.cpp
+=======
+			SDL_GameControllerUpdate(); // Done through polling in Application.cpp
+>>>>>>> e3125d8 (Settings Manager update)
 			for (auto iter = _controllerMap.begin(); iter != _controllerMap.end(); ++iter)
 			{
 				if (g_callback)

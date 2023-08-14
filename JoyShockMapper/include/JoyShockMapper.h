@@ -15,7 +15,7 @@
 using namespace std; // simplify all std calls
 
 // input string parameters should be const references.
-typedef const string &in_string;
+typedef string_view in_string;
 
 // Reused OS typedefs
 typedef unsigned short WORD;
@@ -293,6 +293,9 @@ enum class SettingID
 	UNWIND_RATE,
 	GYRO_OUTPUT,
 	FLICK_STICK_OUTPUT,
+	HIDE_MINIMIZED,
+	AUTO_CALIBRATE_GYRO,
+	JSM_DIRECTORY,
 	RETURN_DEADZONE_IS_ACTIVE,
 	EDGE_PUSH_IS_ACTIVE,
 	STICKLIKE_FACTOR,
@@ -349,6 +352,7 @@ enum class StickMode
 	OUTER_RING,
 	INNER_RING,
 	SCROLL_WHEEL,
+	// Following requires virtual controller (keep them contiguous)
 	LEFT_STICK,
 	RIGHT_STICK,
 	LEFT_ANGLE_TO_X,
@@ -431,6 +435,7 @@ enum class GyroOutput
 	MOUSE,
 	LEFT_STICK,
 	RIGHT_STICK,
+	PS_MOTION,
 	INVALID
 };
 
@@ -462,7 +467,6 @@ enum class ControllerScheme
 	NONE,
 	XBOX,
 	DS4,
-	WHEEL,
 	INVALID
 };
 
@@ -470,6 +474,7 @@ enum class TouchpadMode
 {
 	GRID_AND_STICK, // Grid and Stick
 	MOUSE,          // gestures to be added as part of this mode
+	PS_TOUCHPAD,
 	INVALID
 };
 
@@ -478,6 +483,10 @@ class PathString : public string // Should be wstring
 {
 public:
 	PathString() = default;
+	PathString(const string& path)
+	  : string(path)
+	{
+	}
 	PathString(in_string path)
 	  : string(path)
 	{
@@ -503,14 +512,14 @@ union Color
 using AxisSignPair = pair<AxisMode, AxisMode>;
 
 // Needs to be accessed publicly
-extern WORD nameToKey(const std::string &name);
+extern WORD nameToKey(in_string name);
 
 struct KeyCode
 {
 	static const KeyCode EMPTY;
 
-	WORD code;
-	string name;
+	WORD code = NO_HOLD_MAPPED;
+	string name = "None";
 
 	KeyCode();
 
@@ -556,7 +565,7 @@ struct FloatXY : public pair<float, float>
 struct GyroSettings
 {
 	bool always_off = false;
-	ButtonID button = ButtonID::NONE;
+	ButtonID button = ButtonID::NONE; // Ignore on button none means no GYRO_OFF button (or Always On);
 	GyroIgnoreMode ignore_mode = GyroIgnoreMode::BUTTON;
 };
 
