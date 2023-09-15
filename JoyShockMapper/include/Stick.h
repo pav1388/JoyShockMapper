@@ -16,7 +16,6 @@ protected:
 	ButtonID _pressedBtn;
 
 public:
-	static function<void(JoyShock*, ButtonID, int, bool)> _handleButtonChange;
 
 	ScrollAxis()
 		: _leftovers(0.f)
@@ -108,7 +107,7 @@ struct TouchStick : public Stick
 	bool _prevDown = false;
 	// Handle a single touch related action. On per touch point
 	ScrollAxis verticalScroll;
-	map<ButtonID, DigitalButton> buttons; // Each touchstick gets it's own digital buttons. Is that smart?
+	map<ButtonID, DigitalButton> buttons; // Each touchstick gets it's own digital _buttons. Is that smart?
 
 	TouchStick(int index, shared_ptr<DigitalButton::Context> common, int handle);
 

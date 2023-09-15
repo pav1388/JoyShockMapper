@@ -19,7 +19,7 @@ void SettingsManager::resetAllSettings()
 	};
 	static constexpr auto exceptions = [](SettingsMap::value_type &kvPair)
 	{
-		static std::set<SettingID> exceptions = {
+		static set<SettingID> exceptions = {
 			SettingID::AUTOLOAD,
 			SettingID::JSM_DIRECTORY,
 		};

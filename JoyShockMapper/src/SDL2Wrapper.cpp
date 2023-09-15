@@ -1,6 +1,6 @@
-#include "JslWrapper.h"
 #include "JSMVariable.hpp"
- #include "TriggerEffectGenerator.h"
+#include "JslWrapper.h"
+#include "TriggerEffectGenerator.h"
 #include "SettingsManager.h"
 #include "SDL.h"
 #include <map>
@@ -248,7 +248,7 @@ public:
 			auto tick_time = SettingsManager::get<float>(SettingID::TICK_TIME)->value();
 			SDL_Delay(Uint32(tick_time));
 
-			std::lock_guard guard(controller_lock);
+			lock_guard guard(controller_lock);
 			SDL_GameControllerUpdate();
 			for (auto iter = _controllerMap.begin(); iter != _controllerMap.end(); ++iter)
 			{
@@ -278,7 +278,7 @@ public:
 	void (*g_callback)(int, JOY_SHOCK_STATE, JOY_SHOCK_STATE, IMU_STATE, IMU_STATE, float) = nullptr;
 	void (*g_touch_callback)(int, TOUCH_STATE, TOUCH_STATE, float) = nullptr;
 	atomic_bool keep_polling = false;
-	std::mutex controller_lock;
+	mutex controller_lock;
 
 	int ConnectDevices() override
 	{
@@ -300,7 +300,7 @@ public:
 
 	int GetConnectedDeviceHandles(int *deviceHandleArray, int size) override
 	{
-		std::lock_guard guard(controller_lock);
+		lock_guard guard(controller_lock);
 		auto iter = _controllerMap.begin();
 		while (iter != _controllerMap.end())
 		{
@@ -390,7 +390,7 @@ public:
 
 	bool GetTouchpadDimension(int deviceId, int &sizeX, int &sizeY) override
 	{
-		// I am assuming a single touchpad (or all touchpads are the same dimension)?
+		// I am assuming a single touchpad (or all _touchpads are the same dimension)?
 		auto *jc = _controllerMap[deviceId];
 		if (jc != nullptr)
 		{
@@ -414,7 +414,7 @@ public:
 
 	int GetButtons(int deviceId) override
 	{
-		static const std::map<int, int> sdl2jsl = {
+		static const map<int, int> sdl2jsl = {
 			{ SDL_CONTROLLER_BUTTON_A, JSOFFSET_S },
 			{ SDL_CONTROLLER_BUTTON_B, JSOFFSET_E },
 			{ SDL_CONTROLLER_BUTTON_X, JSOFFSET_W },
@@ -655,13 +655,13 @@ public:
 
 	void SetCallback(void (*callback)(int, JOY_SHOCK_STATE, JOY_SHOCK_STATE, IMU_STATE, IMU_STATE, float)) override
 	{
-		std::lock_guard guard(controller_lock);
+		lock_guard guard(controller_lock);
 		g_callback = callback;
 	}
 
 	void SetTouchCallback(void (*callback)(int, TOUCH_STATE, TOUCH_STATE, float)) override
 	{
-		std::lock_guard guard(controller_lock);
+		lock_guard guard(controller_lock);
 		g_touch_callback = callback;
 	}
 
@@ -696,7 +696,7 @@ public:
 
 	void SetRumble(int deviceId, int smallRumble, int bigRumble) override
 	{
-		// Rumble command needs to be sent at every poll in SDL, so the next value is set here and the actual call
+		// sendRumble command needs to be sent at every poll in SDL, so the next value is set here and the actual call
 		// is done after the callback return
 		_controllerMap[deviceId]->_small_rumble = clamp(smallRumble, 0, int(UINT16_MAX));
 		_controllerMap[deviceId]->_big_rumble = clamp(bigRumble, 0, int(UINT16_MAX));

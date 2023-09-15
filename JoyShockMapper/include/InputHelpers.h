@@ -33,25 +33,25 @@ inline void shapedSensitivityMoveMouse(float x, float y, float deltaTime, float 
 	moveMouse(x * deltaTime + extraVelocityX, y * deltaTime + extraVelocityY);
 }
 
-BOOL WriteToConsole(in_string command);
+BOOL WriteToConsole(string_view command);
 
 BOOL WINAPI ConsoleCtrlHandler(DWORD dwCtrlType);
 
 // just setting up the console with standard stuff
 void initConsole();
 
-std::tuple<std::string, std::string> GetActiveWindowName();
+tuple<string, string> GetActiveWindowName();
 
-std::vector<std::string> ListDirectory(std::string directory);
+vector<string> ListDirectory(string directory);
 
-std::string GetCWD();
+string GetCWD();
 
-bool SetCWD(in_string newCWD);
+bool SetCWD(string_view newCWD);
 
 class PollingThread
 {
 public:
-	PollingThread(const char *label, std::function<bool(void *)> loopContent,
+	PollingThread(const char *label, function<bool(void *)> loopContent,
 	  void *funcParam,
 	  DWORD pollPeriodMs,
 	  bool startNow)
@@ -122,7 +122,7 @@ private:
 			while (workerThread->_continue && workerThread->_loopContent(workerThread->_funcParam))
 			{
 				this_thread::sleep_for(
-				  std::chrono::milliseconds{ workerThread->_sleepTimeMs });
+				  chrono::milliseconds{ workerThread->_sleepTimeMs });
 			}
 		}
 
@@ -131,10 +131,10 @@ private:
 
 private:
 	unique_ptr<thread> _thread;
-	std::function<bool(void *)> _loopContent;
+	function<bool(void *)> _loopContent;
 	uint64_t _sleepTimeMs;
 	void *_funcParam;
-	std::atomic_bool _continue;
+	atomic_bool _continue;
 };
 
 DWORD ShowOnlineHelp();

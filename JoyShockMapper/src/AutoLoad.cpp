@@ -14,7 +14,7 @@ namespace JSM
 {
 
 AutoLoad::AutoLoad(CmdRegistry* commandRegistry, bool start)
-  : PollingThread("AutoLoad thread", std::bind(&AutoLoad::AutoLoadPoll, this, std::placeholders::_1), (void*)commandRegistry, 1000, start)
+  : PollingThread("AutoLoad thread", bind(&AutoLoad::AutoLoadPoll, this, placeholders::_1), (void*)commandRegistry, 1000, start)
 {
 }
 
@@ -37,7 +37,7 @@ bool AutoLoad::AutoLoadPoll(void* param)
 			auto noextconfig = file.substr(0, file.find_first_of('.'));
 			if (iequals(noextconfig, noextmodule))
 			{
-				COUT_INFO << "loading \"AutoLoad\\" << noextconfig << ".txt\"." << endl;
+				COUT_INFO << "loading \"AutoLoad\\" << noextconfig << ".txt\".\n";
 				WriteToConsole(path + file);
 				success = true;
 				break;
@@ -47,7 +47,7 @@ bool AutoLoad::AutoLoadPoll(void* param)
 		{
 			COUT_INFO << "create ";
 			COUT << "AutoLoad\\" << noextmodule << ".txt";
-			COUT_INFO << " to autoload for this application." << endl;
+			COUT_INFO << " to autoload for this application.\n";
 		}
 	}
 	return true;

@@ -32,8 +32,8 @@ struct AdaptiveTriggerSetting
 };
 
 // Defined in operators.cpp
-std::istream &operator>>(std::istream &in, AdaptiveTriggerSetting &atm);
-std::ostream &operator<<(std::ostream &out, const AdaptiveTriggerSetting &atm);
+istream &operator>>(istream &in, AdaptiveTriggerSetting &atm);
+ostream &operator<<(ostream &out, const AdaptiveTriggerSetting &atm);
 bool operator==(const AdaptiveTriggerSetting &lhs, const AdaptiveTriggerSetting &rhs);
 inline bool operator!=(const AdaptiveTriggerSetting &lhs, const AdaptiveTriggerSetting &rhs)
 {

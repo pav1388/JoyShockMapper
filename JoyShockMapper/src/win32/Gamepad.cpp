@@ -1,8 +1,7 @@
 #include <Windows.h>
 #include "Gamepad.h"
 #include "ViGEm/Client.h"
-#define _USE_MATH_DEFINES
-#include <math.h> // M_PI
+#include "PlatformDefinitions.h"
 #include <algorithm>
 #include <sstream>
 #include <iostream>
@@ -99,7 +98,7 @@ public:
 	{
 		if (!_inst || !_inst->_client)
 		{
-			_inst.reset(new VigemClient());
+			_inst = make_unique<VigemClient>();
 		}
 		if (outError)
 		{
@@ -107,6 +106,8 @@ public:
 		}
 		return _inst->_client;
 	}
+
+	friend unique_ptr<VigemClient, default_delete<VigemClient>> std::make_unique<VigemClient>();
 };
 
 unique_ptr<VigemClient> VigemClient::_inst;
@@ -164,7 +165,20 @@ ostream& operator<<<VIGEM_ERROR>(ostream& out, VIGEM_ERROR errCode)
 	case VIGEM_ERROR_INVALID_PARAMETER:
 		out << "VIGEM_ERROR_INVALID_PARAMETER";
 		break;
+	case VIGEM_ERROR_NOT_SUPPORTED:
+		out << "VIGEM_ERROR_NOT_SUPPORTED";
+		break;
+	case VIGEM_ERROR_WINAPI:
+		out << "VIGEM_ERROR_WINAPI";
+		break;
+	case VIGEM_ERROR_TIMED_OUT:
+		out << "VIGEM_ERROR_TIMED_OUT";
+		break;
+	case VIGEM_ERROR_IS_DISPOSING:
+		out << "VIGEM_ERROR_IS_DISPOSING";
+		break;
 	default:
+		out << hex << showbase << errCode;
 		break;
 	}
 	return out;
@@ -176,7 +190,7 @@ public:
 	VigemGamepad(Callback notification)
 	  : _notification(notification)
 	{
-		std::stringstream ss;
+		stringstream ss;
 		VIGEM_ERROR error = VIGEM_ERROR::VIGEM_ERROR_NONE;
 		PVIGEM_CLIENT client = VigemClient::get(&error);
 		if (client == nullptr)
@@ -185,8 +199,8 @@ public:
 		}
 		else if (error == VIGEM_ERROR_BUS_NOT_FOUND)
 		{
-			ss << "ViGEm bus is not installed. You can download the latest version of it here:" << endl
-			   << "https://github.com/ViGEm/ViGEmBus/releases/latest";
+			ss << "ViGEm bus is not installed. You can download the latest version of it here:\n" \
+				"https://github.com/ViGEm/ViGEmBus/releases/latest";
 			_errorMsg = ss.str();
 		}
 		else if (!VIGEM_SUCCESS(error))
@@ -209,7 +223,7 @@ public:
 		}
 	}
 
-	bool isInitialized(std::string* errorMsg = nullptr) const override
+	bool isInitialized(string* errorMsg = nullptr) const override
 	{
 		if (!_errorMsg.empty() && errorMsg != nullptr)
 		{
@@ -226,7 +240,7 @@ public:
 	void setGyro(float accelX, float accelY, float accelZ, float gyroX, float gyroY, float gyroZ) override
 	{}
 
-	void setTouchState(std::optional<FloatXY> press1, std::optional<FloatXY> press2) override 
+	void setTouchState(optional<FloatXY> press1, optional<FloatXY> press2) override 
 	{}
 
 protected:
@@ -253,14 +267,14 @@ public:
 
 		if (_errorMsg.empty())
 		{
-			// Allocate handle to identify new pad
+			// Allocate _handle to identify new pad
 			_gamepad = vigem_target_x360_alloc();
 
 			// Add _client to the bus, this equals a plug-in event
 			VIGEM_ERROR error = vigem_target_add(VigemClient::get(), _gamepad);
 			if (!VIGEM_SUCCESS(error))
 			{
-				std::stringstream ss;
+				stringstream ss;
 				ss << "Target plugin failed: " << error;
 				_errorMsg = ss.str();
 				return;
@@ -269,7 +283,7 @@ public:
 			error = vigem_target_x360_register_notification(VigemClient::get(), _gamepad, &XboxGamepad::x360Notification, this);
 			if (!VIGEM_SUCCESS(error))
 			{
-				std::stringstream ss;
+				stringstream ss;
 				ss << "Target plugin failed: " << error;
 				_errorMsg = ss.str();
 			}
@@ -286,7 +300,7 @@ public:
 	void setButton(KeyCode btn, bool pressed) override
 	{
 		auto op = pressed ? &SetPressed<WORD> : &ClearPressed<WORD>;
-		static std::map<WORD, uint16_t> buttonMap{
+		static map<WORD, uint16_t> buttonMap{
 			{ X_UP, XUSB_GAMEPAD_DPAD_UP },
 			{ X_DOWN, XUSB_GAMEPAD_DPAD_DOWN },
 			{ X_LEFT, XUSB_GAMEPAD_DPAD_LEFT },
@@ -371,20 +385,20 @@ public:
 	Ds4Gamepad(Callback notification)
 	    : VigemGamepad(notification)
 	    , _stateDS4()
-		, _pollDs4Thread(std::bind(&Ds4Gamepad::pollDs4, this))
+		, _pollDs4Thread(bind(&Ds4Gamepad::pollDs4, this))
 	{
 		DS4_REPORT_EX_INIT(&_stateDS4);
 
 		if (_errorMsg.empty())
 		{
-			// Allocate handle to identify new pad
+			// Allocate _handle to identify new pad
 			_gamepad = vigem_target_ds4_alloc();
 
 			// Add _client to the bus, this equals a plug-in event
 			VIGEM_ERROR error = vigem_target_add(VigemClient::get(), _gamepad);
 			if (!VIGEM_SUCCESS(error))
 			{
-				std::stringstream ss;
+				stringstream ss;
 				ss << "Target plugin failed: " << error;
 				_errorMsg = ss.str();
 				return;
@@ -464,7 +478,7 @@ public:
 		_stateDS4.Report.wGyroY = SHORT(roundf(gyroY * gyroToRaw));
 		_stateDS4.Report.wGyroZ = SHORT(roundf(gyroZ * gyroToRaw));
 	}
-	virtual void setTouchState(std::optional<FloatXY> press1, std::optional<FloatXY> press2) override
+	virtual void setTouchState(optional<FloatXY> press1, optional<FloatXY> press2) override
 	{
 		if (press1 || _touchId1 || press2 || _touchId2 )
 		{
@@ -490,7 +504,7 @@ public:
 		else if (_touchId1)
 		{
 			_stateDS4.Report.sCurrentTouch.bIsUpTrackingNum1 = 0x80 | *_touchId1 & 0x7F;
-			_touchId1 = std::nullopt;
+			_touchId1 = nullopt;
 		}
 
 		if (press2)
@@ -511,7 +525,7 @@ public:
 		else if (_touchId2)
 		{
 			_stateDS4.Report.sCurrentTouch.bIsUpTrackingNum2 = 0x80 | *_touchId2 & 0x7F;
-			_touchId2 = std::nullopt;
+			_touchId2 = nullopt;
 		}
 	}
 	virtual void update() override
@@ -532,9 +546,9 @@ private:
 	DS4_REPORT_EX _stateDS4;
 	uint8_t _touchPacket = 0;
 	uint8_t _nextTouchId = 1;
-	std::optional<uint8_t> _touchId1 = 0;
-	std::optional<uint8_t> _touchId2 = 0;
-	std::thread _pollDs4Thread;
+	optional<uint8_t> _touchId1 = 0;
+	optional<uint8_t> _touchId2 = 0;
+	thread _pollDs4Thread;
 };
 
 class PSHat

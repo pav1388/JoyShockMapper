@@ -3,6 +3,9 @@
 #include <regex>
 #include <cstring>
 
+const Mapping Mapping::NO_MAPPING = Mapping("NONE");
+function<bool(string_view)> Mapping::_isCommandValid = function<bool(string_view)>();
+
 ostream &operator<<(ostream &out, const Mapping &mapping)
 {
 	return out << (mapping._command.empty() ? mapping._description : mapping._command);
@@ -85,7 +88,7 @@ bool operator==(const Mapping &lhs, const Mapping &rhs)
 	return lhs.command() == rhs.command();
 }
 
-Mapping::Mapping(in_string mapping)
+Mapping::Mapping(string_view mapping)
 {
 	stringstream ss(mapping.data());
 	ss >> *this;
@@ -97,33 +100,33 @@ Mapping::Mapping(in_string mapping)
 
 void Mapping::ProcessEvent(BtnEvent evt, EventActionIf &button) const
 {
-	// COUT << button._id << " processes event " << evt << endl;
+	// COUT << button._id << " processes event " << evt << '\n';
 	auto entry = _eventMapping.find(evt);
 	if (entry != _eventMapping.end() && entry->second) // Skip over empty entries
 	{
 		switch (evt)
 		{
 		case BtnEvent::OnPress:
-			COUT << button.getDisplayName() << ": true" << endl;
+			COUT << button.getDisplayName() << ": true\n";
 			break;
 		case BtnEvent::OnRelease:
 		case BtnEvent::OnHoldRelease:
-			COUT << button.getDisplayName() << ": false" << endl;
+			COUT << button.getDisplayName() << ": false\n";
 			break;
 		case BtnEvent::OnTap:
-			COUT << button.getDisplayName() << ": tapped" << endl;
+			COUT << button.getDisplayName() << ": tapped\n";
 			break;
 		case BtnEvent::OnHold:
-			COUT << button.getDisplayName() << ": held" << endl;
+			COUT << button.getDisplayName() << ": held\n";
 			break;
 		case BtnEvent::OnTurbo:
-			COUT << button.getDisplayName() << ": turbo" << endl;
+			COUT << button.getDisplayName() << ": turbo\n";
 			break;
 		}
 
 		if (entry->second)
 		{
-			// DEBUG_LOG << button.getDisplayName() << " processes event " << evt << endl;
+			// DEBUG_LOG << button.getDisplayName() << " processes event " << evt << '\n';
 			entry->second(&button);
 		}
 	}
@@ -160,7 +163,7 @@ bool Mapping::AddMapping(KeyCode key, EventModifier evtMod, ActionModifier actMo
 		_ASSERT_EXPR(Mapping::_isCommandValid, "You need to assign a function to this field. It should be a function that validates the command line.");
 		if (!Mapping::_isCommandValid(key.name))
 		{
-			COUT << "Error: \"" << key.name << "\" is not a valid command" << endl;
+			COUT << "Error: \"" << key.name << "\" is not a valid command\n";
 			return false;
 		}
 		apply = bind(&WriteToConsole, key.name);

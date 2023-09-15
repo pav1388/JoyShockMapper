@@ -9,7 +9,7 @@ static unsigned int _delegateID = 1;
 
 class JSMVariableBase
 {
-	public:
+public:
 	virtual ~JSMVariableBase() = default;
 
 	string_view label() const
@@ -17,7 +17,7 @@ class JSMVariableBase
 		return _label;
 	}
 
-	void updateLabel(in_string label)
+	void updateLabel(string_view label)
 	{
 		_label = label;
 	}
@@ -31,7 +31,7 @@ private:
 
 // JSMVariable is a wrapper class for an underlying variable of type T.
 // This class allows other parts of the code be notified of when it changes value.
-// It also has a default value defined at construction that can be assigned on Reset.
+// It also has a default value defined at construction that can be assigned on reset.
 // Finally it has a customizable filter function, to restrict possible values.
 // Setter functions return the object itself so they can be chained.
 template<typename T>
@@ -119,7 +119,7 @@ public:
 		return false;
 	}
 
-	// Reset the variable by assigning it its default value.
+	// reset the variable by assigning it its default value.
 	JSMVariable *reset() override
 	{
 		// Use operator to enable notification
@@ -161,7 +161,7 @@ public:
 	}
 };
 
-// A chorded variable alternate values depending on buttons enabling the chorded value
+// A chorded variable alternate values depending on _buttons enabling the chorded value
 template<typename T>
 class ChordedVariable : public JSMVariable<T>
 {
@@ -302,15 +302,38 @@ public:
 		}
 	}
 
-	// Obtain the Variable for a sim press if any.
-	const ComboMap *getSimMap(ButtonID simBtn) const
+	class SimMapIterator
 	{
-		if (simBtn > ButtonID::NONE)
+		const map<ButtonID, JSMVariable<Mapping>> *_simListeners;
+		map<ButtonID, JSMVariable<Mapping>>::const_iterator _iter;
+
+	public:
+		SimMapIterator(const map<ButtonID, JSMVariable<Mapping>> &simListeners)
+		  : _simListeners(&simListeners)
+		  , _iter(_simListeners->begin())
 		{
-			auto existingSim = _simMappings.find(simBtn);
-			return existingSim != _simMappings.cend() ? &*existingSim : nullptr;
 		}
-		return nullptr;
+
+		operator bool() const
+		{
+			return _iter != _simListeners->cend();
+		}
+
+		void operator++()
+		{
+			_iter++;
+		}
+
+		const ComboMap *operator->() const
+		{
+			return &*_iter;
+		}
+	};
+
+	// Obtain the Variable for a sim press if any.
+	SimMapIterator getSimMapIter() const
+	{
+		return SimMapIterator(_simMappings);
 	}
 
 	// Double Press mappings are stored in the chorded variables
@@ -384,21 +407,21 @@ public:
 	// to be updated when this value changes.
 	JSMVariable<Mapping> *atSimPress(ButtonID chord)
 	{
-		auto existingSim = getSimMap(chord);
-		if (!existingSim)
+		auto existingSim = _simMappings.find(chord);
+		if (existingSim != _simMappings.end())
 		{
 			JSMVariable<Mapping> var(*this, Mapping());
 			_simMappings.emplace(chord, var);
 			_simListeners[chord] = _simMappings[chord].addOnChangeListener(
-			  bind(&SimPressCrossUpdate, chord, _id, placeholders::_1));
+			  bind(&updateSimPressPartner, chord, _id, placeholders::_1));
 		}
 		return &_simMappings[chord];
 	}
 
 	const JSMVariable<Mapping> *atSimPress(ButtonID chord) const
 	{
-		auto existingSim = getSimMap(chord);
-		return existingSim ? &existingSim->second : nullptr;
+		auto existingSim = _simMappings.find(chord);
+		return existingSim != _simMappings.end() ? &existingSim->second : nullptr;
 	}
 
 	void processChordRemoval(ButtonID chord, const JSMVariable<Mapping> *value)

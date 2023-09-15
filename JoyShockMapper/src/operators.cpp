@@ -22,11 +22,6 @@ static optional<float> getFloat(const string &str, size_t *newpos = nullptr)
 	}
 }
 
-ostream &operator<<(ostream &out, const KeyCode &code)
-{
-	return out << code.name;
-}
-
 istream &operator>>(istream &in, ButtonID &rhv)
 {
 	string s;
@@ -288,7 +283,7 @@ istream &operator>>(istream &in, Color &color)
 	if (in.peek() == 'x')
 	{
 		char pound;
-		in >> pound >> std::hex >> color.raw;
+		in >> pound >> hex >> color.raw;
 	}
 	else if (in.peek() >= 'A' && in.peek() <= 'Z')
 	{

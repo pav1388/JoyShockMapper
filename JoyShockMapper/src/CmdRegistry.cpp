@@ -8,7 +8,7 @@
 #include <string>
 #include <fstream>
 
-JSMCommand::JSMCommand(in_string name)
+JSMCommand::JSMCommand(string_view name)
   : _parse()
   , _help("Enter README to bring up the user manual.")
   , _taskOnDestruction()
@@ -22,34 +22,34 @@ JSMCommand::~JSMCommand()
 		_taskOnDestruction(*this);
 }
 
-JSMCommand* JSMCommand::SetParser(ParseDelegate parserFunction)
+JSMCommand* JSMCommand::setParser(ParseDelegate parserFunction)
 {
 	_parse = parserFunction;
 	return this;
 }
 
-JSMCommand* JSMCommand::SetHelp(in_string commandDescription)
+JSMCommand* JSMCommand::setHelp(string_view commandDescription)
 {
 	_help = commandDescription;
 	return this;
 }
 
-unique_ptr<JSMCommand> JSMCommand::GetModifiedCmd(char op, in_string chord)
+unique_ptr<JSMCommand> JSMCommand::getModifiedCmd(char op, string_view chord)
 {
 	return nullptr;
 }
 
-bool JSMCommand::ParseData(in_string arguments, in_string label)
+bool JSMCommand::parseData(string_view arguments, string_view label)
 {
 	_ASSERT_EXPR(_parse, L"There is no function defined to parse this command.");
 	if (arguments.compare("HELP") == 0)
 	{
 		// Parsing has failed. Show help.
-		COUT << _help << endl;
+		COUT << _help << '\n';
 	}
 	else if (!_parse(this, arguments, label))
 	{
-		CERR << _help << endl;
+		CERR << _help << '\n';
 	}
 	return true; // Command is completely processed
 }
@@ -74,12 +74,12 @@ bool CmdRegistry::loadConfigFile(string fileName)
 	ifstream file(fileName);
 	if (!file.is_open())
 	{
-		file.open(std::string{ BASE_JSM_CONFIG_FOLDER() } + fileName);
+		file.open(string{ BASE_JSM_CONFIG_FOLDER() } + fileName);
 	}
 	if (file)
 	{
 		COUT << "Loading commands from file ";
-		COUT_INFO << fileName << endl;
+		COUT_INFO << fileName << '\n';
 		// https://stackoverflow.com/questions/6892754/creating-a-simple-configuration-file-and-parser-in-c
 		string line;
 		while (getline(file, line))
@@ -92,7 +92,7 @@ bool CmdRegistry::loadConfigFile(string fileName)
 	return false;
 }
 
-string_view CmdRegistry::strtrim(std::string_view str)
+string_view CmdRegistry::strtrim(string_view str)
 {
 	if (str.empty())
 		return {};
@@ -130,7 +130,7 @@ bool CmdRegistry::add(JSMCommand* newCommand)
 	return false;
 }
 
-bool CmdRegistry::Remove(in_string name)
+bool CmdRegistry::Remove(string_view name)
 {
 	// If I allow multiple commands with the same name, I should have a way to specify which one I want to remove.
 	CmdMap::iterator cmd = find_if(_registry.begin(), _registry.end(), bind(&CmdRegistry::findCommandWithName, name, placeholders::_1));
@@ -142,12 +142,12 @@ bool CmdRegistry::Remove(in_string name)
 	return false;
 }
 
-bool CmdRegistry::findCommandWithName(in_string name, const CmdMap::value_type& pair)
+bool CmdRegistry::findCommandWithName(string_view name, const CmdMap::value_type& pair)
 {
 	return name == pair.first;
 }
 
-bool CmdRegistry::isCommandValid(in_string line) const
+bool CmdRegistry::isCommandValid(string_view line) const
 {
 	ifstream file(line.data());
 	if (file.is_open())
@@ -183,7 +183,7 @@ bool CmdRegistry::isCommandValid(in_string line) const
 
 void CmdRegistry::processLine(const string& line)
 {
-	auto trimmedLine = std::string{ strtrim(line) };
+	auto trimmedLine = string{ strtrim(line) };
 
 	if (!trimmedLine.empty() && trimmedLine.front() != '#' && !loadConfigFile(trimmedLine))
 	{
@@ -193,7 +193,7 @@ void CmdRegistry::processLine(const string& line)
 		// Break up the line of text in its relevant parts.
 		// Pro tip: use regex101.com to develop these beautiful monstrosities. :P
 		// Also, use raw strings R"(...)" to avoid the need to escape characters
-		// I dislike having to code in exception for + and - buttons not being \w characters
+		// I dislike having to code in exception for + and - _buttons not being \w characters
 		if (regex_match(trimmedLine, results, regex(R"(^\s*([+-]?\w*)\s*([,+]\s*([+-]?\w*))?\s*([^#\n]*)(#\s*(.*))?$)")))
 		{
 			if (results[2].length() > 0)
@@ -217,14 +217,14 @@ void CmdRegistry::processLine(const string& line)
 		{
 			if (combo.empty())
 			{
-				hasProcessed |= cmd->second->ParseData(arguments, label);
+				hasProcessed |= cmd->second->parseData(arguments, label);
 			}
 			else
 			{
-				auto modCommand = cmd->second->GetModifiedCmd(op, combo);
+				auto modCommand = cmd->second->getModifiedCmd(op, combo);
 				if (modCommand)
 				{
-					hasProcessed |= modCommand->ParseData(arguments, label);
+					hasProcessed |= modCommand->parseData(arguments, label);
 				}
 				// Any task set to be run on destruction is done here.
 			}
@@ -235,7 +235,7 @@ void CmdRegistry::processLine(const string& line)
 		{
 			CERR << "Unrecognized command: \"" << trimmedLine << "\"\nEnter ";
 			COUT_INFO << "HELP";
-			CERR << " to display all commands." << endl;
+			CERR << " to display all commands.\n";
 		}
 	}
 	// else ignore empty lines
@@ -249,22 +249,22 @@ void CmdRegistry::GetCommandList(vector<string_view>& outList) const
 	return;
 }
 
-bool CmdRegistry::hasCommand(in_string name) const
+bool CmdRegistry::hasCommand(string_view name) const
 {
 	return _registry.find(name) != _registry.end();
 }
 
-string_view CmdRegistry::GetHelp(in_string command) const
+string_view CmdRegistry::GetHelp(string_view command) const
 {
 	auto cmd = _registry.find(command);
 	if (cmd != _registry.end())
 	{
-		return cmd->second->Help();
+		return cmd->second->help();
 	}
 	return "";
 }
 
-bool JSMMacro::DefaultParser(JSMCommand* cmd, in_string arguments, in_string label)
+bool JSMMacro::DefaultParser(JSMCommand* cmd, string_view arguments, string_view label)
 {
 	// Default macro parser assumes no argument and calls macro when called.
 	auto macroCmd = static_cast<JSMMacro*>(cmd);
@@ -272,19 +272,19 @@ bool JSMMacro::DefaultParser(JSMCommand* cmd, in_string arguments, in_string lab
 	_ASSERT_EXPR(macroCmd->_macro, L"No Macro was set for this command.");
 	if (!macroCmd->_macro(macroCmd, arguments) && !macroCmd->_help.empty())
 	{
-		COUT << macroCmd->_help << endl;
+		COUT << macroCmd->_help << '\n';
 		COUT << "The "; // Parsing has failed. Show help.
 		COUT_INFO << "README";
-		COUT << " command can lead you to further details on this command." << endl;
+		COUT << " command can lead you to further details on this command.\n";
 	}
 	return true;
 }
 
-JSMMacro::JSMMacro(in_string name)
+JSMMacro::JSMMacro(string_view name)
   : JSMCommand(name)
   , _macro()
 {
-	SetParser(&DefaultParser);
+	setParser(&DefaultParser);
 }
 
 JSMMacro* JSMMacro::SetMacro(MacroDelegate macroFunction)

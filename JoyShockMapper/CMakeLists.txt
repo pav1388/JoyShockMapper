@@ -26,6 +26,7 @@ add_executable (
     src/AutoLoad.cpp
     src/SettingsManager.cpp
     src/Stick.cpp
+    src/JoyShock.cpp
     include/TriggerEffectGenerator.h
     include/InputHelpers.h
     include/PlatformDefinitions.h
@@ -45,6 +46,7 @@ add_executable (
     include/AutoLoad.h
     include/SettingsManager.h
     include/Stick.h
+    include/JoyShock.h
 )
 
 if (WINDOWS)

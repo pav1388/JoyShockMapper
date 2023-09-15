@@ -5,15 +5,9 @@ class MotionImpl : public MotionIf
 {
 	GamepadMotion gamepadMotion;
 public:
-	MotionImpl()
-	  : gamepadMotion()
-	{
-	}
+	MotionImpl() = default;
 	
-	virtual ~MotionImpl()
-	{
-
-	}
+	virtual ~MotionImpl() = default;
 	
 	virtual void reset() override 
 	{
