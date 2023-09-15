@@ -2,7 +2,7 @@
 #include "InputHelpers.h"
 #include "JSMVariable.hpp"
 #include "imgui_impl_sdl2.h"
-#include "imgui_impl_sdlrenderer.h"
+#include "imgui_impl_sdlrenderer2.h"
 #include "SettingsManager.h"
 #include "CmdRegistry.h"
 #include <regex>
@@ -188,19 +188,7 @@ void Application::BindingTab::drawButton(ButtonID btn, ImVec2 size)
 	}
 }
 
-void Application::run()
-{
-	threadDone = std::async([this]()
-	  { return DrawLoop(); });
-}
-
-void Application::StopLoop()
-{
-	done = true;
-	threadDone.get();
-}
-
-bool Application::DrawLoop()
+void Application::init()
 {
 	// Setup window
 	SDL_WindowFlags window_flags = (SDL_WindowFlags)(SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI); //  | SDL_WINDOW_BORDERLESS | SDL_WINDOW_FULLSCREEN_DESKTOP
@@ -228,7 +216,7 @@ bool Application::DrawLoop()
 
 	// Setup Platform/Renderer backends
 	ImGui_ImplSDL2_InitForSDLRenderer(window, renderer);
-	ImGui_ImplSDLRenderer_Init(renderer);
+	ImGui_ImplSDLRenderer2_Init(renderer);
 
 	// Load Fonts
 	// - If no fonts are loaded, dear imgui will use the default font. You can also load multiple fonts and use PushFont()/PopFont() to select them.
@@ -248,8 +236,8 @@ bool Application::DrawLoop()
 
 	GetIO().ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 
-	SDL_Surface* image = SDL_LoadBMP("ds4.bmp");
-	SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, image);
+	image = SDL_LoadBMP("ds4.bmp");
+	texture = SDL_CreateTextureFromSurface(renderer, image);
 
 	// Add window transparency
 	// MakeWindowTransparent(window, RGB(Uint8(clear_color.x * 255), Uint8(clear_color.y * 255), Uint8(clear_color.z * 255)), Uint8(clear_color.w * 255));
@@ -262,327 +250,12 @@ bool Application::DrawLoop()
 	SDL_SetEventFilter([](void* userdata, SDL_Event* evt) -> int
 	  { return evt->type >= SDL_JOYAXISMOTION && evt->type <= SDL_CONTROLLERSENSORUPDATE ? FALSE : TRUE; },
 	  nullptr);
-	// Main loop
-	while (!done)
-	{
-		// Poll and handle events (inputs, window resize, etc.)
-		// You can read the io.WantCaptureMouse, io.WantCaptureKeyboard flags to tell if dear imgui wants to use your inputs.
-		// - When io.WantCaptureMouse is true, do not dispatch mouse input data to your main application, or clear/overwrite your copy of the mouse data.
-		// - When io.WantCaptureKeyboard is true, do not dispatch keyboard input data to your main application, or clear/overwrite your copy of the keyboard data.
-		// Generally you may always pass all inputs to dear imgui, and hide them from your application based on those two flags.
-		SDL_Event event;
-		while (!done && SDL_PollEvent(&event) != 0)
-		{
-			ImGui_ImplSDL2_ProcessEvent(&event);
-			if (event.type == SDL_QUIT)
-				done = true;
-			if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_CLOSE && event.window.windowID == SDL_GetWindowID(window))
-				done = true;
-		}
+}
 
-		if (done)
-			break;
-
-		auto& style = GetStyle();
-		style.Alpha = 1.0f;
-
-		// Start the Dear ImGui frame
-		ImGui_ImplSDLRenderer_NewFrame();
-		ImGui_ImplSDL2_NewFrame();
-		NewFrame();
-
-		PushStyleColor(ImGuiCol_WindowBg, { 0.f, 0.f, 0.f, 0.f });
-		DockSpaceOverViewport(GetMainViewport(), ImGuiDockNodeFlags_PassthruCentralNode);
-		PopStyleColor();
-
-		// 1. Show the big demo window (Most of the sample code is in ShowDemoWindow()! You can browse its code to learn more about Dear ImGui!).
-		if (show_demo_window)
-			ShowDemoWindow(&show_demo_window);
-
-		// 2. Show a simple window that we create ourselves. We use a Begin/End pair to create a named window.
-		// static float f = 0.0f;
-		using namespace ImGui;
-		static bool openUsingTheGui = false;
-		if (BeginMainMenuBar())
-		{
-			if (BeginMenu("File"))
-			{
-				if (MenuItem("New", "CTRL+N", nullptr, false))
-				{
-				}
-				if (MenuItem("Open", "CTRL+O", nullptr, false))
-				{
-				}
-				if (MenuItem("Save", "CTRL+S", nullptr, false))
-				{
-				}
-				if (MenuItem("Save As...", "SHIFT+CTRL+S", nullptr, false))
-				{
-				}
-				Separator();
-				if (MenuItem("On Startup"))
-				{
-					WriteToConsole("OnStartup.txt");
-				}
-				if (MenuItem("On Reset"))
-				{
-					WriteToConsole("OnReset.txt");
-				}
-				if (BeginMenu("Templates"))
-				{
-					string gyroConfigsFolder{ GYRO_CONFIGS_FOLDER() };
-					for (auto file : ListDirectory(gyroConfigsFolder.c_str()))
-					{
-						string fullPathName = ".\\GyroConfigs\\" + file;
-						auto noext = file.substr(0, file.find_last_of('.'));
-						if (MenuItem(noext.c_str()))
-						{
-							WriteToConsole(string(fullPathName.begin(), fullPathName.end()));
-							SettingsManager::getV<Switch>(SettingID::AUTOLOAD)->set(Switch::OFF);
-						}
-					}
-					EndMenu();
-				}
-				if (BeginMenu("AutoLoad"))
-				{
-					string autoloadFolder{ AUTOLOAD_FOLDER() };
-					for (auto file : ListDirectory(autoloadFolder.c_str()))
-					{
-						string fullPathName = ".\\AutoLoad\\" + file;
-						auto noext = file.substr(0, file.find_last_of('.'));
-						if (MenuItem(noext.c_str()))
-						{
-							WriteToConsole(string(fullPathName.begin(), fullPathName.end()));
-							SettingsManager::getV<Switch>(SettingID::AUTOLOAD)->set(Switch::OFF);
-						}
-					}
-					EndMenu();
-				}
-				Separator();
-				if (MenuItem("Quit"))
-				{
-					done = true;
-				}
-				EndMenu();
-			}
-			if (BeginMenu("Commands"))
-			{
-				static bool mergeJoycons = true;
-				if (MenuItem("Reconnect Controllers"))
-				{
-					if (mergeJoycons)
-						WriteToConsole("RECONNECT_CONTROLLERS MERGE");
-					else
-						WriteToConsole("RECONNECT_CONTROLLERS SPLIT");
-				}
-				HelpMarker("RECONNECT_CONTROLLERS");
-
-				Checkbox("Merge Joycons", &mergeJoycons);
-				HelpMarker("If checked, complimentary joycons will be consider two parts of a single controller");
-
-				if (MenuItem("Reset Mappings"))
-				{
-					WriteToConsole("RESET_MAPPINGS");
-				}
-				HelpMarker("RESET_MAPPINGS");
-
-				Separator();
-
-				static float duration = 3.f;
-				SliderFloat("Calibration duration", &duration, 0.5f, 5.0f);
-				if (MenuItem("Calibrate All Controllers"))
-				{
-					auto t = std::thread([]()
-					  {
-							WriteToConsole("RESTART_GYRO_CALIBRATION");
-							int32_t ms = duration * 1000.f;
-							Sleep(ms); // ms
-							WriteToConsole("FINISH_GYRO_CALIBRATION"); });
-					t.detach();
-				}
-				HelpMarker("RESTART_GYRO_CALIBRATION");
-
-				auto autocalibrateSetting = SettingsManager::getV<Switch>(SettingID::AUTO_CALIBRATE_GYRO);
-				bool value = autocalibrateSetting->value() == Switch::ON;
-				if (Checkbox("AUTO_CALIBRATE_GYRO", &value))
-				{
-					autocalibrateSetting->set(value ? Switch::ON : Switch::OFF);
-				}
-				HelpMarker("AUTO_CALIBRATE_GYRO");
-
-				if (MenuItem("Calculate Real World Calibration"))
-				{
-					WriteToConsole("CALCULATE_REAL_WORLD_CALIBRATION");
-				}
-				HelpMarker("CALCULATE_REAL_WORLD_CALIBRATION");
-
-				if (MenuItem("Set Motion Stick Center"))
-				{
-					WriteToConsole("SET_MOTION_STICK_NEUTRAL");
-				}
-				HelpMarker("SET_MOTION_STICK_NEUTRAL");
-
-				if (MenuItem("Calibrate adaptive Triggers"))
-				{
-					WriteToConsole("CALIBRATE_TRIGGERS");
-					ShowConsole();
-				}
-				HelpMarker("CALIBRATE_TRIGGERS");
-
-				Separator();
-
-				static bool whitelistAdd = false;
-				if (Checkbox("Add to whitelister application", &whitelistAdd))
-				{
-					if (whitelistAdd)
-						WriteToConsole("WHITELIST_ADD");
-					else
-						WriteToConsole("WHITELIST_REMOVE");
-				}
-				HelpMarker("WHITELIST_ADD");
-
-				if (MenuItem("Show whitelister"))
-				{
-					WriteToConsole("WHITELIST_SHOW");
-				}
-				HelpMarker("WHITELIST_SHOW");
-				EndMenu();
-			}
-			if (BeginMenu("Settings"))
-			{
-				// TODO: HIDE_MINIMIZED
-				auto tickTime = SettingsManager::getV<float>(SettingID::TICK_TIME);
-				float tt = tickTime->value();
-				if (InputFloat(enum_name(SettingID::TICK_TIME).data(), &tt, 0.f, 0.f, "%.3f", ImGuiInputTextFlags_EnterReturnsTrue))
-				{
-					tickTime->set(tt);
-				}
-				HelpMarker(enum_name(SettingID::TICK_TIME).data());
-
-				string dir = SettingsManager::getV<PathString>(SettingID::JSM_DIRECTORY)->value();
-				dir.resize(256, '\0');
-				if (InputText("JSM_DIRECTORY", dir.data(), dir.size(), ImGuiInputTextFlags_EnterReturnsTrue))
-				{
-					dir.resize(strlen(dir.c_str()));
-					SettingsManager::getV<PathString>(SettingID::JSM_DIRECTORY)->set(dir);
-				}
-				HelpMarker("JSM_DIRECTORY");
-
-				drawCombo<ControllerScheme>(SettingID::VIRTUAL_CONTROLLER, 0, "VIRTUAL_CONTROLLER");
-				HelpMarker("VIRTUAL_CONTROLLER");
-
-				auto rumbleEnable = SettingsManager::get<Switch>(SettingID::RUMBLE);
-				bool value = rumbleEnable->value() == Switch::ON;
-				if (Checkbox("RUMBLE", &value))
-				{
-					rumbleEnable->set(value ? Switch::ON : Switch::OFF);
-				}
-				HelpMarker("RUMBLE");
-
-				auto adaptiveTriggers = SettingsManager::get<Switch>(SettingID::ADAPTIVE_TRIGGER);
-				value = rumbleEnable->value() == Switch::ON;
-				if (Checkbox("ADAPTIVE_TRIGGER", &value))
-				{
-					adaptiveTriggers->set(value ? Switch::ON : Switch::OFF);
-				}
-				HelpMarker("ADAPTIVE_TRIGGER");
-
-				auto autoload = SettingsManager::getV<Switch>(SettingID::AUTOLOAD);
-				bool al = autoload->value() == Switch::ON;
-				if (Checkbox(enum_name(SettingID::AUTOLOAD).data(), &al))
-				{
-					autoload->set(al ? Switch::ON : Switch::OFF);
-				}
-				HelpMarker(enum_name(SettingID::AUTOLOAD).data());
-
-				float rwc = *SettingsManager::get<float>(SettingID::REAL_WORLD_CALIBRATION);
-				if (InputFloat("REAL_WORLD_CALIBRATION", &rwc, 0.f, 0.f, "%.3f", ImGuiInputTextFlags_EnterReturnsTrue))
-				{
-					SettingsManager::get<float>(SettingID::REAL_WORLD_CALIBRATION)->set(rwc);
-				}
-				HelpMarker(enum_name(SettingID::REAL_WORLD_CALIBRATION).data());
-
-				float igs = *SettingsManager::get<float>(SettingID::IN_GAME_SENS);
-				if (InputFloat("IN_GAME_SENS", &rwc, 0.f, 0.f, "%.3f", ImGuiInputTextFlags_EnterReturnsTrue))
-				{
-					SettingsManager::get<float>(SettingID::IN_GAME_SENS)->set(igs);
-				}
-				HelpMarker(enum_name(SettingID::IN_GAME_SENS).data());
-
-				EndMenu();
-			}
-			if (BeginMenu("Debug"))
-			{
-				Checkbox("Show ImGui demo", &show_demo_window);
-				MenuItem("Record a bug", nullptr, false, false);
-				EndMenu();
-			}
-			if (BeginMenu("Help"))
-			{
-				if (MenuItem("Using the GUI"))
-				{
-					openUsingTheGui = true;
-					
-				}
-				MenuItem("Read Me", nullptr, false, false);
-				MenuItem("Check For Updates", nullptr, false, false);
-				MenuItem("About", nullptr, false, false);
-				EndMenu();
-			}
-			EndMainMenuBar();
-		}
-
-		if (openUsingTheGui)
-		{
-			OpenPopup("Using The GUI");
-			openUsingTheGui = false;
-		}
-		if (BeginPopup("Using The GUI", ImGuiWindowFlags_Modal))
-		{
-			BulletText("Left click to change the mapping or setting value");
-			BulletText("Right click to see more settings related to the button or setting");
-			BulletText("Middle Click to open a layer when the button is pressed");
-			if (Button("OK"))
-			{
-				CloseCurrentPopup();
-			}
-			EndPopup();
-		}
-
-		ImVec2 renderingAreaPos;
-		ImVec2 renderingAreaSize;
-		Begin("MainWindow", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar);
-
-		bool showBackground = BeginTabBar("BindingsTab");
-		for (auto& bindingTab : _tabs)
-		{
-			bindingTab.draw(renderingAreaPos, renderingAreaSize);
-		}
-		EndTabBar(); // BindingsTab
-		End();       // MainWindow
-
-		SDL_Rect bgDims{
-			renderingAreaPos.x,
-			renderingAreaPos.y,
-			renderingAreaSize.x,
-			renderingAreaSize.y
-		};
-
-		ImVec2 upLeft{ float(bgDims.x), float(bgDims.y) };
-		ImVec2 lowRight{ float(bgDims.x + bgDims.w), float(bgDims.y + bgDims.h) };
-		GetBackgroundDrawList()->AddImage(texture, upLeft, lowRight);
-
-		// Rendering
-		SDL_RenderClear(renderer);
-		Render();
-		SDL_SetTextureBlendMode(texture, SDL_BlendMode::SDL_BLENDMODE_BLEND);
-		SDL_RenderCopy(renderer, texture, nullptr, &bgDims);
-		ImGui_ImplSDLRenderer_RenderDrawData(GetDrawData());
-		SDL_RenderPresent(renderer);
-	}
-
+void Application::cleanUp()
+{
 	// Cleanup
-	ImGui_ImplSDLRenderer_Shutdown();
+	ImGui_ImplSDLRenderer2_Shutdown();
 	ImGui_ImplSDL2_Shutdown();
 	DestroyContext();
 
@@ -590,10 +263,325 @@ bool Application::DrawLoop()
 	SDL_FreeSurface(image);
 	SDL_DestroyRenderer(renderer);
 	SDL_DestroyWindow(window);
+}
 
-	WriteToConsole("QUIT");
+void Application::draw()
+{
+	// Poll and handle events (inputs, window resize, etc.)
+	// You can read the io.WantCaptureMouse, io.WantCaptureKeyboard flags to tell if dear imgui wants to use your inputs.
+	// - When io.WantCaptureMouse is true, do not dispatch mouse input data to your main application, or clear/overwrite your copy of the mouse data.
+	// - When io.WantCaptureKeyboard is true, do not dispatch keyboard input data to your main application, or clear/overwrite your copy of the keyboard data.
+	// Generally you may always pass all inputs to dear imgui, and hide them from your application based on those two flags.
+	SDL_Event event;
+	bool done = false;
+	while (!done && SDL_PollEvent(&event) != 0)
+	{
+		ImGui_ImplSDL2_ProcessEvent(&event);
+		if (event.type == SDL_QUIT)
+			done = true;
+		if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_CLOSE && event.window.windowID == SDL_GetWindowID(window))
+			done = true;
+	}
 
-	return done;
+	if (done)
+		WriteToConsole("QUIT");
+
+	auto& style = GetStyle();
+	style.Alpha = 1.0f;
+
+	// Start the Dear ImGui frame
+	ImGui_ImplSDLRenderer2_NewFrame();
+	ImGui_ImplSDL2_NewFrame();
+	NewFrame();
+
+	PushStyleColor(ImGuiCol_WindowBg, { 0.f, 0.f, 0.f, 0.f });
+	DockSpaceOverViewport(GetMainViewport(), ImGuiDockNodeFlags_PassthruCentralNode);
+	PopStyleColor();
+
+	// 1. Show the big demo window (Most of the sample code is in ShowDemoWindow()! You can browse its code to learn more about Dear ImGui!).
+	if (show_demo_window)
+		ShowDemoWindow(&show_demo_window);
+
+	// 2. Show a simple window that we create ourselves. We use a Begin/End pair to create a named window.
+	// static float f = 0.0f;
+	using namespace ImGui;
+	static bool openUsingTheGui = false;
+	if (BeginMainMenuBar())
+	{
+		if (BeginMenu("File"))
+		{
+			if (MenuItem("New", "CTRL+N", nullptr, false))
+			{
+			}
+			if (MenuItem("Open", "CTRL+O", nullptr, false))
+			{
+			}
+			if (MenuItem("Save", "CTRL+S", nullptr, false))
+			{
+			}
+			if (MenuItem("Save As...", "SHIFT+CTRL+S", nullptr, false))
+			{
+			}
+			Separator();
+			if (MenuItem("On Startup"))
+			{
+				WriteToConsole("OnStartup.txt");
+			}
+			if (MenuItem("On Reset"))
+			{
+				WriteToConsole("OnReset.txt");
+			}
+			if (BeginMenu("Templates"))
+			{
+				string gyroConfigsFolder{ GYRO_CONFIGS_FOLDER() };
+				for (auto file : ListDirectory(gyroConfigsFolder.c_str()))
+				{
+					string fullPathName = ".\\GyroConfigs\\" + file;
+					auto noext = file.substr(0, file.find_last_of('.'));
+					if (MenuItem(noext.c_str()))
+					{
+						WriteToConsole(string(fullPathName.begin(), fullPathName.end()));
+						SettingsManager::getV<Switch>(SettingID::AUTOLOAD)->set(Switch::OFF);
+					}
+				}
+				EndMenu();
+			}
+			if (BeginMenu("AutoLoad"))
+			{
+				string autoloadFolder{ AUTOLOAD_FOLDER() };
+				for (auto file : ListDirectory(autoloadFolder.c_str()))
+				{
+					string fullPathName = ".\\AutoLoad\\" + file;
+					auto noext = file.substr(0, file.find_last_of('.'));
+					if (MenuItem(noext.c_str()))
+					{
+						WriteToConsole(string(fullPathName.begin(), fullPathName.end()));
+						SettingsManager::getV<Switch>(SettingID::AUTOLOAD)->set(Switch::OFF);
+					}
+				}
+				EndMenu();
+			}
+			Separator();
+			if (MenuItem("Quit"))
+			{
+				done = true;
+			}
+			EndMenu();
+		}
+		if (BeginMenu("Commands"))
+		{
+			static bool mergeJoycons = true;
+			if (MenuItem("Reconnect Controllers"))
+			{
+				if (mergeJoycons)
+					WriteToConsole("RECONNECT_CONTROLLERS MERGE");
+				else
+					WriteToConsole("RECONNECT_CONTROLLERS SPLIT");
+			}
+			HelpMarker("RECONNECT_CONTROLLERS");
+
+			Checkbox("Merge Joycons", &mergeJoycons);
+			HelpMarker("If checked, complimentary joycons will be consider two parts of a single controller");
+
+			if (MenuItem("Reset Mappings"))
+			{
+				WriteToConsole("RESET_MAPPINGS");
+			}
+			HelpMarker("RESET_MAPPINGS");
+
+			Separator();
+
+			static float duration = 3.f;
+			SliderFloat("Calibration duration", &duration, 0.5f, 5.0f);
+			if (MenuItem("Calibrate All Controllers"))
+			{
+				auto t = std::thread([]()
+					{
+						WriteToConsole("RESTART_GYRO_CALIBRATION");
+						int32_t ms = duration * 1000.f;
+						Sleep(ms); // ms
+						WriteToConsole("FINISH_GYRO_CALIBRATION"); });
+				t.detach();
+			}
+			HelpMarker("RESTART_GYRO_CALIBRATION");
+
+			auto autocalibrateSetting = SettingsManager::getV<Switch>(SettingID::AUTO_CALIBRATE_GYRO);
+			bool value = autocalibrateSetting->value() == Switch::ON;
+			if (Checkbox("AUTO_CALIBRATE_GYRO", &value))
+			{
+				autocalibrateSetting->set(value ? Switch::ON : Switch::OFF);
+			}
+			HelpMarker("AUTO_CALIBRATE_GYRO");
+
+			if (MenuItem("Calculate Real World Calibration"))
+			{
+				WriteToConsole("CALCULATE_REAL_WORLD_CALIBRATION");
+			}
+			HelpMarker("CALCULATE_REAL_WORLD_CALIBRATION");
+
+			if (MenuItem("Set Motion Stick Center"))
+			{
+				WriteToConsole("SET_MOTION_STICK_NEUTRAL");
+			}
+			HelpMarker("SET_MOTION_STICK_NEUTRAL");
+
+			if (MenuItem("Calibrate adaptive Triggers"))
+			{
+				WriteToConsole("CALIBRATE_TRIGGERS");
+				ShowConsole();
+			}
+			HelpMarker("CALIBRATE_TRIGGERS");
+
+			Separator();
+
+			static bool whitelistAdd = false;
+			if (Checkbox("Add to whitelister application", &whitelistAdd))
+			{
+				if (whitelistAdd)
+					WriteToConsole("WHITELIST_ADD");
+				else
+					WriteToConsole("WHITELIST_REMOVE");
+			}
+			HelpMarker("WHITELIST_ADD");
+
+			if (MenuItem("Show whitelister"))
+			{
+				WriteToConsole("WHITELIST_SHOW");
+			}
+			HelpMarker("WHITELIST_SHOW");
+			EndMenu();
+		}
+		if (BeginMenu("Settings"))
+		{
+			// TODO: HIDE_MINIMIZED
+			auto tickTime = SettingsManager::getV<float>(SettingID::TICK_TIME);
+			float tt = tickTime->value();
+			if (InputFloat(enum_name(SettingID::TICK_TIME).data(), &tt, 0.f, 0.f, "%.3f", ImGuiInputTextFlags_EnterReturnsTrue))
+			{
+				tickTime->set(tt);
+			}
+			HelpMarker(enum_name(SettingID::TICK_TIME).data());
+
+			string dir = SettingsManager::getV<PathString>(SettingID::JSM_DIRECTORY)->value();
+			dir.resize(256, '\0');
+			if (InputText("JSM_DIRECTORY", dir.data(), dir.size(), ImGuiInputTextFlags_EnterReturnsTrue))
+			{
+				dir.resize(strlen(dir.c_str()));
+				SettingsManager::getV<PathString>(SettingID::JSM_DIRECTORY)->set(dir);
+			}
+			HelpMarker("JSM_DIRECTORY");
+
+			drawCombo<ControllerScheme>(SettingID::VIRTUAL_CONTROLLER, 0, "VIRTUAL_CONTROLLER");
+			HelpMarker("VIRTUAL_CONTROLLER");
+
+			auto rumbleEnable = SettingsManager::getV<Switch>(SettingID::RUMBLE);
+			bool value = rumbleEnable->value() == Switch::ON;
+			if (Checkbox("RUMBLE", &value))
+			{
+				rumbleEnable->set(value ? Switch::ON : Switch::OFF);
+			}
+			HelpMarker("RUMBLE");
+
+			auto adaptiveTriggers = SettingsManager::get<Switch>(SettingID::ADAPTIVE_TRIGGER);
+			value = rumbleEnable->value() == Switch::ON;
+			if (Checkbox("ADAPTIVE_TRIGGER", &value))
+			{
+				adaptiveTriggers->set(value ? Switch::ON : Switch::OFF);
+			}
+			HelpMarker("ADAPTIVE_TRIGGER");
+
+			auto autoload = SettingsManager::getV<Switch>(SettingID::AUTOLOAD);
+			bool al = autoload->value() == Switch::ON;
+			if (Checkbox(enum_name(SettingID::AUTOLOAD).data(), &al))
+			{
+				autoload->set(al ? Switch::ON : Switch::OFF);
+			}
+			HelpMarker(enum_name(SettingID::AUTOLOAD).data());
+
+			float rwc = *SettingsManager::get<float>(SettingID::REAL_WORLD_CALIBRATION);
+			if (InputFloat("REAL_WORLD_CALIBRATION", &rwc, 0.f, 0.f, "%.3f", ImGuiInputTextFlags_EnterReturnsTrue))
+			{
+				SettingsManager::get<float>(SettingID::REAL_WORLD_CALIBRATION)->set(rwc);
+			}
+			HelpMarker(enum_name(SettingID::REAL_WORLD_CALIBRATION).data());
+
+			float igs = *SettingsManager::get<float>(SettingID::IN_GAME_SENS);
+			if (InputFloat("IN_GAME_SENS", &rwc, 0.f, 0.f, "%.3f", ImGuiInputTextFlags_EnterReturnsTrue))
+			{
+				SettingsManager::get<float>(SettingID::IN_GAME_SENS)->set(igs);
+			}
+			HelpMarker(enum_name(SettingID::IN_GAME_SENS).data());
+
+			EndMenu();
+		}
+		if (BeginMenu("Debug"))
+		{
+			Checkbox("Show ImGui demo", &show_demo_window);
+			MenuItem("Record a bug", nullptr, false, false);
+			EndMenu();
+		}
+		if (BeginMenu("Help"))
+		{
+			if (MenuItem("Using the GUI"))
+			{
+				openUsingTheGui = true;
+					
+			}
+			MenuItem("Read Me", nullptr, false, false);
+			MenuItem("Check For Updates", nullptr, false, false);
+			MenuItem("About", nullptr, false, false);
+			EndMenu();
+		}
+		EndMainMenuBar();
+	}
+
+	if (openUsingTheGui)
+	{
+		OpenPopup("Using The GUI");
+		openUsingTheGui = false;
+	}
+	if (BeginPopup("Using The GUI", ImGuiWindowFlags_Modal))
+	{
+		BulletText("Left click to change the mapping or setting value");
+		BulletText("Right click to see more settings related to the button or setting");
+		BulletText("Middle Click to open a layer when the button is pressed");
+		if (Button("OK"))
+		{
+			CloseCurrentPopup();
+		}
+		EndPopup();
+	}
+
+	ImVec2 renderingAreaPos;
+	ImVec2 renderingAreaSize;
+	Begin("MainWindow", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar);
+
+	bool showBackground = BeginTabBar("BindingsTab");
+	for (auto& bindingTab : _tabs)
+	{
+		bindingTab.draw(renderingAreaPos, renderingAreaSize);
+	}
+	EndTabBar(); // BindingsTab
+	End();       // MainWindow
+
+	SDL_Rect bgDims{
+		renderingAreaPos.x,
+		renderingAreaPos.y,
+		renderingAreaSize.x,
+		renderingAreaSize.y
+	};
+
+	ImVec2 upLeft{ float(bgDims.x), float(bgDims.y) };
+	ImVec2 lowRight{ float(bgDims.x + bgDims.w), float(bgDims.y + bgDims.h) };
+	GetBackgroundDrawList()->AddImage(texture, upLeft, lowRight);
+
+	// Rendering
+	SDL_RenderClear(renderer);
+	Render();
+	SDL_SetTextureBlendMode(texture, SDL_BlendMode::SDL_BLENDMODE_BLEND);
+	SDL_RenderCopy(renderer, texture, nullptr, &bgDims);
+	ImGui_ImplSDLRenderer2_RenderDrawData(GetDrawData());
+	SDL_RenderPresent(renderer);
 }
 
 Application::BindingTab::BindingTab(string_view name, const CmdRegistry& cmds, ButtonID chord)

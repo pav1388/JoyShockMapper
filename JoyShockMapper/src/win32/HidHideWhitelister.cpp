@@ -5,7 +5,7 @@
 class HidHideWhitelister : public Whitelister
 {
 private:
-	std::wstring _fullImageName;
+	wstring _fullImageName;
 	DWORD _len;
 public:
 	HidHideWhitelister(bool add = false)
@@ -13,7 +13,7 @@ public:
 		, _fullImageName()
 		, _len( 256 )
 	{
-		std::wstring module(_len, '\0');
+		wstring module(_len, '\0');
 		if (!HidHide::Present() || QueryFullProcessImageName(GetCurrentProcess(), 0, &module[0], &_len) == FALSE)
 		{
 			_len = 0;
@@ -42,7 +42,7 @@ public:
 
 	virtual bool ShowConsole() override
 	{
-		std::cout << "Search for \"HidHide Configuration Client\" in your windows search bar." << std::endl;
+		cout << "Search for \"HidHide Configuration Client\" in your windows search bar.\n";
 		return true;
 	}
 

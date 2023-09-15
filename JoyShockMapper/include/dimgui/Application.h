@@ -22,11 +22,11 @@ public:
 
 	~Application() = default;
 
-	void run();
+	void init();
 
-	void StopLoop();
+	void cleanUp();
 
-	bool DrawLoop();
+	void draw();
 
 
 private:
@@ -55,9 +55,10 @@ private:
 	};
 	static const CmdRegistry *_cmds;
 	vector<BindingTab> _tabs;
-	atomic_bool done = false;
 	bool show_demo_window = false;
 	SDL_Window* window = nullptr;
 	SDL_Renderer* renderer = nullptr;
 	future<bool> threadDone;
+	SDL_Texture *texture = nullptr;
+	SDL_Surface *image = nullptr;
 };

@@ -29,11 +29,7 @@
 #include "TriggerEffectGenerator.h"
 #include <cstdint>
 
-namespace ExtendInput
-{
-namespace DataTools
-{
-namespace DualSense
+namespace ExtendInput::DataTools::DualSense
 {
 
 bool TriggerEffectGenerator::SimpleResistance(byte *destinationArray, int destinationIndex, byte start, byte force)
@@ -352,6 +348,4 @@ bool TriggerEffectGenerator::Machine(byte *destinationArray, int destinationInde
 	return reset(destinationArray, destinationIndex);
 }
 
-}
-}
 }

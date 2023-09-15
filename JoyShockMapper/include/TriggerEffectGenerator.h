@@ -86,7 +86,7 @@ public:
 	/// @returns The success of the effect write.
 	static bool SimpleSemiAutomaticGun(byte *destinationArray, int destinationIndex, byte start, byte end, byte force);
 
-	/// Reset effect data generator.
+	/// reset effect data generator.
 	/// This is used by libpad and is expected to be present in future DualSense firmware.
 	/// @param destinationArray The byte[] that receives the data.
 	/// @param destinationIndex A 32-bit integer that represents the index in the destinationArray at which storing begins.

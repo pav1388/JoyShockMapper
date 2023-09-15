@@ -14,77 +14,6 @@
 
 using namespace std; // simplify all std calls
 
-// input string parameters should be const references.
-typedef string_view in_string;
-
-// Reused OS typedefs
-typedef unsigned short WORD;
-typedef unsigned long DWORD;
-
-// https://docs.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes
-// Only use undefined keys from the above list for JSM custom commands
-constexpr WORD V_WHEEL_UP = 0x03;     // Here I intentionally overwride VK_CANCEL because breaking a process with a keybind is not something we want to do
-constexpr WORD V_WHEEL_DOWN = 0x07;   // I want all mouse bindings to be contiguous IDs for ease to distinguish
-constexpr WORD NO_HOLD_MAPPED = 0x0A; // Empty mapping, which is different form no mapping for combo presses
-constexpr WORD CALIBRATE = 0x0B;
-constexpr WORD GYRO_INV_X = 0x88;
-constexpr WORD GYRO_INV_Y = 0x89;
-constexpr WORD GYRO_INVERT = 0x8A;
-constexpr WORD GYRO_OFF_BIND = 0x8B; // Not to be confused with settings GYRO_ON and GYRO_OFF
-constexpr WORD GYRO_ON_BIND = 0x8C;  // Those here are bindings
-constexpr WORD GYRO_TRACK_X = 0x8D;
-constexpr WORD GYRO_TRACK_Y = 0x8E;
-constexpr WORD GYRO_TRACKBALL = 0x8F;
-constexpr WORD COMMAND_ACTION = 0x97; // Run command
-constexpr WORD RUMBLE = 0xE6;
-
-constexpr const char *SMALL_RUMBLE = "R0080";
-constexpr const char *BIG_RUMBLE = "RFF00";
-
-// XInput buttons
-constexpr WORD X_UP = 0xE8;
-constexpr WORD X_DOWN = 0xE9;
-constexpr WORD X_LEFT = 0xEA;
-constexpr WORD X_RIGHT = 0xEB;
-constexpr WORD X_LB = 0xEC;
-constexpr WORD X_RB = 0xED;
-constexpr WORD X_X = 0xEE;
-constexpr WORD X_A = 0xEF;
-constexpr WORD X_Y = 0xF0;
-constexpr WORD X_B = 0xF1;
-constexpr WORD X_LS = 0xF2;
-constexpr WORD X_RS = 0xF3;
-constexpr WORD X_BACK = 0xF4;
-constexpr WORD X_START = 0xF5;
-constexpr WORD X_GUIDE = 0xB8;
-constexpr WORD X_LT = 0xD8;
-constexpr WORD X_RT = 0xD9;
-
-// DS4 buttons
-constexpr WORD PS_UP = 0xE8;
-constexpr WORD PS_DOWN = 0xE9;
-constexpr WORD PS_LEFT = 0xEA;
-constexpr WORD PS_RIGHT = 0xEB;
-constexpr WORD PS_L1 = 0xEC;
-constexpr WORD PS_R1 = 0xED;
-constexpr WORD PS_SQUARE = 0xEE;
-constexpr WORD PS_CROSS = 0xEF;
-constexpr WORD PS_TRIANGLE = 0xF0;
-constexpr WORD PS_CIRCLE = 0xF1;
-constexpr WORD PS_L3 = 0xF2;
-constexpr WORD PS_R3 = 0xF3;
-constexpr WORD PS_SHARE = 0xF4;
-constexpr WORD PS_OPTIONS = 0xF5;
-constexpr WORD PS_HOME = 0xB8;
-constexpr WORD PS_PAD_CLICK = 0xB9;
-constexpr WORD PS_L2 = 0xD8;
-constexpr WORD PS_R2 = 0xD9;
-
-constexpr bool isControllerKey(WORD code)
-{
-	return (code >= X_UP && code <= X_START) || code == PS_HOME || code == PS_PAD_CLICK || code == X_LT || code == X_RT;
-}
-
 // All enums should have an INVALID field for proper use with templated << and >> operators
 
 enum class ButtonID
@@ -173,12 +102,13 @@ enum class ButtonID
 	// Add as necessary...
 };
 
-// Help strings for each button
+// help strings for each button
 extern const map<ButtonID, string> buttonHelpMap;
 
 enum class SettingID
 {
-	INVALID = 0,    // Represents an error in user input
+	INVALID = -1,
+	ZERO = 0,    // Represents an error in user input
 	MIN_GYRO_SENS,  // Legacy but int value not used
 	MAX_GYRO_SENS,
 	MIN_GYRO_THRESHOLD,
@@ -200,8 +130,8 @@ enum class SettingID
 	RIGHT_STICK_AXIS,
 	MOTION_STICK_AXIS,
 	TOUCH_STICK_AXIS,
-	STICK_AXIS_X,      // Legacy command
-	STICK_AXIS_Y,      // Legacy command
+	STICK_AXIS_X, // Legacy command
+	STICK_AXIS_Y, // Legacy command
 	GYRO_AXIS_X,
 	GYRO_AXIS_Y,
 	RECONNECT_CONTROLLERS,
@@ -296,6 +226,12 @@ enum class SettingID
 	HIDE_MINIMIZED,
 	AUTO_CALIBRATE_GYRO,
 	JSM_DIRECTORY,
+	RETURN_DEADZONE_IS_ACTIVE,
+	EDGE_PUSH_IS_ACTIVE,
+	STICKLIKE_FACTOR,
+	MOUSELIKE_FACTOR,
+	RETURN_DEADZONE_ANGLE,
+	RETURN_DEADZONE_ANGLE_CUTOFF,
 };
 
 // constexpr are like #define but with respect to typeness
@@ -346,6 +282,7 @@ enum class StickMode
 	OUTER_RING,
 	INNER_RING,
 	SCROLL_WHEEL,
+	HYBRID_AIM,
 	// Following requires virtual controller (keep them contiguous)
 	LEFT_STICK,
 	RIGHT_STICK,
@@ -442,10 +379,6 @@ enum class BtnEvent
 	OnTapRelease,
 	OnHoldRelease,
 	OnInstantRelease,
-	// Controller keys need to be updated on every tick, instead of on change
-	WhilePressed,
-	WhileHeld,
-	WhileTapping,
 	INVALID
 };
 enum class Switch : char
@@ -480,7 +413,7 @@ public:
 	  : string(path)
 	{
 	}
-	PathString(in_string path)
+	PathString(string_view path)
 	  : string(path)
 	{
 	}
@@ -504,36 +437,6 @@ union Color
 
 using AxisSignPair = pair<AxisMode, AxisMode>;
 
-// Needs to be accessed publicly
-extern WORD nameToKey(in_string name);
-
-struct KeyCode
-{
-	static const KeyCode EMPTY;
-
-	WORD code = NO_HOLD_MAPPED;
-	string name = "None";
-
-	KeyCode();
-
-	KeyCode(in_string keyName);
-
-	inline bool isValid()
-	{
-		return code != 0;
-	}
-
-	inline bool operator==(const KeyCode &rhs) const
-	{
-		return code == rhs.code && name == rhs.name;
-	}
-
-	inline bool operator!=(const KeyCode &rhs) const
-	{
-		return !operator==(rhs);
-	}
-};
-
 // Used for XY pair values such as sensitivity or GyroSample
 // that includes a nicer accessor
 struct FloatXY : public pair<float, float>
@@ -552,6 +455,13 @@ struct FloatXY : public pair<float, float>
 	{
 		return second;
 	}
+
+	FloatXY &operator+=(const FloatXY& rhs)
+	{
+		first += rhs.first;
+		second += rhs.second;
+		return *this;
+	}
 };
 
 // Set of gyro control settings bundled in one structure
@@ -566,7 +476,7 @@ class Mapping;
 
 // This function is defined in main.cpp. It enables two sim press variables to
 // listen to each other and make sure they both hold the same values.
-void SimPressCrossUpdate(ButtonID sim, ButtonID origin, const Mapping &newVal);
+void updateSimPressPartner(ButtonID sim, ButtonID origin, const Mapping &newVal);
 
 // This operator enables reading any enum from string
 template<class E, class = std::enable_if_t<std::is_enum<E>{}>>
@@ -583,14 +493,8 @@ istream &operator>>(istream &in, E &rhv)
 template<class E, class = std::enable_if_t<std::is_enum<E>{}>>
 ostream &operator<<(ostream &out, E rhv)
 {
-	out << magic_enum::enum_name(rhv);
-	return out;
+	return out << magic_enum::enum_name(rhv);
 }
-
-// The following operators enable reading and writing JSM's custom
-// types to and from string, or handles exceptions
-ostream &operator<<(ostream &out, const KeyCode &code);
-// operator >>() is nameToKey()?!?
 
 istream &operator>>(istream &in, ButtonID &rhv);
 ostream &operator<<(ostream &out, const ButtonID &rhv);
@@ -683,4 +587,4 @@ public:
 #define DEBUG_LOG Log(Log::Level::UT)._str
 #define COUT_BOLD Log(Log::Level::BOLD)._str
 
-bool do_RECONNECT_CONTROLLERS(in_string arguments);
+bool do_RECONNECT_CONTROLLERS(string_view arguments);

@@ -5,14 +5,14 @@
 
 void DigitalButton::Context::updateChordStack(bool isPressed, ButtonID id)
 {
-	if (id < ButtonID::SIZE || id >= ButtonID::T1) // Can't chord touch stick buttons
+	if (id < ButtonID::SIZE || id >= ButtonID::T1) // Can't chord touch stick _buttons
 	{
 		if (isPressed)
 		{
 			auto foundChord = find(chordStack.begin(), chordStack.end(), id);
 			if (foundChord == chordStack.end())
 			{
-				// COUT << "Button " << index << " is pressed!" << endl;
+				// COUT << "Button " << index << " is pressed!\n";
 				chordStack.push_front(id); // Always push at the fromt to make it a stack
 			}
 		}
@@ -21,7 +21,7 @@ void DigitalButton::Context::updateChordStack(bool isPressed, ButtonID id)
 			auto foundChord = find(chordStack.begin(), chordStack.end(), id);
 			if (foundChord != chordStack.end())
 			{
-				// COUT << "Button " << index << " is released!" << endl;
+				// COUT << "Button " << index << " is released!\n";
 				chordStack.erase(foundChord); // The chord is released
 			}
 		}
@@ -69,7 +69,7 @@ public:
 	string _nameToRelease;
 	shared_ptr<DigitalButton::Context> _context;
 	chrono::steady_clock::time_point _press_times;
-	unique_ptr<Mapping> _keyToRelease; // At key press, remember what to release
+	optional<Mapping> _keyToRelease; // At key press, remember what to release
 	const JSMButton &_mapping;
 	DigitalButton *_simPressMaster = nullptr;
 
@@ -91,7 +91,7 @@ public:
 
 	void ClearKey()
 	{
-		_keyToRelease.reset();
+		_keyToRelease = nullopt;
 		_instantReleaseQueue.clear();
 		_nameToRelease.clear();
 		_turboCount = 0;
@@ -102,7 +102,7 @@ public:
 		auto instant = find(_instantReleaseQueue.begin(), _instantReleaseQueue.end(), instantEvent);
 		if (instant != _instantReleaseQueue.end())
 		{
-			// DEBUG_LOG << "Button " << _id << " releases instant " << instantEvent << endl;
+			// DEBUG_LOG << "Button " << _id << " releases instant " << instantEvent << '\n';
 			_keyToRelease->ProcessEvent(BtnEvent::OnInstantRelease, *this);
 			_instantReleaseQueue.erase(instant);
 			return true;
@@ -110,7 +110,7 @@ public:
 		return false;
 	}
 
-	Mapping *GetPressMapping()
+	optional<Mapping> GetPressMapping()
 	{
 		if (!_keyToRelease)
 		{
@@ -120,20 +120,20 @@ public:
 				auto binding = _mapping.chordedValue(*activeChord);
 				if (binding && *activeChord != _id)
 				{
-					_keyToRelease.reset(new Mapping(*binding));
+					_keyToRelease = *binding;
 					_nameToRelease = _mapping.getName(*activeChord);
-					return _keyToRelease.get();
+					return _keyToRelease;
 				}
 			}
 			// Chord stack should always include NONE which will provide a value in the loop above
 			throw runtime_error("ChordStack should always include ButtonID::NONE, for the chorded variable to return the base value.");
 		}
-		return _keyToRelease.get();
+		return _keyToRelease;
 	}
 
 	void RegisterInstant(BtnEvent evt) override
 	{
-		// DEBUG_LOG << "Button " << _id << " registers instant " << evt << endl;
+		// DEBUG_LOG << "Button " << _id << " registers instant " << evt << '\n';
 		_instantReleaseQueue.push_back(evt);
 	}
 
@@ -158,7 +158,7 @@ public:
 			     currentlyActive != _context->gyroActionQueue.end();
 			     currentlyActive = find_if(currentlyActive, _context->gyroActionQueue.end(), bind(isSameKey, key, placeholders::_1)))
 			{
-				DEBUG_LOG << "Removing active gyro action for " << key.name << endl;
+				DEBUG_LOG << "Removing active gyro action for " << key.name << '\n';
 				currentlyActive = _context->gyroActionQueue.erase(currentlyActive);
 			}
 		}
@@ -166,7 +166,7 @@ public:
 
 	void SetRumble(int smallRumble, int bigRumble) override
 	{
-		DEBUG_LOG << "Rumbling at " << smallRumble << " and " << bigRumble << endl;
+		DEBUG_LOG << "Rumbling at " << smallRumble << " and " << bigRumble << '\n';
 		_context->_rumble(smallRumble, bigRumble);
 	}
 
@@ -194,7 +194,7 @@ public:
 		}
 		else if (key.code != NO_HOLD_MAPPED && HasActiveToggle(_context, key) == false)
 		{
-			DEBUG_LOG << "Pressing down on key " << key.name << endl;
+			DEBUG_LOG << "Pressing down on key " << key.name << '\n';
 			pressKey(key, true);
 		}
 	}
@@ -204,7 +204,10 @@ public:
 		if (key.code >= X_UP && key.code <= X_START || key.code == PS_HOME || key.code == PS_PAD_CLICK)
 		{
 			if (_context->_vigemController)
+			{
 				_context->_vigemController->setButton(key, false);
+				ClearAllActiveToggle(key);
+			}
 		}
 		else if (key.code == X_LT)
 		{
@@ -218,7 +221,7 @@ public:
 		}
 		else if (key.code != NO_HOLD_MAPPED)
 		{
-			// DEBUG_LOG << "Releasing key " << key.name << endl;
+			// DEBUG_LOG << "Releasing key " << key.name << '\n';
 			pressKey(key, false);
 			ClearAllActiveToggle(key);
 		}
@@ -233,7 +236,7 @@ public:
 		  });
 		if (currentlyActive == _context->activeTogglesQueue.end())
 		{
-			DEBUG_LOG << "Adding active toggle for " << key.name << endl;
+			DEBUG_LOG << "Adding active toggle for " << key.name << '\n';
 			apply(this);
 			_context->activeTogglesQueue.push_front({ _id, key });
 		}
@@ -249,14 +252,14 @@ public:
 		     currentlyActive != _context->activeTogglesQueue.end();
 		     currentlyActive = find_if(currentlyActive, _context->activeTogglesQueue.end(), bind(isSameKey, key, placeholders::_1)))
 		{
-			DEBUG_LOG << "Removing active toggle for " << key.name << endl;
+			DEBUG_LOG << "Removing active toggle for " << key.name << '\n';
 			currentlyActive = _context->activeTogglesQueue.erase(currentlyActive);
 		}
 	}
 
 	void StartCalibration() override
 	{
-		COUT << "Starting continuous calibration" << endl;
+		COUT << "Starting continuous calibration\n";
 		_context->rightMainMotion->ResetContinuousCalibration();
 		_context->rightMainMotion->StartContinuousCalibration();
 		if (_context->leftMotion)
@@ -275,7 +278,7 @@ public:
 			// Perform calibration on both gyros of a joycon pair regardless of mask
 			_context->leftMotion->PauseContinuousCalibration();
 		}
-		COUT << "Gyro calibration set" << endl;
+		COUT << "Gyro calibration set\n";
 		ClearAllActiveToggle(KeyCode("CALIBRATE"));
 	}
 
@@ -308,7 +311,7 @@ class ActiveHoldPress;
 void DigitalButtonState::react(OnEntry &e)
 {
 	// Uncomment below to diplay a log each time a button changes state
-	// DEBUG_LOG << "Button " << pimpl()->_id << " is now in state " << _name << endl;
+	// DEBUG_LOG << "Button " << pimpl()->_id << " is now in state " << _name << '\n';
 }
 
 // Basic Press reaction should be called in every concrete Press reaction
@@ -334,6 +337,7 @@ void DigitalButtonState::react(GetDuration &e)
 	// final implementation. All states can be querried it's duration time.
 	e.out_duration = pimpl()->GetPressDurationMS(e.in_now);
 }
+
 
 // Append to pocket_fsm macro
 #define DB_CONCRETE_STATE(statename)           \
@@ -399,8 +403,6 @@ class ActiveStartPress : public ActiveMappingState
 		{
 			changeState<ActiveHoldPress>();
 		}
-
-		pimpl()->GetPressMapping()->ProcessEvent(BtnEvent::WhilePressed, *pimpl());
 	}
 
 	REACT(Released)
@@ -410,6 +412,7 @@ class ActiveStartPress : public ActiveMappingState
 		pimpl()->_press_times = e.time_now; // Start counting tap duration
 		changeState<TapPress>();
 	}
+
 };
 
 class ActiveHoldPress : public ActiveMappingState
@@ -441,9 +444,6 @@ class ActiveHoldPress : public ActiveMappingState
 		{
 			pimpl()->ReleaseInstant(BtnEvent::OnTurbo);
 		}
-
-		pimpl()->GetPressMapping()->ProcessEvent(BtnEvent::WhileHeld, *pimpl());
-		pimpl()->GetPressMapping()->ProcessEvent(BtnEvent::WhilePressed, *pimpl());
 	}
 
 	REACT(Released)
@@ -539,10 +539,6 @@ class TapPress : public DigitalButtonState
 		{
 			changeState<NoPress>();
 		}
-		else
-		{
-			pimpl()->GetPressMapping()->ProcessEvent(BtnEvent::WhileTapping, *pimpl());
-		}
 	}
 
 	REACT(OnExit)
@@ -624,8 +620,8 @@ class WaitSim : public DigitalButtonState
 		if (simBtn)
 		{
 			changeState<SimPressSlave>();
-			pimpl()->_press_times = e.time_now;                                                            // Reset Timer
-			pimpl()->_keyToRelease.reset(new Mapping(pimpl()->_mapping.atSimPress(simBtn->_id)->value())); // Make a copy
+			pimpl()->_press_times = e.time_now;                                          // reset Timer
+			pimpl()->_keyToRelease = pimpl()->_mapping.atSimPress(simBtn->_id)->value(); // Make a copy
 			pimpl()->_nameToRelease = pimpl()->_mapping.getSimPressName(simBtn->_id);
 			pimpl()->_simPressMaster = simBtn; // Second to press is the slave
 
@@ -637,7 +633,7 @@ class WaitSim : public DigitalButtonState
 			sync.dblPressWindow = e.dblPressWindow;
 			simBtn->sendEvent(sync);
 		}
-		else if (pimpl()->GetPressDurationMS(e.time_now) > SettingsManager::get<float>(SettingID::SIM_PRESS_WINDOW)->value())
+		else if (pimpl()->GetPressDurationMS(e.time_now) > SettingsManager::getV<float>(SettingID::SIM_PRESS_WINDOW)->value())
 		{
 			// Button is still pressed but Sim delay did expire
 			if (pimpl()->_mapping.getDblPressMap())
@@ -648,7 +644,7 @@ class WaitSim : public DigitalButtonState
 			else // Handle regular press mapping
 			{
 				changeState<BtnPress>();
-				// _press_times = time_now;
+				// _press_times = _timeNow;
 			}
 		}
 		// Else let time flow, stay in this state, no output.
@@ -675,7 +671,7 @@ class WaitSim : public DigitalButtonState
 	{
 		pimpl()->_simPressMaster = nullptr;
 		pimpl()->_press_times = e.pressTime;
-		pimpl()->_keyToRelease.reset(e.activeMapping);
+		pimpl()->_keyToRelease = *e.activeMapping;
 		pimpl()->_nameToRelease = e.nameToRelease;
 		_nextState = e.nextState; // changeState<SimPressMaster>()
 	}
@@ -738,7 +734,7 @@ class DblPressNoPress : public DigitalButtonState
 		DigitalButtonState::react(e);
 		if (pimpl()->GetPressDurationMS(e.time_now) > e.dblPressWindow)
 		{
-			pimpl()->_press_times = e.time_now; // Reset Timer to raise a tap
+			pimpl()->_press_times = e.time_now; // reset Timer to raise a tap
 			changeState<BtnPress>();
 		}
 		else
@@ -772,12 +768,12 @@ class DblPressNoPressTap : public DigitalButtonState
 	{
 		if (pimpl()->GetPressDurationMS(e.time_now) > e.dblPressWindow)
 		{
-			pimpl()->_press_times = e.time_now; // Reset Timer to raise a tap
+			pimpl()->_press_times = e.time_now; // reset Timer to raise a tap
 			changeState<TapPress>();
 		}
 		else
 		{
-			pimpl()->_keyToRelease.reset(new Mapping(pimpl()->_mapping.getDblPressMap()->second));
+			pimpl()->_keyToRelease = pimpl()->_mapping.getDblPressMap()->second;
 			pimpl()->_nameToRelease = pimpl()->_mapping.getName(pimpl()->_id);
 			pimpl()->_press_times = e.time_now;
 			changeState<DblPressPress>();
@@ -789,7 +785,7 @@ class DblPressNoPressTap : public DigitalButtonState
 	{
 		if (pimpl()->GetPressDurationMS(e.time_now) > e.dblPressWindow)
 		{
-			pimpl()->_press_times = e.time_now; // Reset Timer to raise a tap
+			pimpl()->_press_times = e.time_now; // reset Timer to raise a tap
 			changeState<TapPress>();
 		}
 	}
@@ -811,7 +807,7 @@ class DblPressNoPressHold : public DigitalButtonState
 		{
 			changeState<DblPressPress>();
 			pimpl()->_press_times = e.time_now;
-			pimpl()->_keyToRelease.reset(new Mapping(pimpl()->_mapping.getDblPressMap()->second));
+			pimpl()->_keyToRelease = pimpl()->_mapping.getDblPressMap()->second;
 			pimpl()->_nameToRelease = pimpl()->_mapping.getName(pimpl()->_id);
 		}
 	}
@@ -836,7 +832,7 @@ class DblPressPress : public pocket_fsm::NestedStateMachine<ActiveMappingState, 
 	override
 	{
 		DigitalButtonState::react(e);
-		pimpl()->_keyToRelease.reset(new Mapping(pimpl()->_mapping.getDblPressMap()->second));
+		pimpl()->_keyToRelease = pimpl()->_mapping.getDblPressMap()->second;
 		pimpl()->_nameToRelease = pimpl()->_mapping.getName(pimpl()->_id);
 		initialize(new ActiveStartPress(_pimpl));
 	}
@@ -882,7 +878,7 @@ DigitalButton::DigitalButton(shared_ptr<DigitalButton::Context> _context, JSMBut
 DigitalButton::Context::Context(Gamepad::Callback virtualControllerCallback, shared_ptr<MotionIf> mainMotion)
   : rightMainMotion(mainMotion)
 {
-	chordStack.push_front(ButtonID::NONE); // Always hold mapping none at the end to handle modeshifts and chords
+	chordStack.push_front(ButtonID::NONE); // Always hold mapping none at the end to _handle modeshifts and chords
 #ifdef _WIN32
 	auto virtual_controller = SettingsManager::getV<ControllerScheme>(SettingID::VIRTUAL_CONTROLLER);
 	if (virtual_controller->value() != ControllerScheme::NONE)
@@ -895,7 +891,7 @@ DigitalButton::Context::Context(Gamepad::Callback virtualControllerCallback, sha
 		}
 		if (!error.empty())
 		{
-			CERR << error << endl;
+			CERR << error << '\n';
 		}
 	}
 #endif

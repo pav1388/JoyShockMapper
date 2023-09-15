@@ -7,7 +7,7 @@
 constexpr uint16_t DEFAULT_COLOR = FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE; // White
 #define FOREGROUND_YELLOW FOREGROUND_RED | FOREGROUND_GREEN
 
-template<std::ostream *stdio, uint16_t color>
+template<ostream *stdio, uint16_t color>
 class ColorStream : public stringbuf
 {
 public:
@@ -15,7 +15,7 @@ public:
 	// print the string on the stdio
 	virtual ~ColorStream()
 	{
-		std::lock_guard<std::mutex> guard(print_mutex);
+		lock_guard<mutex> guard(print_mutex);
 		HANDLE hStdout = GetStdHandle(STD_ERROR_HANDLE);
 		SetConsoleTextAttribute(hStdout, color);
 		(*stdio) << str();
@@ -28,7 +28,7 @@ streambuf *Log::makeBuffer(Level level)
 	switch (level)
 	{
 	case Level::ERR:
-		return new ColorStream<&std::cerr, FOREGROUND_RED | FOREGROUND_INTENSITY>();
+		return new ColorStream<&cerr, FOREGROUND_RED | FOREGROUND_INTENSITY>();
 	case Level::WARN:
 		return new ColorStream<&cout, FOREGROUND_YELLOW | FOREGROUND_INTENSITY>();
 	case Level::INFO:
@@ -43,24 +43,29 @@ streambuf *Log::makeBuffer(Level level)
 	case Level::BOLD:
 		return new ColorStream<&cout, FOREGROUND_GREEN | FOREGROUND_INTENSITY>();
 	default:
-		return new ColorStream<&std::cout, FOREGROUND_GREEN>();
+		return new ColorStream<&cout, FOREGROUND_GREEN>();
 	}
 }
 
 const char *AUTOLOAD_FOLDER()
 {
 	return _strdup((GetCWD() + "\\AutoLoad\\").c_str());
-};
+}
 
 const char *GYRO_CONFIGS_FOLDER()
 {
 	return _strdup((GetCWD() + "\\GyroConfigs\\").c_str());
-};
+}
 
 const char *BASE_JSM_CONFIG_FOLDER()
 {
 	return _strdup((GetCWD() + "\\").c_str());
-};
+}
+
+std::ostream &operator<<(std::ostream &out, const KeyCode &code)
+{
+	return out << code.name;
+}
 
 /// Valid inputs:
 /// 0-9, N0-N9, F1-F29, A-Z, (L, R, )CONTROL, (L, R, )ALT, (L, R, )SHIFT, TAB, ENTER
@@ -68,7 +73,7 @@ const char *BASE_JSM_CONFIG_FOLDER()
 /// NONE
 /// And characters: ; ' , . / \ [ ] + - `
 /// Yes, this looks slow. But it's only there to help set up faster mappings
-WORD nameToKey(in_string name)
+WORD nameToKey(string_view name)
 {
 	// https://msdn.microsoft.com/en-us/library/dd375731%28v=vs.85%29.aspx?f=255&MSPPError=-2147217396
 	auto length = name.length();

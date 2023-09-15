@@ -53,7 +53,7 @@ const map<ButtonID, string> buttonHelpMap{
 	{ ButtonID::TRING, "Touch ring binding, either inner or outer." },
 };
 
-std::map<int, ButtonID> nnm = { 
+map<int, ButtonID> nnm = { 
 	{22, ButtonID::HOME},
 	{6, ButtonID::DOWN},
 	{10, ButtonID::LEFT},

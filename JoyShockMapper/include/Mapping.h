@@ -1,6 +1,7 @@
 #pragma once
 
 #include "JoyShockMapper.h"
+#include "PlatformDefinitions.h"
 
 // The list of different function that can be bound in the mapping
 class EventActionIf
@@ -48,7 +49,7 @@ public:
 	static const Mapping NO_MAPPING;
 
 	// This functor nees to be set to way to validate a command line string;
-	static function<bool(in_string)> _isCommandValid;
+	static function<bool(string_view)> _isCommandValid;
 
 	friend istream &operator>>(istream &in, Mapping &mapping);
 	friend ostream &operator<<(ostream &out, const Mapping &mapping);
@@ -67,19 +68,19 @@ private:
 public:
 	Mapping() = default;
 
-	Mapping(in_string mapping);
+	Mapping(string_view mapping);
 
 	Mapping(int dummy)
 	  : Mapping()
 	{
 	}
 
-	std::string_view description() const
+	string_view description() const
 	{
 		return _description;
 	}
 
-	std::string_view command() const
+	string_view command() const
 	{
 		return _command;
 	}

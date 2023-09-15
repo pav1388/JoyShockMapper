@@ -1,7 +1,8 @@
-#include "JslWrapper.h"
 #include "JSMVariable.hpp"
+#include "JslWrapper.h"
 #include "TriggerEffectGenerator.h"
 #include "SettingsManager.h"
+#include "dimgui/Application.h"
 #include "SDL.h"
 #include <map>
 #include <mutex>
@@ -12,6 +13,8 @@
 #include <memory>
 #include <iostream>
 #include <cstring>
+
+extern CmdRegistry commandRegistry;
 
 typedef struct
 {
@@ -44,6 +47,8 @@ struct ControllerDevice
 	  : _has_accel(false)
 	  , _has_gyro(false)
 	{
+		_prevTouchState.t0Down = false;
+		_prevTouchState.t1Down = false;
 		if (SDL_IsGameController(id))
 		{
 			_sdlController = SDL_GameControllerOpen(id);
@@ -64,27 +69,20 @@ struct ControllerDevice
 
 				int vid = SDL_GameControllerGetVendor(_sdlController);
 				int pid = SDL_GameControllerGetProduct(_sdlController);
-				if (vid == 0x057e)
-				{
-					if (pid == 0x2006)
-					{
-						_split_type = JS_SPLIT_TYPE_LEFT;
-					}
-					else if (pid == 0x2007)
-					{
-						_split_type = JS_SPLIT_TYPE_RIGHT;
-					}
-				}
 
 				auto sdl_ctrlr_type = SDL_GameControllerGetType(_sdlController);
 				switch (sdl_ctrlr_type)
 				{
+				case SDL_GameControllerType::SDL_CONTROLLER_TYPE_NINTENDO_SWITCH_JOYCON_LEFT:
+					_ctrlr_type = JS_TYPE_JOYCON_LEFT;
+					_split_type = JS_SPLIT_TYPE_LEFT;
+					break;
+				case SDL_GameControllerType::SDL_CONTROLLER_TYPE_NINTENDO_SWITCH_JOYCON_RIGHT:
+					_ctrlr_type = JS_TYPE_JOYCON_RIGHT;
+					_split_type = JS_SPLIT_TYPE_RIGHT;
+					break;
+				case SDL_GameControllerType::SDL_CONTROLLER_TYPE_NINTENDO_SWITCH_JOYCON_PAIR:
 				case SDL_GameControllerType::SDL_CONTROLLER_TYPE_NINTENDO_SWITCH_PRO:
-					if (_split_type == JS_SPLIT_TYPE_LEFT)
-						_ctrlr_type = JS_TYPE_JOYCON_LEFT;
-					else if (_split_type == JS_SPLIT_TYPE_RIGHT)
-						_ctrlr_type = JS_TYPE_JOYCON_RIGHT;
-					else
 						_ctrlr_type = JS_TYPE_PRO_CONTROLLER;
 					break;
 				case SDL_GameControllerType::SDL_CONTROLLER_TYPE_PS4:
@@ -97,7 +95,7 @@ struct ControllerDevice
                     _ctrlr_type = JS_TYPE_XBOXONE;
                     if (vid == 0x0e6f) // PDP Vendor ID
                     {    
-                    _ctrlr_type = JS_TYPE_XBOX_SERIES;
+						_ctrlr_type = JS_TYPE_XBOX_SERIES;
                     }
                     if (vid == 0x24c6) // PowerA
                     {
@@ -222,12 +220,14 @@ public:
 	AdaptiveTriggerSetting _rightTriggerEffect;
 	uint8_t _micLight = 0;
 	SDL_GameController *_sdlController = nullptr;
+	TOUCH_STATE _prevTouchState;
 };
 
 struct SdlInstance : public JslWrapper
 {
 public:
 	SdlInstance()
+	  : _gui(commandRegistry)
 	{
 		SDL_SetHint(SDL_HINT_GAMECONTROLLER_USE_BUTTON_LABELS, "0");
 		SDL_SetHint(SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, "1");
@@ -247,34 +247,38 @@ public:
 
 	int pollDevices()
 	{
+		_gui.init();
 		while (keep_polling)
 		{
 			auto tick_time = SettingsManager::get<float>(SettingID::TICK_TIME)->value();
-			SDL_Delay(tick_time);
+			SDL_Delay(Uint32(tick_time));
 
-			std::lock_guard guard(controller_lock);
-			//SDL_GameControllerUpdate(); // Done through polling in Application.cpp
-			for (auto iter = _controllerMap.begin(); iter != _controllerMap.end(); ++iter)
 			{
-				if (g_callback)
+				lock_guard guard(controller_lock);
+				SDL_GameControllerUpdate();
+				for (auto iter = _controllerMap.begin(); iter != _controllerMap.end(); ++iter)
 				{
-					JOY_SHOCK_STATE dummy1;
-					IMU_STATE dummy2;
-					memset(&dummy1, 0, sizeof(dummy1));
-					memset(&dummy2, 0, sizeof(dummy2));
-					g_callback(iter->first, dummy1, dummy1, dummy2, dummy2, tick_time);
+					if (g_callback)
+					{
+						JOY_SHOCK_STATE dummy1;
+						IMU_STATE dummy2;
+						memset(&dummy1, 0, sizeof(dummy1));
+						memset(&dummy2, 0, sizeof(dummy2));
+						g_callback(iter->first, dummy1, dummy1, dummy2, dummy2, tick_time);
+					}
+					if (g_touch_callback)
+					{
+						TOUCH_STATE touch = GetTouchState(iter->first, false);
+						g_touch_callback(iter->first, touch, iter->second->_prevTouchState, tick_time);
+						iter->second->_prevTouchState = touch;
+					}
+					// Perform rumble
+					SDL_GameControllerRumble(iter->second->_sdlController, iter->second->_big_rumble, iter->second->_small_rumble, Uint32(tick_time + 5));
 				}
-				if (g_touch_callback)
-				{
-					TOUCH_STATE touch = GetTouchState(iter->first, false), dummy3;
-					memset(&dummy3, 0, sizeof(dummy3));
-					g_touch_callback(iter->first, touch, dummy3, tick_time);
-				}
-				// Perform rumble
-				SDL_GameControllerRumble(iter->second->_sdlController, iter->second->_big_rumble, iter->second->_small_rumble, tick_time + 5);
 			}
+			_gui.draw();
 		}
-
+		_gui.cleanUp();
 		return 1;
 	}
 
@@ -282,7 +286,8 @@ public:
 	void (*g_callback)(int, JOY_SHOCK_STATE, JOY_SHOCK_STATE, IMU_STATE, IMU_STATE, float) = nullptr;
 	void (*g_touch_callback)(int, TOUCH_STATE, TOUCH_STATE, float) = nullptr;
 	atomic_bool keep_polling = false;
-	std::mutex controller_lock;
+	mutex controller_lock;
+	Application _gui;
 
 	int ConnectDevices() override
 	{
@@ -304,7 +309,7 @@ public:
 
 	int GetConnectedDeviceHandles(int *deviceHandleArray, int size) override
 	{
-		std::lock_guard guard(controller_lock);
+		lock_guard guard(controller_lock);
 		auto iter = _controllerMap.begin();
 		while (iter != _controllerMap.end())
 		{
@@ -356,7 +361,7 @@ public:
 		{
 			array<float, 3> gyro;
 			SDL_GameControllerGetSensorData(_controllerMap[deviceId]->_sdlController, SDL_SENSOR_GYRO, &gyro[0], 3);
-			static constexpr float toDegPerSec = 180.f / M_PI;
+			static constexpr float toDegPerSec = float(180. / M_PI);
 			imuState.gyroX = gyro[0] * toDegPerSec;
 			imuState.gyroY = gyro[1] * toDegPerSec;
 			imuState.gyroZ = gyro[2] * toDegPerSec;
@@ -394,7 +399,7 @@ public:
 
 	bool GetTouchpadDimension(int deviceId, int &sizeX, int &sizeY) override
 	{
-		// I am assuming a single touchpad (or all touchpads are the same dimension)?
+		// I am assuming a single touchpad (or all _touchpads are the same dimension)?
 		auto *jc = _controllerMap[deviceId];
 		if (jc != nullptr)
 		{
@@ -418,7 +423,7 @@ public:
 
 	int GetButtons(int deviceId) override
 	{
-		static const std::map<int, int> sdl2jsl = {
+		static const map<int, int> sdl2jsl = {
 			{ SDL_CONTROLLER_BUTTON_A, JSOFFSET_S },
 			{ SDL_CONTROLLER_BUTTON_B, JSOFFSET_E },
 			{ SDL_CONTROLLER_BUTTON_X, JSOFFSET_W },
@@ -433,62 +438,112 @@ public:
 			{ SDL_CONTROLLER_BUTTON_DPAD_UP, JSOFFSET_UP },
 			{ SDL_CONTROLLER_BUTTON_DPAD_DOWN, JSOFFSET_DOWN },
 			{ SDL_CONTROLLER_BUTTON_DPAD_LEFT, JSOFFSET_LEFT },
-			{ SDL_CONTROLLER_BUTTON_DPAD_RIGHT, JSOFFSET_RIGHT },
-			{ SDL_CONTROLLER_BUTTON_PADDLE2, JSOFFSET_SL },  // LSL
-			{ SDL_CONTROLLER_BUTTON_PADDLE4, JSOFFSET_SR },  // LSR
+			{ SDL_CONTROLLER_BUTTON_DPAD_RIGHT, JSOFFSET_RIGHT }
 		};
+
 		int buttons = 0;
-		for (auto pair : sdl2jsl)
+		if (_controllerMap[deviceId]->_ctrlr_type == JS_TYPE_JOYCON_LEFT)
 		{
-			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_GameControllerButton(pair.first)) > 0 ? 1 << pair.second : 0;
+			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_A) > 0 ? 1 << JSOFFSET_LEFT : 0;
+			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_B) > 0 ? 1 << JSOFFSET_DOWN : 0;
+			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_X) > 0 ? 1 << JSOFFSET_UP : 0;
+			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_Y) > 0 ? 1 << JSOFFSET_RIGHT : 0;
+			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_GUIDE) > 0 ? 1 << JSOFFSET_CAPTURE : 0;
+			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_START) > 0 ? 1 << JSOFFSET_MINUS : 0;
+			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_LEFTSHOULDER) > 0 ? 1 << JSOFFSET_SL : 0;
+			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_RIGHTSHOULDER) > 0 ? 1 << JSOFFSET_SR : 0;
+			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_PADDLE2) > 0 ? 1 << JSOFFSET_L : 0;
+			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_PADDLE4) > 0 ? 1 << JSOFFSET_ZL : 0;
+			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_LEFTSTICK) > 0 ? 1 << JSOFFSET_LCLICK : 0;
 		}
-		switch (_controllerMap[deviceId]->_ctrlr_type)
+		else if (_controllerMap[deviceId]->_ctrlr_type == JS_TYPE_JOYCON_RIGHT)
 		{
-		case JS_TYPE_DS:
-			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_MISC1) > 0 ? 1 << JSOFFSET_MIC : 0;
-			// Intentional fall through to the next case
-		case JS_TYPE_DS4:
-			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_TOUCHPAD) > 0 ? 1 << JSOFFSET_CAPTURE : 0;
-			break;
-		case JS_TYPE_JOYCON_RIGHT:
-			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_PADDLE3) > 0 ? 1 << JSOFFSET_SL : 0;
-			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_PADDLE1) > 0 ? 1 << JSOFFSET_SR : 0;
-		default:
-			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_MISC1) > 0 ? 1 << JSOFFSET_CAPTURE : 0;
-			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_PADDLE3) > 0 ? 1 << JSOFFSET_SL2 : 0;
-			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_PADDLE1) > 0 ? 1 << JSOFFSET_SR2 : 0;
-			break;
+			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_A) > 0 ? 1 << JSOFFSET_E : 0;
+			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_B) > 0 ? 1 << JSOFFSET_N : 0;
+			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_X) > 0 ? 1 << JSOFFSET_S : 0;
+			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_Y) > 0 ? 1 << JSOFFSET_W : 0;
+			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_GUIDE) > 0 ? 1 << JSOFFSET_HOME : 0;
+			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_START) > 0 ? 1 << JSOFFSET_PLUS : 0;
+			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_LEFTSHOULDER) > 0 ? 1 << JSOFFSET_SL : 0;
+			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_RIGHTSHOULDER) > 0 ? 1 << JSOFFSET_SR : 0;
+			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_PADDLE1) > 0 ? 1 << JSOFFSET_R : 0;
+			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_PADDLE3) > 0 ? 1 << JSOFFSET_ZR : 0;
+			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_LEFTSTICK) > 0 ? 1 << JSOFFSET_RCLICK : 0;
+		}
+		else
+		{
+			for (auto pair : sdl2jsl)
+			{
+				buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_GameControllerButton(pair.first)) > 0 ? 1 << pair.second : 0;
+			}
+			switch (_controllerMap[deviceId]->_ctrlr_type)
+			{
+			case JS_TYPE_DS:
+				buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_MISC1) > 0 ? 1 << JSOFFSET_MIC : 0;
+				buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_PADDLE1) > 0 ? 1 << JSOFFSET_SR : 0;
+				buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_PADDLE2) > 0 ? 1 << JSOFFSET_FNL : 0;
+				buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_PADDLE3) > 0 ? 1 << JSOFFSET_FNR : 0;
+				buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_PADDLE4) > 0 ? 1 << JSOFFSET_SL : 0;
+				// Intentional fall through to the next case
+			case JS_TYPE_DS4:
+				buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_TOUCHPAD) > 0 ? 1 << JSOFFSET_CAPTURE : 0;
+				break;
+			case JS_TYPE_PRO_CONTROLLER:
+				buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_MISC1) > 0 ? 1 << JSOFFSET_CAPTURE : 0;
+				buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_PADDLE1) > 0 ? 1 << JSOFFSET_SR : 0;
+				buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_PADDLE2) > 0 ? 1 << JSOFFSET_SL : 0;
+				buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_PADDLE3) > 0 ? 1 << JSOFFSET_FNR : 0;
+				buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_PADDLE4) > 0 ? 1 << JSOFFSET_FNL : 0;
+				break;
+			default:
+				buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_MISC1) > 0 ? 1 << JSOFFSET_CAPTURE : 0;
+				buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_PADDLE3) > 0 ? 1 << JSOFFSET_FNL : 0;
+				buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_PADDLE1) > 0 ? 1 << JSOFFSET_FNR : 0;
+				break;
+			}
 		}
 		return buttons;
 	}
 
 	float GetLeftX(int deviceId) override
 	{
+		if (_controllerMap[deviceId]->_ctrlr_type == JS_TYPE_JOYCON_LEFT)
+			return -SDL_GameControllerGetAxis(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_AXIS_LEFTY) / (float)SDL_JOYSTICK_AXIS_MAX;
 		return SDL_GameControllerGetAxis(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_AXIS_LEFTX) / (float)SDL_JOYSTICK_AXIS_MAX;
 	}
 
 	float GetLeftY(int deviceId) override
 	{
+		if (_controllerMap[deviceId]->_ctrlr_type == JS_TYPE_JOYCON_LEFT)
+			return -SDL_GameControllerGetAxis(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_AXIS_LEFTX) / (float)SDL_JOYSTICK_AXIS_MAX;
 		return -SDL_GameControllerGetAxis(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_AXIS_LEFTY) / (float)SDL_JOYSTICK_AXIS_MAX;
 	}
 
 	float GetRightX(int deviceId) override
 	{
+		if (_controllerMap[deviceId]->_ctrlr_type == JS_TYPE_JOYCON_RIGHT)
+			return -GetLeftY(deviceId);
 		return SDL_GameControllerGetAxis(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_AXIS_RIGHTX) / (float)SDL_JOYSTICK_AXIS_MAX;
 	}
 
 	float GetRightY(int deviceId) override
 	{
+		if (_controllerMap[deviceId]->_ctrlr_type == JS_TYPE_JOYCON_RIGHT)
+			return GetLeftX(deviceId);
 		return -SDL_GameControllerGetAxis(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_AXIS_RIGHTY) / (float)SDL_JOYSTICK_AXIS_MAX;
 	}
 
 	float GetLeftTrigger(int deviceId) override
 	{
+		if (_controllerMap[deviceId]->_ctrlr_type == JS_TYPE_JOYCON_LEFT)
+			return SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_PADDLE4) > 0 ? 1.f : 0.f;
 		return SDL_GameControllerGetAxis(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_AXIS_TRIGGERLEFT) / (float)SDL_JOYSTICK_AXIS_MAX;
 	}
 
 	float GetRightTrigger(int deviceId) override
 	{
+		if (_controllerMap[deviceId]->_ctrlr_type == JS_TYPE_JOYCON_RIGHT)
+			return SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_PADDLE3) > 0 ? 1.f : 0.f;
 		return SDL_GameControllerGetAxis(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_AXIS_TRIGGERRIGHT) / (float)SDL_JOYSTICK_AXIS_MAX;
 	}
 
@@ -609,13 +664,13 @@ public:
 
 	void SetCallback(void (*callback)(int, JOY_SHOCK_STATE, JOY_SHOCK_STATE, IMU_STATE, IMU_STATE, float)) override
 	{
-		std::lock_guard guard(controller_lock);
+		lock_guard guard(controller_lock);
 		g_callback = callback;
 	}
 
 	void SetTouchCallback(void (*callback)(int, TOUCH_STATE, TOUCH_STATE, float)) override
 	{
-		std::lock_guard guard(controller_lock);
+		lock_guard guard(controller_lock);
 		g_touch_callback = callback;
 	}
 
@@ -650,7 +705,7 @@ public:
 
 	void SetRumble(int deviceId, int smallRumble, int bigRumble) override
 	{
-		// Rumble command needs to be sent at every poll in SDL, so the next value is set here and the actual call
+		// sendRumble command needs to be sent at every poll in SDL, so the next value is set here and the actual call
 		// is done after the callback return
 		_controllerMap[deviceId]->_small_rumble = clamp(smallRumble, 0, int(UINT16_MAX));
 		_controllerMap[deviceId]->_big_rumble = clamp(bigRumble, 0, int(UINT16_MAX));

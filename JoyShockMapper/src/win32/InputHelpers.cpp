@@ -45,7 +45,7 @@ float getMouseSpeed()
 }
 
 // Map a VK id to mouse event id press (0) or release (1) and mouseData (2) complementary info
-std::unordered_map<WORD, std::tuple<DWORD, DWORD, DWORD>> mouseMaps = {
+unordered_map<WORD, tuple<DWORD, DWORD, DWORD>> mouseMaps = {
 	{ VK_LBUTTON, { MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP, 0 } },
 	{ VK_RBUTTON, { MOUSEEVENTF_RIGHTDOWN, MOUSEEVENTF_RIGHTUP, 0 } },
 	{ VK_MBUTTON, { MOUSEEVENTF_MIDDLEDOWN, MOUSEEVENTF_MIDDLEUP, 0 } },
@@ -66,13 +66,13 @@ int pressMouse(KeyCode vkKey, bool isPressed)
 	input.mi.time = 0;
 	input.mi.dx = 0;
 	input.mi.dy = 0;
-	input.mi.dwFlags = isPressed ? std::get<0>(val) : std::get<1>(val);
-	input.mi.mouseData = std::get<2>(val);
+	input.mi.dwFlags = isPressed ? get<0>(val) : get<1>(val);
+	input.mi.mouseData = get<2>(val);
 	if (input.mi.dwFlags)
 	{ // Ignore if there's no event ID (ex: "wheel release")
 		auto result = SendInput(1, &input, sizeof(input));
-		//COUT << key.name << endl;
-		//COUT << key.key << endl;
+		//COUT << key.name << '\n';
+		//COUT << key.key << '\n';
 		return result;
 	}
 	return 0;
@@ -153,7 +153,7 @@ void moveMouse(float x, float y)
 
 	accumulatedX -= applicableX;
 	accumulatedY -= applicableY;
-	//COUT << setprecision(4) << accumulatedX << ' ' << accumulatedY << endl;
+	//COUT << setprecision(4) << accumulatedX << ' ' << accumulatedY << '\n';
 
 	INPUT input;
 	input.type = INPUT_MOUSE;
@@ -171,20 +171,20 @@ void setMouseNorm(float x, float y)
 	input.type = INPUT_MOUSE;
 	input.mi.mouseData = 0;
 	input.mi.time = 0;
-	input.mi.dx = roundf(65535.0f * x);
-	input.mi.dy = roundf(65535.0f * y);
+	input.mi.dx = LONG(roundf(65535.0f * x));
+	input.mi.dy = LONG(roundf(65535.0f * y));
 	input.mi.dwFlags = MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE;
 	SendInput(1, &input, sizeof(input));
 }
 
-BOOL WriteToConsole(in_string command)
+BOOL WriteToConsole(string_view command)
 {
-	static const INPUT_RECORD ESC_DOWN = { KEY_EVENT, { TRUE, 1, VK_ESCAPE, MapVirtualKey(VK_ESCAPE, MAPVK_VK_TO_VSC), VK_ESCAPE, 0 } };
-	static const INPUT_RECORD ESC_UP = { KEY_EVENT, { FALSE, 1, VK_ESCAPE, MapVirtualKey(VK_ESCAPE, MAPVK_VK_TO_VSC), VK_ESCAPE, 0 } };
-	static const INPUT_RECORD RET_DOWN = { KEY_EVENT, { TRUE, 1, VK_RETURN, MapVirtualKey(VK_RETURN, MAPVK_VK_TO_VSC), VK_RETURN, 0 } };
-	static const INPUT_RECORD RET_UP = { KEY_EVENT, { FALSE, 1, VK_RETURN, MapVirtualKey(VK_RETURN, MAPVK_VK_TO_VSC), VK_RETURN, 0 } };
+	static const INPUT_RECORD ESC_DOWN = { KEY_EVENT, { TRUE, 1, VK_ESCAPE, MapVirtualKey(WORD(VK_ESCAPE), MAPVK_VK_TO_VSC), VK_ESCAPE, 0 } };
+	static const INPUT_RECORD ESC_UP = { KEY_EVENT, { FALSE, 1, VK_ESCAPE, MapVirtualKey(WORD(VK_ESCAPE), MAPVK_VK_TO_VSC), VK_ESCAPE, 0 } };
+	static const INPUT_RECORD RET_DOWN = { KEY_EVENT, { TRUE, 1, VK_RETURN, MapVirtualKey(WORD(VK_RETURN), MAPVK_VK_TO_VSC), VK_RETURN, 0 } };
+	static const INPUT_RECORD RET_UP = { KEY_EVENT, { FALSE, 1, VK_RETURN, MapVirtualKey(WORD(VK_RETURN), MAPVK_VK_TO_VSC), VK_RETURN, 0 } };
 
-	std::vector<INPUT_RECORD> inputs(0);
+	vector<INPUT_RECORD> inputs(0);
 	inputs.reserve(command.size() + 4);
 	inputs.push_back(ESC_DOWN);
 	inputs.push_back(ESC_UP);
@@ -211,7 +211,7 @@ BOOL WriteToConsole(in_string command)
 	if (WriteConsoleInput(GetStdHandle(STD_INPUT_HANDLE), inputs.data(), inputs.size(), &written) == FALSE)
 	{
 		auto err = GetLastError();
-		CERR << "Error writing to console input: " << err << endl;
+		CERR << "Error writing to console input: " << err << '\n';
 	}
 	FlushConsoleInputBuffer(GetStdHandle(STD_INPUT_HANDLE));
 	return written == inputs.size();
@@ -243,13 +243,13 @@ void initConsole()
 	SetConsoleCtrlHandler(&ConsoleCtrlHandler, TRUE);
 }
 
-std::tuple<std::string, std::string> GetActiveWindowName()
+tuple<string, string> GetActiveWindowName()
 {
 	HWND activeWindow = GetForegroundWindow();
 	if (activeWindow)
 	{
-		std::string module(256, '\0');
-		std::string title(256, '\0');
+		string module(256, '\0');
+		string title(256, '\0');
 		GetWindowTextA(activeWindow, &title[0], title.size()); //note: C++11 only
 		title.resize(strlen(title.c_str()));
 		DWORD pid;
@@ -259,7 +259,7 @@ std::tuple<std::string, std::string> GetActiveWindowName()
 			HANDLE hProcess = OpenProcess(PROCESS_QUERY_INFORMATION, FALSE, pid);
 			if (hProcess)
 			{
-				DWORD len = module.size();
+				DWORD len = DWORD(module.size());
 				if (QueryFullProcessImageNameA(hProcess, 0, &module[0], &len))
 				{
 					auto pos = module.find_last_of("\\");
@@ -278,9 +278,9 @@ std::tuple<std::string, std::string> GetActiveWindowName()
 	return { "", "" };
 }
 
-std::vector<std::string> ListDirectory(std::string directory)
+vector<string> ListDirectory(string directory)
 {
-	std::vector<std::string> fileListing;
+	vector<string> fileListing;
 
 	// Prepare string for use with FindFile functions.  First, copy the
 	// string to a buffer, then append '\*' to the directory name.
@@ -308,37 +308,37 @@ std::vector<std::string> ListDirectory(std::string directory)
 
 		{
 			fileListing.push_back(ffd.cFileName);
-			//COUT << "File: " << ffd.cFileName << endl;
+			//COUT << "File: " << ffd.cFileName << '\n';
 		}
 	} while (FindNextFileA(hFind, &ffd) != 0);
 
 	auto dwError = GetLastError();
 	if (dwError != ERROR_NO_MORE_FILES)
 	{
-		CERR << "Error code " << dwError << " raised with FindNextFile()" << endl;
+		CERR << "Error code " << dwError << " raised with FindNextFile()\n";
 	}
 
 	FindClose(hFind);
 	return fileListing;
 }
 
-std::string GetCWD()
+string GetCWD()
 {
-	std::string cwd(MAX_PATH, '\0');
+	string cwd(MAX_PATH, '\0');
 	GetCurrentDirectoryA(cwd.size(), &cwd[0]);
 	cwd.resize(strlen(cwd.c_str()));
 	return cwd;
 }
 
-bool SetCWD(in_string newCWD)
+bool SetCWD(string_view newCWD)
 {
 	return SetCurrentDirectoryA(newCWD.data()) == TRUE;
 }
 
 DWORD ShowOnlineHelp()
 {
-	COUT << "See the latest user manual at the web page below:" << endl
-	     << "https://github.com/Electronicks/JoyShockMapper/blob/master/README.md" << endl;
+	COUT << "See the latest user manual at the web page below:\n" \
+	     "https://github.com/Electronicks/JoyShockMapper/blob/master/README.md\n";
 	return 0;
 	// SECURE CODING! https://www.oreilly.com/library/view/secure-programming-cookbook/0596003943/ch01s08.html
 	//STARTUPINFOA startupInfo;

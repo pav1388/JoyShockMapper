@@ -1,12 +1,12 @@
 #pragma once
 
 #include "JoyShockMapper.h"
+#include "PlatformDefinitions.h"
 
-union Indicator
+struct Indicator
 {
 	uint8_t led;
 	uint8_t rgb[3];
-	uint32_t colorCode;
 };
 
 class Gamepad
@@ -22,7 +22,7 @@ public:
 	static Gamepad* getNew(ControllerScheme scheme, Callback notification = nullptr);
 	virtual ~Gamepad() { }
 
-	virtual bool isInitialized(std::string* errorMsg = nullptr) = 0;
+	virtual bool isInitialized(string* errorMsg = nullptr) const = 0;
 	inline string getError() const
 	{
 		return _errorMsg;
@@ -35,11 +35,11 @@ public:
 	virtual void setLeftTrigger(float) = 0;
 	virtual void setRightTrigger(float) = 0;
 	virtual void setGyro(float accelX, float accelY, float accelZ, float gyroX, float gyroY, float gyroZ) = 0;
-	virtual void setTouchState(std::optional<FloatXY> press1, std::optional<FloatXY> press2) = 0;
+	virtual void setTouchState(optional<FloatXY> press1, optional<FloatXY> press2) = 0;
 	virtual void update() = 0;
 
 	virtual ControllerScheme getType() const = 0;
 
 protected:
-	std::string _errorMsg;
+	string _errorMsg;
 };

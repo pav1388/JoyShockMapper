@@ -45,3 +45,5 @@ private:
 	using SettingsMap = unordered_map<SettingID, shared_ptr<JSMVariableBase>>;
 	static SettingsMap _settings;
 };
+
+extern map<int, ButtonID> nnm;

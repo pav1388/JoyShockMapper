@@ -20,12 +20,14 @@ add_executable (
     src/CmdRegistry.cpp
     src/quatMaths.cpp
     src/ButtonHelp.cpp
- 	src/DigitalButton.cpp
-	src/MotionImpl.cpp
-	src/Mapping.cpp
+    src/DigitalButton.cpp
+    src/MotionImpl.cpp
+    src/Mapping.cpp
     src/TriggerEffectGenerator.cpp
     src/AutoLoad.cpp
-	src/SettingsManager.cpp
+    src/SettingsManager.cpp
+    src/Stick.cpp
+    src/JoyShock.cpp
     include/TriggerEffectGenerator.h
     include/InputHelpers.h
     include/PlatformDefinitions.h
@@ -48,21 +50,23 @@ add_executable (
     src/dimgui/InputSelector.cpp
     include/dimgui/Application.h
     include/dimgui/InputSelector.h
+    include/Stick.h
+    include/JoyShock.h
 )
 
 if (WINDOWS)
-	if(SDL)
-		target_sources (
-				${BINARY_NAME} PRIVATE
-				src/SDL2Wrapper.cpp
-		)
-		add_definitions(-DSDL2)
-	else()
-		target_sources (
-				${BINARY_NAME} PRIVATE
-				src/JslWrapper.cpp
-		)
-	endif()
+    if(SDL)
+        target_sources (
+                ${BINARY_NAME} PRIVATE
+                src/SDL2Wrapper.cpp
+        )
+        add_definitions(-DSDL2)
+    else()
+        target_sources (
+                ${BINARY_NAME} PRIVATE
+                src/JslWrapper.cpp
+        )
+    endif()
 
     target_sources (
         ${BINARY_NAME} PRIVATE
@@ -87,56 +91,56 @@ if (WINDOWS)
     
     target_link_libraries (
         ${BINARY_NAME} PRIVATE
-		ViGEmClient
-	)
-	
+        ViGEmClient
+    )
+    
     target_include_directories (
         ${BINARY_NAME} PUBLIC
         "${ViGEmClient_SOURCE_DIR}/include"
     )
 
     if(SDL)
-		add_custom_command(
-			TARGET ${BINARY_NAME}
-			POST_BUILD
-			COMMAND ${CMAKE_COMMAND} -E copy
-				"$<TARGET_FILE:SDL2>"
-				"$<TARGET_FILE_DIR:${PROJECT_NAME}>/$<TARGET_FILE_NAME:SDL2>"
-		)
+        add_custom_command(
+            TARGET ${BINARY_NAME}
+            POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy
+                "$<TARGET_FILE:SDL2>"
+                "$<TARGET_FILE_DIR:${PROJECT_NAME}>/$<TARGET_FILE_NAME:SDL2>"
+        )
     else()
-		add_custom_command(
-			TARGET ${BINARY_NAME}
-			POST_BUILD
-			COMMAND ${CMAKE_COMMAND} -E copy
-				"$<TARGET_FILE:JoyShockLibrary>"
-				"$<TARGET_FILE_DIR:${PROJECT_NAME}>/$<TARGET_FILE_NAME:JoyShockLibrary>"
-		)
+        add_custom_command(
+            TARGET ${BINARY_NAME}
+            POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy
+                "$<TARGET_FILE:JoyShockLibrary>"
+                "$<TARGET_FILE_DIR:${PROJECT_NAME}>/$<TARGET_FILE_NAME:JoyShockLibrary>"
+        )
     endif()
-	
-	set_target_properties (
+    
+    set_target_properties (
         ${BINARY_NAME} PROPERTIES
          WIN32_EXECUTABLE ON
          VS_STARTUP_PROJECT "${BINARY_NAME}"
          VS_DEBUGGER_WORKING_DIRECTORY "$(ProjectDir)/$(Configuration)/"
-		 VS_DEBUGGER_COMMAND_ARGUMENTS "$(SolutionDir)../dist"
+         VS_DEBUGGER_COMMAND_ARGUMENTS "$(SolutionDir)../dist"
     )
 
-	 add_definitions(/bigobj)
+     add_definitions(/bigobj)
 endif ()
 
 if (LINUX)
-	if(SDL OR NOT DEFINED SDL)
-		target_sources (
-				${BINARY_NAME} PRIVATE
-				src/SDL2Wrapper.cpp
-		)
-		add_definitions(-DSDL2)
-	else()
-		target_sources (
-				${BINARY_NAME} PRIVATE
-				src/JslWrapper.cpp
-		)
-	endif()
+    if(SDL OR NOT DEFINED SDL)
+        target_sources (
+                ${BINARY_NAME} PRIVATE
+                src/SDL2Wrapper.cpp
+        )
+        add_definitions(-DSDL2)
+    else()
+        target_sources (
+                ${BINARY_NAME} PRIVATE
+                src/JslWrapper.cpp
+        )
+    endif()
 
     target_sources (
         ${BINARY_NAME} PRIVATE
@@ -145,7 +149,7 @@ if (LINUX)
         src/linux/PlatformDefinitions.cpp
         src/linux/StatusNotifierItem.cpp    include/linux/StatusNotifierItem.h
         src/linux/Whitelister.cpp
-		src/linux/Gamepad.cpp
+        src/linux/Gamepad.cpp
     )
 endif ()
 
@@ -162,11 +166,12 @@ target_include_directories (
 )
 
 if(SDL OR NOT DEFINED SDL)
+
 	set(SDL_HIDAPI ON)
 	CPMAddPackage (
 		NAME SDL2
-		GITHUB_REPOSITORY libsdl-org/SDL
-		GIT_TAG release-2.26.2
+        GITHUB_REPOSITORY libsdl-org/SDL
+        GIT_TAG release-2.28.3
 	)
 
     # CPMAddPackage (
@@ -202,25 +207,24 @@ if(SDL OR NOT DEFINED SDL)
 	)
 	
 	# install(TARGETS SDL2_ttf PUBLIC_HEADER DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
-
 else()
 	# JoyShockLibrary
 	CPMAddPackage (
 		NAME JoyShockLibrary
-		GITHUB_REPOSITORY JibbSmart/JoyShockLibrary
+		GITHUB_REPOSITORY Electronicks/JoyShockLibrary
 		GIT_TAG 0
 	)
 
-	target_link_libraries (
-		${BINARY_NAME} PRIVATE
-		Platform::Dependencies
-		JoyShockLibrary
-	)
+    target_link_libraries (
+        ${BINARY_NAME} PRIVATE
+        Platform::Dependencies
+        JoyShockLibrary
+    )
 
-	install (
-		TARGETS ${BINARY_NAME} JoyShockLibrary
-		RUNTIME DESTINATION ${PACKAGE_DIR}
-	)
+    install (
+        TARGETS ${BINARY_NAME} JoyShockLibrary
+        RUNTIME DESTINATION ${PACKAGE_DIR}
+    )
 endif()
 
 
@@ -254,7 +258,7 @@ target_link_libraries (
 CPMAddPackage (
     NAME GamepadMotionHelpers
     GITHUB_REPOSITORY JibbSmart/GamepadMotionHelpers
-    GIT_TAG main
+    GIT_TAG 39b578aacf34c3a1c584d8f7f194adc776f88055
 )
 
 target_link_libraries (
@@ -278,7 +282,7 @@ add_library(imgui STATIC
   ${imgui_SOURCE_DIR}/imstb_rectpack.h ${imgui_SOURCE_DIR}/imstb_textedit.h
   ${imgui_SOURCE_DIR}/imstb_truetype.h
   ${imgui_SOURCE_DIR}/backends/imgui_impl_sdl2.h ${imgui_SOURCE_DIR}/backends/imgui_impl_sdl2.cpp
-  ${imgui_SOURCE_DIR}/backends/imgui_impl_sdlrenderer.h ${imgui_SOURCE_DIR}/backends/imgui_impl_sdlrenderer.cpp)
+  ${imgui_SOURCE_DIR}/backends/imgui_impl_sdlrenderer2.h ${imgui_SOURCE_DIR}/backends/imgui_impl_sdlrenderer2.cpp)
 
 target_include_directories(imgui PUBLIC ${imgui_SOURCE_DIR})
 target_link_libraries(imgui PUBLIC SDL2::SDL2)

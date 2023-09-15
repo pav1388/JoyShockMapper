@@ -3,6 +3,24 @@
 Most recent updates will appear first.
 This is a summary of new features and bugfixes. Read the README to learn how to use the features mentioned here.
 
+## Known issues
+* SDL always merges joycons behind the scene into a single controller. JSM is not able to split them. Use legacy-JSL version to use this feature.
+
+## 3.5.0
+
+Nick updates C++ standard to C++20, Add Setting Manager, Create Stick and Autoload objects, Update ViGEm, SDL2 and JSL dependencies to latest,
+which includes Sony Edge support for both SDL and JSL versions. Perform proper polymorphism of virtual gamepads.
+
+### Features
+* New HYBRID_AIM stick mode. This is the first feature developped by a community member : somebelse-Schmortii. It combines AIM and MOUSE_AREA. See readme for a ton of options and description
+* New virtual DS4 forwarding options: GYRO_OUTPUT=PS_MOTION, TOUCHPAD_MODE=PS_TOUCHPAD
+
+### Bugfixes
+* Set flick threshold at 100% (so that it is precisely controllerd by the outer deadzone setting)
+* Virtual buttons now work properly with event and action modifiers (toggle, hold, turbo, etc...)
+* Fix joycons in SDL2
+
+
 ## 3.4.0
 
 Nicolas updated SDL2 version to the latest release 2.0.20 and fixed some bugs
