@@ -37,7 +37,7 @@ public:
 
 	~HidHideWhitelister()
 	{
-		//Remove();
+		//remove();
 	}
 
 	virtual bool ShowConsole() override

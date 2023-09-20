@@ -566,7 +566,7 @@ void JoyShock::handleTriggerChange(ButtonID softIndex, ButtonID fullIndex, Trigg
 		{
 			// Trigger has been full pressed quickly
 			_triggerState[idxState] = DstState::QuickFullPress;
-			handleButtonChange(softIndex, false); // Remove soft press
+			handleButtonChange(softIndex, false); // remove soft press
 			handleButtonChange(fullIndex, true);
 		}
 		else

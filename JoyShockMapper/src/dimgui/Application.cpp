@@ -5,13 +5,14 @@
 #include "imgui_impl_sdlrenderer2.h"
 #include "SettingsManager.h"
 #include "CmdRegistry.h"
+#include "InputHelpers.h"
+#include "JslWrapper.h"
 #include <regex>
 #include <span>
 
 #define ImTextureID SDL_Texture
 
-const CmdRegistry* Application::_cmds = nullptr;
-
+extern CmdRegistry commandRegistry;
 extern vector<JSMButton> mappings;
 
 using namespace magic_enum;
@@ -19,6 +20,12 @@ using namespace ImGui;
 #define EndMenu() ImGui::EndMenu(); // Resolve symbol conflict with windows
 
 InputSelector Application::BindingTab::_inputSelector;
+AppIf *Application::BindingTab::_app = nullptr;
+
+ImVec2 operator+(ImVec2 lhs, ImVec2 rhs)
+{
+	return ImVec2 { lhs.x + rhs.x, lhs.y + rhs.y};
+}
 
 ButtonID operator+(ButtonID lhs, int rhs)
 {
@@ -26,10 +33,11 @@ ButtonID operator+(ButtonID lhs, int rhs)
 	return newEnum ? *newEnum : ButtonID::INVALID;
 }
 
-Application::Application(const CmdRegistry& cmds)
+Application::Application(JslWrapper* jsl)
+  : _jsl(jsl)
 {
-	_cmds = &cmds;
-	_tabs.emplace_back("Base Layer", cmds);
+	BindingTab::_app = this;
+	_tabs.emplace_back("Base Layer", jsl);
 }
 
 void Application::HelpMarker(string_view cmd)
@@ -40,7 +48,7 @@ void Application::HelpMarker(string_view cmd)
 	{
 		BeginTooltip();
 		PushTextWrapPos(GetFontSize() * 35.0f);
-		TextUnformatted(_cmds->GetHelp(cmd).data());
+		TextUnformatted(commandRegistry.getHelp(cmd).data());
 		PopTextWrapPos();
 		EndTooltip();
 	}
@@ -124,7 +132,17 @@ void Application::drawCombo(SettingID stg, ImGuiComboFlags flags, bool label)
 void Application::BindingTab::drawButton(ButtonID btn, ImVec2 size)
 {
 	std::stringstream labelID;
-	string desc(mappings[enum_integer(btn)].value().description());
+	auto mapping = mappings[enum_integer(btn)].atChord(_chord);
+	string desc;
+	if (mapping)
+		desc = mapping->value().description();
+	else
+	{
+		stringstream ss;
+		ss << '[' << mappings[enum_integer(btn)].value().description() << ']';
+		desc = ss.str();
+	}
+
 	for (auto pos = desc.find("and"); pos != string::npos; pos = desc.find("and", pos))
 	{
 		desc.insert(pos, "\n");
@@ -132,16 +150,22 @@ void Application::BindingTab::drawButton(ButtonID btn, ImVec2 size)
 	}
 	labelID << desc;                    // Button label to display
 	labelID << "###" << enum_name(btn); // Button ID for ImGui
-
 	if (Button(labelID.str().data(), size))
 	{
 		_showPopup = btn;
 	}
 
-	string_view label = mappings[enum_integer(btn)].label().data();
-	if (IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled | ImGuiHoveredFlags_DelayNormal) && !label.empty())
+	string_view label = mapping ? mapping->label().data() : string_view("Set a chorded button");
+	if (IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled | ImGuiHoveredFlags_DelayNormal))
 	{
-		SetTooltip(label.data());
+		if (!label.empty())
+		{
+			SetTooltip(label.data());
+		}
+		if (ImGui::IsMouseClicked(ImGuiMouseButton_Middle))
+		{
+			_app->createChord(btn);
+		}
 	}
 	if (ImGui::BeginPopupContextItem(nullptr, ImGuiPopupFlags_MouseButtonRight))
 	{
@@ -151,15 +175,22 @@ void Application::BindingTab::drawButton(ButtonID btn, ImVec2 size)
 		}
 		if (MenuItem("Clear", ""))
 		{
-			mappings[enum_integer(btn)].set(Mapping::NO_MAPPING);
-			mappings[enum_integer(btn)].updateLabel("");
+			if (mapping)
+			{
+				mapping->set(Mapping::NO_MAPPING);
+				mappings[enum_integer(btn)].processChordRemoval(_chord, mapping);
+				mappings[enum_integer(btn)].updateLabel("");
+			}
 		}
 		if (MenuItem("Set Double Press", "", false, false))
 		{
 			auto simMap = mappings[enum_integer(btn)].atSimPress(btn);
 			// TODO: set simMap to some value using the input selector and create a display for it somewhere in the UI
 		}
-		MenuItem("Chord this button", "Middle Click", false, false);
+		if (MenuItem("Chord this button", "Middle Click"))
+		{
+			_app->createChord(btn);
+		}
 		if (BeginMenu("Simultaneous Press with"))
 		{
 			for (auto pair = enum_entries<ButtonID>().begin(); pair->first < ButtonID::SIZE; ++pair)
@@ -190,6 +221,7 @@ void Application::BindingTab::drawButton(ButtonID btn, ImVec2 size)
 
 void Application::init()
 {
+	HideConsole();
 	// Setup window
 	SDL_WindowFlags window_flags = (SDL_WindowFlags)(SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI); //  | SDL_WINDOW_BORDERLESS | SDL_WINDOW_FULLSCREEN_DESKTOP
 	window = SDL_CreateWindow("JoyShockMapper", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1280, 720, window_flags);
@@ -364,7 +396,7 @@ void Application::draw()
 			Separator();
 			if (MenuItem("Quit"))
 			{
-				done = true;
+				WriteToConsole("QUIT");
 			}
 			EndMenu();
 		}
@@ -561,6 +593,14 @@ void Application::draw()
 	{
 		bindingTab.draw(renderingAreaPos, renderingAreaSize);
 	}
+	if (newTab != ButtonID::NONE)
+	{
+		stringstream ss;
+		ss << "Chorded " << newTab;
+		_tabs.emplace_back(ss.str(), _jsl, newTab);
+		_tabs.back().draw(renderingAreaPos, renderingAreaSize, true);
+		newTab = ButtonID::NONE;
+	}
 	EndTabBar(); // BindingsTab
 	End();       // MainWindow
 
@@ -584,10 +624,15 @@ void Application::draw()
 	SDL_RenderPresent(renderer);
 }
 
-Application::BindingTab::BindingTab(string_view name, const CmdRegistry& cmds, ButtonID chord)
+void Application::createChord(ButtonID chord)
+{
+	newTab = chord;
+}
+
+Application::BindingTab::BindingTab(string_view name, JslWrapper* jsl, ButtonID chord)
   : _name(name)
-  , _cmds(cmds)
   , _chord(chord)
+  , _jsl(jsl)
 {
 }
 
@@ -597,7 +642,7 @@ void Application::BindingTab::drawLabel(ButtonID btn)
 	Text(enum_name(btn).data());
 	if (IsItemHovered(ImGuiHoveredFlags_DelayNormal))
 	{
-		SetTooltip(_cmds.GetHelp(enum_name(btn)).data());
+		SetTooltip(commandRegistry.getHelp(enum_name(btn)).data());
 	}
 };
 void Application::BindingTab::drawLabel(SettingID stg)
@@ -606,7 +651,7 @@ void Application::BindingTab::drawLabel(SettingID stg)
 	Text(enum_name(stg).data());
 	if (IsItemHovered(ImGuiHoveredFlags_DelayNormal))
 	{
-		SetTooltip(_cmds.GetHelp(enum_name(stg)).data());
+		SetTooltip(commandRegistry.getHelp(enum_name(stg)).data());
 	}
 };
 void Application::BindingTab::drawLabel(string_view cmd)
@@ -615,7 +660,7 @@ void Application::BindingTab::drawLabel(string_view cmd)
 	Text(cmd.data());
 	if (IsItemHovered(ImGuiHoveredFlags_DelayNormal))
 	{
-		SetTooltip(_cmds.GetHelp(cmd).data());
+		SetTooltip(commandRegistry.getHelp(cmd).data());
 	}
 }
 
@@ -634,7 +679,7 @@ void Application::BindingTab::drawAnyFloat(SettingID stg, bool labeled)
 	}
 	if (labeled && IsItemHovered(ImGuiHoveredFlags_DelayNormal))
 	{
-		SetTooltip(_cmds.GetHelp(enum_name(stg)).data());
+		SetTooltip(commandRegistry.getHelp(enum_name(stg)).data());
 	}
 }
 
@@ -668,10 +713,13 @@ void Application::BindingTab::drawAny2Floats(SettingID stg, bool labeled)
 	}
 }
 
-void Application::BindingTab::draw(ImVec2& renderingAreaPos, ImVec2& renderingAreaSize)
+void Application::BindingTab::draw(ImVec2& renderingAreaPos, ImVec2& renderingAreaSize, bool setFocus)
 {
 	static constexpr float barSize = 75.f;
-	if (ImGui::BeginTabItem(_name.data()))
+	ImGuiTabItemFlags flags = ImGuiTabItemFlags_None;
+	if (ButtonID::NONE == _chord)
+		flags |= ImGuiTabItemFlags_Leading | ImGuiTabItemFlags_NoCloseWithMiddleMouseButton;
+	if (ImGui::BeginTabItem(_name.data(), setFocus ? &setFocus : nullptr, flags))
 	{
 		//SliderFloat("barwidth", &barSize, 20.f, 500.f);
 		auto mainWindowSize = ImGui::GetContentRegionAvail();
@@ -679,10 +727,16 @@ void Application::BindingTab::draw(ImVec2& renderingAreaPos, ImVec2& renderingAr
 		// int sizingPolicies[] = { ImGuiTableFlags_SizingFixedFit, ImGuiTableFlags_SizingFixedSame, ImGuiTableFlags_SizingStretchProp, ImGuiTableFlags_SizingStretchSame };
 		// Combo("Sizing policy", &sizingPolicy, "FixedFit\0FixedSame\0StretchProp\0StretchSame");
 
+
 		// Left
 		BeginChild("Left Bindings", { mainWindowSize.x * 1.f / 5.f, mainWindowSize.y - barSize }, true, ImGuiWindowFlags_AlwaysAutoResize);
 		if (BeginTable("LeftTable", 2, ImGuiTableFlags_SizingStretchSame))
 		{
+			TableNextRow();
+			TableNextColumn();
+			drawLabel("Top buttons");
+			TableNextColumn();
+
 			TableNextRow();
 			TableNextColumn();
 			drawLabel(ButtonID::ZLF);
@@ -718,6 +772,16 @@ void Application::BindingTab::draw(ImVec2& renderingAreaPos, ImVec2& renderingAr
 
 			TableNextRow();
 			TableNextColumn();
+			drawLabel("Face buttons");
+
+			TableNextRow();
+			TableNextColumn();
+			drawLabel("-");
+			TableNextColumn();
+			drawButton(ButtonID::MINUS);
+
+			TableNextRow();
+			TableNextColumn();
 			drawLabel(ButtonID::UP);
 			TableNextColumn();
 			drawButton(ButtonID::UP);
@@ -742,6 +806,22 @@ void Application::BindingTab::draw(ImVec2& renderingAreaPos, ImVec2& renderingAr
 
 			TableNextRow();
 			TableNextColumn();
+			drawLabel(ButtonID::CAPTURE);
+			disabled = SettingsManager::get<TriggerMode>(SettingID::TOUCHPAD_DUAL_STAGE_MODE)->value() == TriggerMode::NO_FULL;
+			if (disabled)
+				BeginDisabled();
+			TableNextColumn();
+			drawButton(ButtonID::CAPTURE);
+			if (disabled)
+				EndDisabled();
+
+			
+			TableNextRow();
+			TableNextColumn();
+			drawLabel("Back buttons");
+
+			TableNextRow();
+			TableNextColumn();
 			drawLabel(ButtonID::LSL);
 			TableNextColumn();
 			drawButton(ButtonID::LSL);
@@ -751,6 +831,11 @@ void Application::BindingTab::draw(ImVec2& renderingAreaPos, ImVec2& renderingAr
 			drawLabel(ButtonID::LSR);
 			TableNextColumn();
 			drawButton(ButtonID::LSR);
+
+			
+			TableNextRow();
+			TableNextColumn();
+			drawLabel("Left stick");
 
 			TableNextRow();
 			TableNextColumn();
@@ -764,7 +849,7 @@ void Application::BindingTab::draw(ImVec2& renderingAreaPos, ImVec2& renderingAr
 			SameLine();
 			drawCombo<RingMode>(SettingID::LEFT_RING_MODE, ImGuiComboFlags_NoPreview);
 			if (IsItemHovered())
-				SetTooltip(_cmds.GetHelp(enum_name(SettingID::LEFT_RING_MODE)).data());
+				SetTooltip(commandRegistry.getHelp(enum_name(SettingID::LEFT_RING_MODE)).data());
 			TableNextColumn();
 			drawButton(ButtonID::LRING);
 
@@ -861,40 +946,19 @@ void Application::BindingTab::draw(ImVec2& renderingAreaPos, ImVec2& renderingAr
 		{
 			TableNextRow();
 			TableNextColumn();
-			drawLabel("-");
-			TableNextColumn();
 			drawLabel(ButtonID::TOUCH);
 			SameLine();
 			drawCombo<TriggerMode>(SettingID::TOUCHPAD_DUAL_STAGE_MODE, ImGuiComboFlags_NoPreview);
 			if (IsItemHovered())
-				SetTooltip(_cmds.GetHelp(enum_name(SettingID::TOUCHPAD_DUAL_STAGE_MODE)).data());
-			TableSetColumnIndex(2);
-			drawLabel(ButtonID::CAPTURE);
-			TableSetColumnIndex(3);
-			drawLabel(ButtonID::HOME);
+				SetTooltip(commandRegistry.getHelp(enum_name(SettingID::TOUCHPAD_DUAL_STAGE_MODE)).data());
 			TableSetColumnIndex(4);
 			drawLabel(ButtonID::MIC);
-			TableSetColumnIndex(5);
-			drawLabel("+");
 
 			TableNextRow();
 			TableNextColumn();
-			drawButton(ButtonID::MINUS);
-			TableNextColumn();
 			drawButton(ButtonID::TOUCH);
-			TableSetColumnIndex(2);
-			bool disabled = SettingsManager::get<TriggerMode>(SettingID::TOUCHPAD_DUAL_STAGE_MODE)->value() == TriggerMode::NO_FULL;
-			if (disabled)
-				BeginDisabled();
-			drawButton(ButtonID::CAPTURE);
-			if (disabled)
-				EndDisabled();
-			TableSetColumnIndex(3);
-			drawButton(ButtonID::HOME);
 			TableSetColumnIndex(4);
 			drawButton(ButtonID::MIC);
-			TableSetColumnIndex(5);
-			drawButton(ButtonID::PLUS);
 
 			EndTable();
 		}
@@ -910,6 +974,10 @@ void Application::BindingTab::draw(ImVec2& renderingAreaPos, ImVec2& renderingAr
 		BeginChild("Right Bindings", { 0.f, mainWindowSize.y - barSize }, true);
 		if (BeginTable("RightTable", 2, ImGuiTableFlags_SizingStretchSame))
 		{
+			TableNextRow();
+			TableNextColumn();
+			drawLabel("Top buttons");
+
 			TableNextRow();
 			TableNextColumn();
 			bool disabled = SettingsManager::get<TriggerMode>(SettingID::ZL_MODE)->value() == TriggerMode::NO_FULL;
@@ -945,6 +1013,16 @@ void Application::BindingTab::draw(ImVec2& renderingAreaPos, ImVec2& renderingAr
 
 			TableNextRow();
 			TableNextColumn();
+			drawLabel("Face buttons");
+
+			TableNextRow();
+			TableNextColumn();
+			drawButton(ButtonID::PLUS);
+			TableNextColumn();
+			drawLabel("+");
+
+			TableNextRow();
+			TableNextColumn();
 			drawButton(ButtonID::N);
 			TableNextColumn();
 			drawLabel(ButtonID::N);
@@ -966,6 +1044,16 @@ void Application::BindingTab::draw(ImVec2& renderingAreaPos, ImVec2& renderingAr
 			drawButton(ButtonID::S);
 			TableNextColumn();
 			drawLabel(ButtonID::S);
+			
+			TableNextRow();
+			TableNextColumn();
+			drawButton(ButtonID::HOME);
+			TableNextColumn();
+			drawLabel(ButtonID::HOME);
+
+			TableNextRow();
+			TableNextColumn();
+			drawLabel("Back buttons");
 
 			TableNextRow();
 			TableNextColumn();
@@ -981,6 +1069,10 @@ void Application::BindingTab::draw(ImVec2& renderingAreaPos, ImVec2& renderingAr
 
 			TableNextRow();
 			TableNextColumn();
+			drawLabel("Right Stick");
+
+			TableNextRow();
+			TableNextColumn();
 			drawButton(ButtonID::R3);
 			TableNextColumn();
 			drawLabel(ButtonID::R3);
@@ -993,7 +1085,7 @@ void Application::BindingTab::draw(ImVec2& renderingAreaPos, ImVec2& renderingAr
 			SameLine();
 			drawCombo<RingMode>(SettingID::RIGHT_RING_MODE, ImGuiComboFlags_NoPreview);
 			if (IsItemHovered())
-				SetTooltip(_cmds.GetHelp(enum_name(SettingID::RIGHT_RING_MODE)).data());
+				SetTooltip(commandRegistry.getHelp(enum_name(SettingID::RIGHT_RING_MODE)).data());
 
 			TableNextRow();
 			TableNextColumn();
@@ -1199,7 +1291,7 @@ void Application::BindingTab::draw(ImVec2& renderingAreaPos, ImVec2& renderingAr
 			Text("GYRO_");
 			if (IsItemHovered(ImGuiHoveredFlags_DelayNormal))
 			{
-				SetTooltip(_cmds.GetHelp(gyroSetting.always_off ? "GYRO_ON" : "GYRO_OFF").data());
+				SetTooltip(commandRegistry.getHelp(gyroSetting.always_off ? "GYRO_ON" : "GYRO_OFF").data());
 			}
 			SameLine();
 			Switch enableButton = *enum_cast<Switch>(gyroSetting.always_off);
@@ -1284,7 +1376,19 @@ void Application::BindingTab::draw(ImVec2& renderingAreaPos, ImVec2& renderingAr
 
 		if (_showPopup != ButtonID::INVALID)
 		{
-			_inputSelector.show(_showPopup);
+			stringstream ss;
+			JSMVariable<Mapping> *variable = nullptr;
+			if (_chord != ButtonID::NONE)
+			{
+				ss << _chord << ',';
+				variable = &mappings[int(_showPopup)].createChord(_chord);
+			}
+			else
+			{
+				variable = &mappings[int(_showPopup)];
+			}
+			ss << _showPopup;
+			_inputSelector.show(variable, ss.str());
 			_showPopup = ButtonID::INVALID;
 		}
 		_inputSelector.draw();

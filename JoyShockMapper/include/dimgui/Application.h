@@ -11,22 +11,34 @@
 #include "InputSelector.h"
 
 enum class ButtonID;
-class CmdRegistry;
 template<typename T>
 class JSMVariable;
 
-class Application
+class JslWrapper;
+
+class AppIf
 {
 public:
-	Application(const CmdRegistry &cmds);
+	virtual ~AppIf() = default;
 
-	~Application() = default;
+	virtual void createChord(ButtonID chord) = 0;
+};
+
+class Application : protected AppIf
+{
+public:
+	Application(JslWrapper *jsl);
+
+	~Application() override = default;
 
 	void init();
 
 	void cleanUp();
 
 	void draw();
+
+protected:
+	void createChord(ButtonID chord) override;
 
 
 private:
@@ -37,8 +49,8 @@ private:
 
 	struct BindingTab
 	{
-		BindingTab(string_view name, const CmdRegistry &cmds, ButtonID chord = ButtonID::NONE);
-		void draw(ImVec2 &renderingAreaPos, ImVec2 &renderingAreaSize);
+		BindingTab(string_view name, JslWrapper *jsl, ButtonID chord = ButtonID::NONE);
+		void draw(ImVec2 &renderingAreaPos, ImVec2 &renderingAreaSize, bool setFocus = false);
 		void drawButton(ButtonID btn, ImVec2 size = ImVec2{ 0, 0 });
 		void drawLabel(ButtonID btn);
 		void drawLabel(SettingID stg);
@@ -46,14 +58,15 @@ private:
 		void drawAnyFloat(SettingID stg, bool labeled = false);
 		void drawPercentFloat(SettingID stg, bool labeled = false);
 		void drawAny2Floats(SettingID stg, bool labeled = false);
-		const string_view _name;
+		string _name;
 		const ButtonID _chord;
 		static InputSelector _inputSelector;
-		const CmdRegistry &_cmds;
 		ButtonID _showPopup = ButtonID::INVALID;
 		SettingID _stickConfigPopup = SettingID::INVALID;
+		JslWrapper *_jsl;
+		static AppIf * _app;
 	};
-	static const CmdRegistry *_cmds;
+	ButtonID newTab = ButtonID::NONE;
 	vector<BindingTab> _tabs;
 	bool show_demo_window = false;
 	SDL_Window* window = nullptr;
@@ -61,4 +74,5 @@ private:
 	future<bool> threadDone;
 	SDL_Texture *texture = nullptr;
 	SDL_Surface *image = nullptr;
+	JslWrapper *_jsl;
 };

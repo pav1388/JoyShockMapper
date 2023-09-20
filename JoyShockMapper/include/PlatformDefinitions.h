@@ -82,7 +82,7 @@ struct KeyCode
 	  , name()
 	{
 		if (code == COMMAND_ACTION)
-			name = keyName.substr(1, keyName.size() - 2); // Remove opening and closing quotation marks
+			name = keyName.substr(1, keyName.size() - 2); // remove opening and closing quotation marks
 		else if (keyName.compare("SMALL_RUMBLE") == 0)
 		{
 			name = SMALL_RUMBLE;

@@ -14,8 +14,6 @@
 #include <iostream>
 #include <cstring>
 
-extern CmdRegistry commandRegistry;
-
 typedef struct
 {
 	Uint8 ucEnableBits1;              /* 0 */
@@ -227,7 +225,7 @@ struct SdlInstance : public JslWrapper
 {
 public:
 	SdlInstance()
-	  : _gui(commandRegistry)
+	  : _gui(this)
 	{
 		SDL_SetHint(SDL_HINT_GAMECONTROLLER_USE_BUTTON_LABELS, "0");
 		SDL_SetHint(SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, "1");
@@ -242,6 +240,8 @@ public:
 
 	virtual ~SdlInstance()
 	{
+		keep_polling = false;
+		SDL_WaitThread(_controllerPolling, nullptr);
 		SDL_Quit();
 	}
 
@@ -287,22 +287,23 @@ public:
 	void (*g_touch_callback)(int, TOUCH_STATE, TOUCH_STATE, float) = nullptr;
 	atomic_bool keep_polling = false;
 	mutex controller_lock;
+	SDL_Thread *_controllerPolling = nullptr;
 	Application _gui;
 
 	int ConnectDevices() override
 	{
 		bool isFalse = false;
-		if (keep_polling.compare_exchange_strong(isFalse, true))
+		if (!_controllerPolling && keep_polling.compare_exchange_strong(isFalse, true))
 		{
 			// keep polling was false! It is set to true now.
-			SDL_Thread* controller_polling_thread = SDL_CreateThread([] (void *obj)
+			_controllerPolling = SDL_CreateThread([] (void *obj)
 			{
 				  auto this_ = static_cast<SdlInstance *>(obj);
 				  return this_->pollDevices();
-			  },
-			  "Poll Devices", this);
-			SDL_DetachThread(controller_polling_thread);
+			},
+			"Poll Devices", this);
 		}
+		lock_guard guard(controller_lock);
 		SDL_GameControllerUpdate(); // Refresh driver listing
 		return SDL_NumJoysticks();
 	}
@@ -336,7 +337,6 @@ public:
 	void DisconnectAndDisposeAll() override
 	{
 		lock_guard guard(controller_lock);
-		keep_polling = false;
 		g_callback = nullptr;
 		g_touch_callback = nullptr;
 		auto iter = _controllerMap.begin();
@@ -345,7 +345,6 @@ public:
 			delete iter->second;
 			iter = _controllerMap.erase(iter);
 		}
-		SDL_Delay(200);
 	}
 
 	JOY_SHOCK_STATE GetSimpleState(int deviceId) override

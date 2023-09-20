@@ -130,7 +130,7 @@ bool CmdRegistry::add(JSMCommand* newCommand)
 	return false;
 }
 
-bool CmdRegistry::Remove(string_view name)
+bool CmdRegistry::remove(string_view name)
 {
 	// If I allow multiple commands with the same name, I should have a way to specify which one I want to remove.
 	CmdMap::iterator cmd = find_if(_registry.begin(), _registry.end(), bind(&CmdRegistry::findCommandWithName, name, placeholders::_1));
@@ -241,7 +241,7 @@ void CmdRegistry::processLine(const string& line)
 	// else ignore empty lines
 }
 
-void CmdRegistry::GetCommandList(vector<string_view>& outList) const
+void CmdRegistry::getCommandList(vector<string_view>& outList) const
 {
 	outList.clear();
 	for (auto& cmd : _registry)
@@ -254,7 +254,7 @@ bool CmdRegistry::hasCommand(string_view name) const
 	return _registry.find(name) != _registry.end();
 }
 
-string_view CmdRegistry::GetHelp(string_view command) const
+string_view CmdRegistry::getHelp(string_view command) const
 {
 	auto cmd = _registry.find(command);
 	if (cmd != _registry.end())

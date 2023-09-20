@@ -13,4 +13,6 @@ Del /Q ..\JoyShockMapper_x64.zip ..\JoyShockMapper_x64_legacy.zip
 PowerShell -command  "Compress-Archive -Path ../install/JoyShockMapper_x64 -DestinationPath ../JoyShockMapper_x64.zip"
 PowerShell -command  "Compress-Archive -Path ../install/JoyShockMapper_x64_legacy -DestinationPath ../JoyShockMapper_x64_legacy.zip"
 
+echo Packages Generation Complete
+
 pause

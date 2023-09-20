@@ -46,10 +46,6 @@ add_executable (
 	include/Mapping.h
     include/AutoLoad.h
 	include/SettingsManager.h
-    src/dimgui/Application.cpp
-    src/dimgui/InputSelector.cpp
-    include/dimgui/Application.h
-    include/dimgui/InputSelector.h
     include/Stick.h
     include/JoyShock.h
 )
@@ -57,14 +53,18 @@ add_executable (
 if (WINDOWS)
     if(SDL)
         target_sources (
-                ${BINARY_NAME} PRIVATE
-                src/SDL2Wrapper.cpp
+            ${BINARY_NAME} PRIVATE
+            src/SDL2Wrapper.cpp
+            src/dimgui/Application.cpp
+            src/dimgui/InputSelector.cpp
+            include/dimgui/Application.h
+            include/dimgui/InputSelector.h
         )
         add_definitions(-DSDL2)
     else()
         target_sources (
-                ${BINARY_NAME} PRIVATE
-                src/JslWrapper.cpp
+            ${BINARY_NAME} PRIVATE
+            src/JslWrapper.cpp
         )
     endif()
 
@@ -207,6 +207,42 @@ if(SDL OR NOT DEFINED SDL)
 	)
 	
 	# install(TARGETS SDL2_ttf PUBLIC_HEADER DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
+    
+    # Dear ImGUI
+    CPMAddPackage (
+        NAME imgui
+        GITHUB_REPOSITORY ocornut/imgui
+        GIT_TAG v1.89.9-docking
+    )
+
+    add_library(imgui STATIC
+      ${imgui_SOURCE_DIR}/imgui.cpp ${imgui_SOURCE_DIR}/imgui.h
+      ${imgui_SOURCE_DIR}/imconfig.h ${imgui_SOURCE_DIR}/imgui_demo.cpp
+      ${imgui_SOURCE_DIR}/imgui_draw.cpp ${imgui_SOURCE_DIR}/imgui_internal.h
+      ${imgui_SOURCE_DIR}/imgui_tables.cpp ${imgui_SOURCE_DIR}/imgui_widgets.cpp
+      ${imgui_SOURCE_DIR}/imstb_rectpack.h ${imgui_SOURCE_DIR}/imstb_textedit.h
+      ${imgui_SOURCE_DIR}/imstb_truetype.h
+      ${imgui_SOURCE_DIR}/backends/imgui_impl_sdl2.h ${imgui_SOURCE_DIR}/backends/imgui_impl_sdl2.cpp
+      ${imgui_SOURCE_DIR}/backends/imgui_impl_sdlrenderer2.h ${imgui_SOURCE_DIR}/backends/imgui_impl_sdlrenderer2.cpp)
+
+    target_include_directories(imgui PUBLIC ${imgui_SOURCE_DIR})
+    target_link_libraries(imgui PUBLIC SDL2::SDL2)
+
+    target_link_libraries(${BINARY_NAME} PUBLIC imgui)
+
+    target_include_directories(${BINARY_NAME} PUBLIC ${PROJECT_BINARY_DIR}/_deps/imgui-src
+                                                     ${PROJECT_BINARY_DIR}/_deps/imgui-src/backends)
+
+    add_custom_command(
+	    TARGET ${BINARY_NAME}
+	    POST_BUILD
+	    COMMAND ${CMAKE_COMMAND} -E copy
+	    "${PROJECT_SOURCE_DIR}/dist/ds4.bmp"
+	    "$<TARGET_FILE_DIR:${PROJECT_NAME}>/ds4.bmp"
+    )
+
+    # FetchContent_MakeAvailable(imgui)
+
 else()
 	# JoyShockLibrary
 	CPMAddPackage (
@@ -266,38 +302,3 @@ target_link_libraries (
     Platform::Dependencies
     GamepadMotionHelpers
 )
-
-# Dear ImGUI
-CPMAddPackage (
-    NAME imgui
-    GITHUB_REPOSITORY ocornut/imgui
-    GIT_TAG docking
-)
-
-add_library(imgui STATIC
-  ${imgui_SOURCE_DIR}/imgui.cpp ${imgui_SOURCE_DIR}/imgui.h
-  ${imgui_SOURCE_DIR}/imconfig.h ${imgui_SOURCE_DIR}/imgui_demo.cpp
-  ${imgui_SOURCE_DIR}/imgui_draw.cpp ${imgui_SOURCE_DIR}/imgui_internal.h
-  ${imgui_SOURCE_DIR}/imgui_tables.cpp ${imgui_SOURCE_DIR}/imgui_widgets.cpp
-  ${imgui_SOURCE_DIR}/imstb_rectpack.h ${imgui_SOURCE_DIR}/imstb_textedit.h
-  ${imgui_SOURCE_DIR}/imstb_truetype.h
-  ${imgui_SOURCE_DIR}/backends/imgui_impl_sdl2.h ${imgui_SOURCE_DIR}/backends/imgui_impl_sdl2.cpp
-  ${imgui_SOURCE_DIR}/backends/imgui_impl_sdlrenderer2.h ${imgui_SOURCE_DIR}/backends/imgui_impl_sdlrenderer2.cpp)
-
-target_include_directories(imgui PUBLIC ${imgui_SOURCE_DIR})
-target_link_libraries(imgui PUBLIC SDL2::SDL2)
-
-target_link_libraries(${BINARY_NAME} PUBLIC imgui)
-
-target_include_directories(${BINARY_NAME} PUBLIC ${PROJECT_BINARY_DIR}/_deps/imgui-src
-                                                 ${PROJECT_BINARY_DIR}/_deps/imgui-src/backends)
-
-add_custom_command(
-	TARGET ${BINARY_NAME}
-	POST_BUILD
-	COMMAND ${CMAKE_COMMAND} -E copy
-	"${PROJECT_SOURCE_DIR}/dist/ds4.bmp"
-	"$<TARGET_FILE_DIR:${PROJECT_NAME}>/ds4.bmp"
-)
-
-# FetchContent_MakeAvailable(imgui)

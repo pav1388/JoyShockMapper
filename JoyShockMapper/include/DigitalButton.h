@@ -79,7 +79,7 @@ class DigitalButtonState : public pocket_fsm::StatePimplIF<DigitalButtonImpl>
 	// Adds chord to stack if absent
 	REACT(Pressed);
 
-	// Remove chord from stack if present
+	// remove chord from stack if present
 	REACT(Released);
 
 	// ignored by default

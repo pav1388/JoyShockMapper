@@ -4,11 +4,14 @@
 #include "imgui.h"
 #include <list>
 
+template<class T>
+class JSMVariable;
+
 class InputSelector
 {
 public:
 	InputSelector() = default;
-	void show(ButtonID btn);
+	void show(JSMVariable<Mapping> *variable, string_view name);
 	void draw();
 private:
 	struct MappingTabItem
@@ -45,7 +48,8 @@ private:
 		} _activeHeader;
 	};
 
-	std::optional<ButtonID> targetButton;
+	JSMVariable<Mapping> *_variable;
+	std::string _name;
 	std::list<MappingTabItem> tabList;
 	size_t activeTab = 0;
 	char label[64] = "";

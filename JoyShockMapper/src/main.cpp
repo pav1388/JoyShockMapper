@@ -26,6 +26,7 @@ unique_ptr<JslWrapper> jsl;
 unique_ptr<TrayIcon> tray;
 unique_ptr<Whitelister> whitelister;
 
+CmdRegistry commandRegistry;
 vector<JSMButton> grid_mappings; // array of virtual _buttons on the touchpad grid
 vector<JSMButton> mappings;      // array enables use of for each loop and other i/f
 
@@ -36,43 +37,41 @@ unique_ptr<PollingThread> minimizeThread;
 bool devicesCalibrating = false;
 unordered_map<int, shared_ptr<JoyShock>> handle_to_joyshock;
 int triggerCalibrationStep = 0;
-CmdRegistry commandRegistry;
 
-// void DisplayTouchInfo(int id, optional<FloatXY> xy, optional<FloatXY> prevXY = nullopt)
-//{
-//	if (xy)
-//	{
-//		if (!prevXY)
-//		{
-//			cout << "New touch " << id << " at " << *xy << '\n';
-//		}
-//		else if (fabsf(xy->x() - prevXY->x()) > FLT_EPSILON || fabsf(xy->y() - prevXY->y()) > FLT_EPSILON)
-//		{
-//			cout << "Touch " << id << " moved to " << *xy << '\n';
-//		}
-//	}
-//	else if (prevXY)
-//	{
-//		cout << "Touch " << id << " has been released\n";
-//	}
-// }
+void DisplayTouchInfo(int id, optional<FloatXY> xy, optional<FloatXY> prevXY = nullopt)
+{
+	if (xy)
+	{
+		if (!prevXY)
+		{
+			COUT << "New touch " << id << " at " << *xy << '\n';
+		}
+		else if (fabsf(xy->x() - prevXY->x()) > FLT_EPSILON || fabsf(xy->y() - prevXY->y()) > FLT_EPSILON)
+		{
+			COUT << "Touch " << id << " moved to " << *xy << '\n';
+		}
+	}
+	else if (prevXY)
+	{
+		COUT << "Touch " << id << " has been released\n";
+	}
+ }
 
 void touchCallback(int jcHandle, TOUCH_STATE newState, TOUCH_STATE prevState, float delta_time)
 {
-
-	// if (current.t0Down || previous.t0Down)
+	//if (newState.t0Down || prevState.t0Down)
 	//{
-	//	DisplayTouchInfo(current.t0Down ? current.t0Id : previous.t0Id,
-	//		current.t0Down ? optional<FloatXY>({ current.t0X, current.t0Y }) : nullopt,
-	//		previous.t0Down ? optional<FloatXY>({ previous.t0X, previous.t0Y }) : nullopt);
-	// }
+	//	DisplayTouchInfo(newState.t0Down ? newState.t0Id : prevState.t0Id,
+	//		newState.t0Down ? optional<FloatXY>({ newState.t0X, newState.t0Y }) : nullopt,
+	//		prevState.t0Down ? optional<FloatXY>({ prevState.t0X, prevState.t0Y }) : nullopt);
+	//}
 
-	// if (current.t1Down || previous.t1Down)
+	//if (newState.t1Down || prevState.t1Down)
 	//{
-	//	DisplayTouchInfo(current.t1Down ? current.t1Id : previous.t1Id,
-	//		current.t1Down ? optional<FloatXY>({ current.t1X, current.t1Y }) : nullopt,
-	//		previous.t1Down ? optional<FloatXY>({ previous.t1X, previous.t1Y }) : nullopt);
-	// }
+	//	DisplayTouchInfo(newState.t1Down ? newState.t1Id : prevState.t1Id,
+	//		newState.t1Down ? optional<FloatXY>({ newState.t1X, newState.t1Y }) : nullopt,
+	//		prevState.t1Down ? optional<FloatXY>({ prevState.t1X, prevState.t1Y }) : nullopt);
+	//}
 
 	shared_ptr<JoyShock> js = handle_to_joyshock[jcHandle];
 	int tpSizeX, tpSizeY;
@@ -126,16 +125,16 @@ void touchCallback(int jcHandle, TOUCH_STATE newState, TOUCH_STATE prevState, fl
 		int index0 = -1, index1 = -1;
 		if (point0.isDown())
 		{
-			float row = floorf(point0.posY * grid_size.value().y());
-			float col = floorf(point0.posX * grid_size.value().x());
+			float row = ceilf(point0.posY * grid_size.value().y()) - 1.f;
+			float col = ceilf(point0.posX * grid_size.value().x()) - 1.f;
 			// cout << "I should be in button " << row << " " << col << '\n';
 			index0 = int(row * grid_size.value().x() + col);
 		}
 
 		if (point1.isDown())
 		{
-			float row = floorf(point1.posY * grid_size.value().y());
-			float col = floorf(point1.posX * grid_size.value().x());
+			float row = ceilf(point1.posY * grid_size.value().y()) - 1.f;
+			float col = ceilf(point1.posX * grid_size.value().x()) - 1.f;
 			// cout << "I should be in button " << row << " " << col << '\n';
 			index1 = int(row * grid_size.value().x() + col);
 		}
@@ -1503,8 +1502,10 @@ void cleanUp()
 	}
 	HideConsole();
 	jsl->DisconnectAndDisposeAll();
+	jsl.reset();
 	handle_to_joyshock.clear(); // Destroy Vigem Gamepads
 	ReleaseConsole();
+	commandRegistry.clear();
 }
 
 int filterClampByte(int current, int next)
@@ -1763,12 +1764,12 @@ void onNewGridDimensions(CmdRegistry *registry, const FloatXY &newGridDims)
 
 	if (numberOfButtons < grid_mappings.size())
 	{
-		// Remove all extra touch button commands
+		// remove all extra touch button commands
 		bool successfulRemove = true;
 		for (auto id = FIRST_TOUCH_BUTTON + numberOfButtons; successfulRemove; ++id)
 		{
 			string name(magic_enum::enum_name(*magic_enum::enum_cast<ButtonID>(id)));
-			successfulRemove = registry->Remove(name);
+			successfulRemove = registry->remove(name);
 		}
 
 		// For all joyshocks, remove extra touch DigitalButtons
@@ -1778,7 +1779,7 @@ void onNewGridDimensions(CmdRegistry *registry, const FloatXY &newGridDims)
 			js.second->updateGridSize();
 		}
 
-		// Remove extra touch button variables
+		// remove extra touch button variables
 		while (grid_mappings.size() > numberOfButtons)
 			grid_mappings.pop_back();
 	}
@@ -1951,7 +1952,7 @@ private:
 			// Show all commands
 			COUT << "Here's the list of all commands.\n";
 			vector<string_view> list;
-			registry->GetCommandList(list);
+			registry->getCommandList(list);
 			for (auto cmd : list)
 			{
 				COUT_INFO << "    " << cmd << '\n';
@@ -1960,7 +1961,7 @@ private:
 		}
 		else if (registry->hasCommand(arg))
 		{
-			auto help = registry->GetHelp(arg);
+			auto help = registry->getHelp(arg);
 			if (!help.empty())
 			{
 				COUT << arg << " :\n"
@@ -1976,7 +1977,7 @@ private:
 			// Show all commands that include ARG
 			COUT << "\"" << arg << "\" is not a command, but the following are:\n";
 			vector<string_view> list;
-			registry->GetCommandList(list);
+			registry->getCommandList(list);
 			for (auto cmd : list)
 			{
 				auto pos = cmd.find(arg);
@@ -2475,7 +2476,12 @@ void initJsmSettings(CmdRegistry *commandRegistry)
 	commandRegistry->add((new JSMAssignment<FloatXY>(*touchpad_sens))
 	                       ->setHelp("Changes the sensitivity of the touchpad when set as a mouse. Enter a second value for a different vertical sensitivity."));
 
-	auto hide_minimized = new JSMVariable<Switch>(Switch::OFF);
+#ifdef SDL2
+	Switch defaultHideMinimized = Switch::ON; // Hide console to highlight GUI
+#else
+	Switch defaultHideMinimized = Switch::OFF;
+#endif
+	auto hide_minimized = new JSMVariable<Switch>(defaultHideMinimized);
 	minimizeThread.reset(new PollingThread( "Minimize thread", [] (void *param)
 		{
 			if (isConsoleMinimized())

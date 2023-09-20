@@ -98,7 +98,7 @@ public:
 	// accepted.
 	bool add(JSMCommand* newCommand);
 
-	bool Remove(string_view name);
+	bool remove(string_view name);
 
 	bool hasCommand(string_view name) const;
 
@@ -109,10 +109,15 @@ public:
 	void processLine(const string& line);
 
 	// Fill vector with registered command names
-	void GetCommandList(vector<string_view>& outList) const;
+	void getCommandList(vector<string_view>& outList) const;
 
 	// Return help string for provided command
-	string_view GetHelp(string_view command) const;
+	string_view getHelp(string_view command) const;
+
+	inline void clear()
+	{
+		_registry.clear();
+	}
 };
 
 // Macro commands are simple function calls when recognized. But it could do different things

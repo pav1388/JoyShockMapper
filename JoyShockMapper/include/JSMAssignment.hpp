@@ -145,7 +145,7 @@ protected:
 				if (settingVar)
 				{
 					//Create Modeshift
-					auto chordAssignment = make_unique<JSMAssignment<T>>(name.str(), *settingVar->atChord(btn));
+					auto chordAssignment = make_unique<JSMAssignment<T>>(name.str(), settingVar->createChord(btn));
 					chordAssignment->setHelp(_help)->setParser(bind(&JSMAssignment<T>::modeshiftParser, btn, settingVar, &_parse, placeholders::_1, placeholders::_2, placeholders::_3))
 						->setTaskOnDestruction(bind(&JSMSetting<T>::processModeshiftRemoval, settingVar, btn));
 					return chordAssignment;
@@ -153,10 +153,10 @@ protected:
 				auto buttonVar = dynamic_cast<JSMButton*>(&_var);
 				if (buttonVar && btn > ButtonID::NONE)
 				{
-					auto chordedVar = buttonVar->atChord(btn);
+					auto &chordedVar = buttonVar->createChord(btn);
 					// The reinterpret_cast is required for compilation, but settings will never run this code anyway.
-					auto chordAssignment = make_unique<JSMAssignment<T>>(name.str(), reinterpret_cast<JSMVariable<T>&>(*chordedVar));
-					chordAssignment->setHelp(_help)->setParser(_parse)->setTaskOnDestruction(bind(&JSMButton::processChordRemoval, buttonVar, btn, chordedVar));
+					auto chordAssignment = make_unique<JSMAssignment<T>>(name.str(), reinterpret_cast<JSMVariable<T>&>(chordedVar));
+					chordAssignment->setHelp(_help)->setParser(_parse)->setTaskOnDestruction(bind(&JSMButton::processChordRemoval, buttonVar, btn, &chordedVar));
 					// BE ADVISED! If a custom parser was set using bind(), the very same bound vars will
 					// be passed along.
 					return chordAssignment;

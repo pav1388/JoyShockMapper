@@ -8,7 +8,6 @@
 
 using namespace ImGui;
 using namespace magic_enum;
-extern vector<JSMButton> mappings;
 
 enum InputSelector::MappingTabItem::Header InputSelector::MappingTabItem::_activeHeader = InputSelector::MappingTabItem::Header::MODIFIERS;
 
@@ -67,15 +66,16 @@ void drawCombo(string_view name, T& setting)
 	}
 }
 
-void InputSelector::show(ButtonID btn)
+void InputSelector::show(JSMVariable<Mapping> *variable, string_view name)
 {
-	targetButton = btn;
+	_variable = variable;
+	_name = name;
 	stringstream ss;
-	ss << "Pick an input for " << enum_name(btn) << "##"
+	ss << "Pick an input for " << name << "##"
 	   << "InputSelector";
 	OpenPopup(ss.str().c_str(), ImGuiPopupFlags_AnyPopup);
 	tabList.clear();
-	auto currentLabel = mappings[enum_integer(btn)].label();
+	auto currentLabel = variable->label();
 	if (!currentLabel.empty())
 	{
 		strncpy(label, currentLabel.data(), std::min(IM_ARRAYSIZE(label), int(currentLabel.size())));
@@ -86,7 +86,7 @@ void InputSelector::show(ButtonID btn)
 	}
 	static constexpr string_view rgx = R"(\s*([!\^]?)((\".*?\")|\w*[0-9A-Z]|\W)([\\\/+'_]?)\s*(.*))";
 	smatch results;
-	string command(mappings[enum_integer(btn)].value().command());
+	string command(variable->value().command());
 	while (regex_match(command, results, regex(rgx.data())) && !results[0].str().empty())
 	{
 		Mapping::ActionModifier actMod =
@@ -120,7 +120,7 @@ void InputSelector::draw()
 	SetNextWindowPos(center, ImGuiCond_Appearing);
 	SetNextWindowBgAlpha(1.f);
 	stringstream ss;
-	ss << "Pick an input for " << enum_name(targetButton? *targetButton : ButtonID::INVALID) << "##"
+	ss << "Pick an input for " << _name << "##"
 	   << "InputSelector";
 	if (BeginPopupModal(ss.str().c_str(), nullptr, ImGuiWindowFlags_AlwaysAutoResize))
 	{
@@ -192,34 +192,34 @@ void InputSelector::draw()
 			TableSetColumnIndex(0);
 			if (Button("Save", { -FLT_MIN, 0.f }))
 			{
-				mappings[enum_integer(*targetButton)].set(currentMapping);
-				mappings[enum_integer(*targetButton)].updateLabel(label);
-				targetButton = std::nullopt;
+				_variable->set(currentMapping);
+				_variable->updateLabel(label);
+				_variable = nullptr;
 				CloseCurrentPopup();
 			}
 
 			TableSetColumnIndex(1);
 			if (Button("Clear", { -FLT_MIN, 0.f }))
 			{
-				mappings[enum_integer(*targetButton)].set(Mapping::NO_MAPPING);
-				mappings[enum_integer(*targetButton)].updateLabel("");
-				targetButton = std::nullopt;
+				_variable->set(Mapping::NO_MAPPING);
+				_variable->updateLabel("");
+				_variable = nullptr;
 				CloseCurrentPopup();
 			}
 			else if (IsItemHovered())
 			{
-				SetTooltip(mappings[enum_integer(*targetButton)].defaultValue().description().data());
+				SetTooltip(_variable->defaultValue().description().data());
 			}
 			TableSetColumnIndex(2);
 
 			if (Button("Cancel", { -FLT_MIN, 0.f }))
 			{
-				targetButton = std::nullopt;
+				_variable = nullptr;
 				CloseCurrentPopup();
 			}
 			else if (IsItemHovered())
 			{
-				SetTooltip(mappings[enum_integer(*targetButton)].value().description().data());
+				SetTooltip(_variable->value().description().data());
 			}
 			EndTable();
 		}

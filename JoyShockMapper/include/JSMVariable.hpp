@@ -107,7 +107,7 @@ public:
 		return _delegateID++;
 	}
 
-	// Remove the listener from list
+	// remove the listener from list
 	virtual bool removeOnChangeListener(unsigned int id)
 	{
 		auto found = _onChangeListeners.find(id);
@@ -179,7 +179,7 @@ public:
 	}
 
 	// Get the chorded variable, creating one if required.
-	JSMVariable<T> *atChord(ButtonID chord)
+	JSMVariable<T> &createChord(ButtonID chord)
 	{
 		auto existingChord = _chordedVariables.find(chord);
 		if (existingChord == _chordedVariables.end())
@@ -187,11 +187,21 @@ public:
 			// Create the chord when requested, using the copy constructor.
 			_chordedVariables.emplace(chord, JSMVariable<T>(*this, Base::_defVal));
 		}
-		return &_chordedVariables[chord];
+		return _chordedVariables[chord];
 	}
 
 	const JSMVariable<T> *atChord(ButtonID chord) const
 	{
+		if (chord == ButtonID::NONE)
+			return this;
+		auto existingChord = _chordedVariables.find(chord);
+		return existingChord != _chordedVariables.end() ? &existingChord->second : nullptr;
+	}
+
+	JSMVariable<T> *atChord(ButtonID chord)
+	{
+		if (chord == ButtonID::NONE)
+			return this;
 		auto existingChord = _chordedVariables.find(chord);
 		return existingChord != _chordedVariables.end() ? &existingChord->second : nullptr;
 	}
