@@ -6,6 +6,7 @@
 #include <sstream>
 #include <iostream>
 #include <thread>
+#include <mutex>
 
 //
 // Link against SetupAPI
@@ -54,13 +55,18 @@ union UDs4OutputBuffer
 inline void DS4_REPORT_EX_INIT(DS4_REPORT_EX* ds4reportEx)
 {
 	// Preserve button state
-	auto buttons = ds4reportEx->Report.wButtons;
 	memset(ds4reportEx, 0, (sizeof(DS4_REPORT_EX)));
-	ds4reportEx->Report.wButtons = buttons;
-	ds4reportEx->Report.bThumbLX = 0x7F;
-	ds4reportEx->Report.bThumbLY = 0x7F;
-	ds4reportEx->Report.bThumbRX = 0x7F;
-	ds4reportEx->Report.bThumbRY = 0x7F;
+	ds4reportEx->Report.bThumbLX = 0x80;
+	ds4reportEx->Report.bThumbLY = 0x80;
+	ds4reportEx->Report.bThumbRX = 0x80;
+	ds4reportEx->Report.bThumbRY = 0x80;
+
+	//DS4_SET_DPAD(ds4reportEx, DS4_BUTTON_DPAD_NONE);
+	ds4reportEx->Report.wButtons &= ~0xF;
+	ds4reportEx->Report.wButtons |= (USHORT)DS4_BUTTON_DPAD_NONE;
+
+	ds4reportEx->Report.sCurrentTouch.bIsUpTrackingNum1 = 0x80;
+	ds4reportEx->Report.sCurrentTouch.bIsUpTrackingNum2 = 0x80;
 }
 
 template<typename T>
@@ -251,6 +257,8 @@ protected:
 	}
 
 	PVIGEM_TARGET _gamepad = nullptr;
+	bool isLeftTriggerPressedDigitally = false;
+	bool isRightTriggerPressedDigitally = false;
 
 private :
 	Callback _notification = nullptr;
@@ -322,6 +330,16 @@ public:
 		{
 			op(_stateX360.wButtons, found->second);
 		}
+		else if (btn.code == X_LT)
+		{
+			isLeftTriggerPressedDigitally = pressed;
+			setLeftTrigger(1.0f);
+		}
+		else if (btn.code == X_RT)
+		{
+			isRightTriggerPressedDigitally = pressed;
+			setRightTrigger(1.0f);
+		}
 	}
 	void setLeftStick(float x, float y) override
 	{
@@ -346,6 +364,11 @@ public:
 	{
 		if (isInitialized())
 		{
+			if (isLeftTriggerPressedDigitally)
+				setLeftTrigger(1.0f);
+			if (isRightTriggerPressedDigitally)
+				setRightTrigger(1.0f);
+
 			vigem_target_x360_update(VigemClient::get(), _gamepad, _stateX360);
 			auto buttons = _stateX360.wButtons;
 			XUSB_REPORT_INIT(&_stateX360);
@@ -391,7 +414,8 @@ public:
 
 		if (_errorMsg.empty())
 		{
-			// Allocate _handle to identify new pad
+			lock_guard guard(_gamepadLock);
+			// Allocate handle to identify new pad
 			_gamepad = vigem_target_ds4_alloc();
 
 			// Add _client to the bus, this equals a plug-in event
@@ -410,6 +434,7 @@ public:
 	{
 		if (isInitialized())
 		{
+			lock_guard guard(_gamepadLock);
 			// We're done with this pad, free resources (this disconnects the virtual device)
 			if (PVIGEM_CLIENT client = VigemClient::get(); client != nullptr)
 			{
@@ -420,13 +445,19 @@ public:
 		_pollDs4Thread.join();
 	}
 
+	VIGEM_ERROR awaitOutputReportTimeout(UDs4OutputBuffer &out)
+	{
+		lock_guard guard(_gamepadLock);
+		return vigem_target_ds4_await_output_report_timeout(VigemClient::get(), _gamepad, 1000, &out.buffer);
+	}
+
 	void pollDs4()
 	{
 		UDs4OutputBuffer out;
 		Indicator ind;
-		for (auto result = vigem_target_ds4_await_output_report_timeout(VigemClient::get(), _gamepad, 1000, &out.buffer);
+		for (auto result = awaitOutputReportTimeout(out);
 			result == VIGEM_ERROR_NONE || result == VIGEM_ERROR_TIMED_OUT;
-		     result = vigem_target_ds4_await_output_report_timeout(VigemClient::get(), _gamepad, 1000, &out.buffer))
+		     result = awaitOutputReportTimeout(out))
 		{
 			if (result == VIGEM_ERROR_NONE)
 			{
@@ -532,8 +563,17 @@ public:
 	{
 		if (isInitialized())
 		{
+			if (isLeftTriggerPressedDigitally)
+				setLeftTrigger(1.0f);
+			if (isRightTriggerPressedDigitally)
+				setRightTrigger(1.0f);
+
 			vigem_target_ds4_update_ex(VigemClient::get(), _gamepad, _stateDS4);
+			auto buttons = _stateDS4.Report.wButtons;
+			auto special = _stateDS4.Report.bSpecial;
 			DS4_REPORT_EX_INIT(&_stateDS4);
+			_stateDS4.Report.wButtons = buttons;
+			_stateDS4.Report.bSpecial = special;
 		}
 	}
 
@@ -549,6 +589,7 @@ private:
 	optional<uint8_t> _touchId1 = 0;
 	optional<uint8_t> _touchId2 = 0;
 	thread _pollDs4Thread;
+	mutex _gamepadLock;
 };
 
 class PSHat
@@ -826,7 +867,15 @@ void Ds4Gamepad::setButton(KeyCode btn, bool pressed)
 	case PS_R3:
 		op_w(_stateDS4.Report.wButtons, DS4_BUTTON_THUMB_RIGHT);
 		break;
-	default:
+	case PS_L2:
+		isLeftTriggerPressedDigitally = pressed;
+		op_w(_stateDS4.Report.wButtons, DS4_BUTTON_TRIGGER_LEFT);
+		setLeftTrigger(pressed ? 1.0f : 0.f);
+		break;
+	case PS_R2:
+		isRightTriggerPressedDigitally = pressed;
+		op_w(_stateDS4.Report.wButtons, DS4_BUTTON_TRIGGER_RIGHT);
+		setRightTrigger(pressed ? 1.0f : 0.f);
 		break;
 	}
 }
