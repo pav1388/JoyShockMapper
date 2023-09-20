@@ -17,6 +17,7 @@
 #include <shellapi.h>
 #else
 #define UCHAR unsigned char
+#include <algorithm>
 #endif
 
 #pragma warning(disable : 4996) // Disable deprecated API warnings
@@ -62,15 +63,15 @@ void touchCallback(int jcHandle, TOUCH_STATE newState, TOUCH_STATE prevState, fl
 	//if (newState.t0Down || prevState.t0Down)
 	//{
 	//	DisplayTouchInfo(newState.t0Down ? newState.t0Id : prevState.t0Id,
-	//		newState.t0Down ? optional<FloatXY>({ newState.t0X, newState.t0Y }) : nullopt,
-	//		prevState.t0Down ? optional<FloatXY>({ prevState.t0X, prevState.t0Y }) : nullopt);
+	//	  newState.t0Down ? optional<FloatXY>({ newState.t0X, newState.t0Y }) : nullopt,
+	//	  prevState.t0Down ? optional<FloatXY>({ prevState.t0X, prevState.t0Y }) : nullopt);
 	//}
 
 	//if (newState.t1Down || prevState.t1Down)
 	//{
 	//	DisplayTouchInfo(newState.t1Down ? newState.t1Id : prevState.t1Id,
-	//		newState.t1Down ? optional<FloatXY>({ newState.t1X, newState.t1Y }) : nullopt,
-	//		prevState.t1Down ? optional<FloatXY>({ prevState.t1X, prevState.t1Y }) : nullopt);
+	//	  newState.t1Down ? optional<FloatXY>({ newState.t1X, newState.t1Y }) : nullopt,
+	//	  prevState.t1Down ? optional<FloatXY>({ prevState.t1X, prevState.t1Y }) : nullopt);
 	//}
 
 	shared_ptr<JoyShock> js = handle_to_joyshock[jcHandle];
@@ -127,7 +128,7 @@ void touchCallback(int jcHandle, TOUCH_STATE newState, TOUCH_STATE prevState, fl
 		{
 			float row = ceilf(point0.posY * grid_size.value().y()) - 1.f;
 			float col = ceilf(point0.posX * grid_size.value().x()) - 1.f;
-			// cout << "I should be in button " << row << " " << col << '\n';
+			// COUT << "I should be in button " << row << " " << col << '\n';
 			index0 = int(row * grid_size.value().x() + col);
 		}
 
@@ -135,7 +136,7 @@ void touchCallback(int jcHandle, TOUCH_STATE newState, TOUCH_STATE prevState, fl
 		{
 			float row = ceilf(point1.posY * grid_size.value().y()) - 1.f;
 			float col = ceilf(point1.posX * grid_size.value().x()) - 1.f;
-			// cout << "I should be in button " << row << " " << col << '\n';
+			// COUT << "I should be in button " << row << " " << col << '\n';
 			index1 = int(row * grid_size.value().x() + col);
 		}
 
@@ -1742,11 +1743,13 @@ void onVirtualControllerChange(const ControllerScheme &newScheme)
 	for (auto &js : handle_to_joyshock)
 	{
 		// Display an error message if any vigem is no good.
+		lock_guard guard(js.second->_context->callback_lock);
 		if (!js.second->hasVirtualController())
 		{
 			break;
 		}
 	}
+	// TODO: on NONE clear mappings with vigem commands?
 }
 
 void refreshAutoLoadHelp(JSMAssignment<Switch> *autoloadCmd)
