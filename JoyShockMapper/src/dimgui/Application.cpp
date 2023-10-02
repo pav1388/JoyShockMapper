@@ -597,9 +597,14 @@ void Application::draw()
 	{
 		stringstream ss;
 		ss << "Chorded " << newTab;
-		_tabs.emplace_back(ss.str(), _jsl, newTab);
-		_tabs.back().draw(renderingAreaPos, renderingAreaSize, true);
-		newTab = ButtonID::NONE;
+		auto existingTab = std::find_if(_tabs.begin(), _tabs.end(), [&ss](auto const& tab)
+		  { return tab._name == ss.str(); });
+		if (existingTab == _tabs.end())
+		{
+			_tabs.emplace_back(ss.str(), _jsl, newTab);
+			_tabs.back().draw(renderingAreaPos, renderingAreaSize, true);
+			newTab = ButtonID::NONE;
+		}
 	}
 	EndTabBar(); // BindingsTab
 	End();       // MainWindow

@@ -141,7 +141,7 @@ void Mapping::InsertEventMapping(BtnEvent evt, EventActionIf::Callback action)
 
 bool Mapping::AddMapping(KeyCode key, EventModifier evtMod, ActionModifier actMod)
 {
-	EventActionIf::Callback apply, release;
+	EventActionIf::Callback apply, apply2, release;
 	if (key.code == 0)
 	{
 		return false;
@@ -206,11 +206,14 @@ bool Mapping::AddMapping(KeyCode key, EventModifier evtMod, ActionModifier actMo
 	case EventModifier::ReleasePress:
 		// Acttion Modifier is required
 		applyEvt = BtnEvent::OnRelease;
-		releaseEvt = BtnEvent::INVALID;
+		releaseEvt = BtnEvent::OnInstantRelease;
 		break;
 	case EventModifier::TurboPress:
 		applyEvt = BtnEvent::OnTurbo;
-		releaseEvt = BtnEvent::OnTurbo;
+		releaseEvt = BtnEvent::OnInstantRelease;
+		apply2 = bind(&EventActionIf::RegisterInstant, placeholders::_1, applyEvt);
+		if (actMod == ActionModifier::None)
+			std::swap(apply, release);
 		break;
 	default: // EventModifier::INVALID or None
 		return false;
@@ -220,12 +223,12 @@ bool Mapping::AddMapping(KeyCode key, EventModifier evtMod, ActionModifier actMo
 	{
 	case ActionModifier::Toggle:
 		apply = bind(&EventActionIf::ApplyButtonToggle, placeholders::_1, key, apply, release);
+		release = EventActionIf::Callback();
 		break;
 	case ActionModifier::Instant:
 	{
-		EventActionIf::Callback action2 = bind(&EventActionIf::RegisterInstant, placeholders::_1, applyEvt);
-		apply = bind(&Mapping::RunBothActions, placeholders::_1, apply, action2);
-		releaseEvt = BtnEvent::OnInstantRelease;
+		apply2 = bind(&EventActionIf::RegisterInstant, placeholders::_1, applyEvt);
+		apply = bind(&Mapping::RunBothActions, placeholders::_1, apply, apply2);
 	}
 	break;
 	case ActionModifier::INVALID:
@@ -233,17 +236,15 @@ bool Mapping::AddMapping(KeyCode key, EventModifier evtMod, ActionModifier actMo
 		// None applies no modification... Hey!
 	}
 
-	// Insert release first because in turbo's case apply and release are the same but we want release to apply first
-	InsertEventMapping(applyEvt, apply);
 	if (evtMod == EventModifier::TurboPress)
 	{
+		apply = bind(&Mapping::RunBothActions, placeholders::_1, apply, apply2);
 		// On turbo you also always need to clear the turbo on release
-		InsertEventMapping(BtnEvent::OnRelease, release);
+		InsertEventMapping(BtnEvent::OnRelease, actMod == ActionModifier::Instant ? release : apply);
 	}
-	else
-	{
-		InsertEventMapping(releaseEvt, release);
-	}
+
+	InsertEventMapping(applyEvt, apply);
+	InsertEventMapping(releaseEvt, release);
 
 	stringstream ss;
 	// Update Description
