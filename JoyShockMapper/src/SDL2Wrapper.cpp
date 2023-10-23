@@ -1,6 +1,5 @@
 #include "JSMVariable.hpp"
 #include "JslWrapper.h"
-#include "TriggerEffectGenerator.h"
 #include "SettingsManager.h"
 #include "dimgui/Application.h"
 #include "SDL.h"
@@ -13,6 +12,8 @@
 #include <memory>
 #include <iostream>
 #include <cstring>
+
+import TriggerEffectGenerator;
 
 typedef struct
 {
