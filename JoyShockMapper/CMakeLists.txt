@@ -24,12 +24,10 @@ add_executable (
     src/DigitalButton.cpp
     src/MotionImpl.cpp
     src/Mapping.cpp
-    src/TriggerEffectGenerator.cpp
     src/AutoLoad.cpp
     src/SettingsManager.cpp
     src/Stick.cpp
     src/JoyShock.cpp
-    include/TriggerEffectGenerator.h
     include/InputHelpers.h
     include/PlatformDefinitions.h
     include/TrayIcon.h
@@ -49,6 +47,13 @@ add_executable (
     include/SettingsManager.h
     include/Stick.h
     include/JoyShock.h
+)
+
+# modules
+target_sources(${BINARY_NAME}
+  PUBLIC
+    FILE_SET CXX_MODULES FILES
+      mod/TriggerEffectGenerator.ixx
 )
 
 if (WINDOWS)
