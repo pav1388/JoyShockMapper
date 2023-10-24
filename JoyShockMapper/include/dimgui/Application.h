@@ -6,6 +6,7 @@
 #include <functional>
 #include <future>
 #include <atomic>
+#include <map>
 #include <optional>
 #include "Mapping.h"
 #include "InputSelector.h"
@@ -45,12 +46,14 @@ private:
 	static void HelpMarker(string_view cmd);
 
 	template<typename T>
-	static void drawCombo(SettingID stg, ImGuiComboFlags flags = ImGuiComboFlags_NoArrowButton, bool labeled = false);
+	static void drawCombo(SettingID stg, ButtonID chord, ImGuiComboFlags flags = ImGuiComboFlags_NoArrowButton, bool labeled = false);
 
 	struct BindingTab
 	{
 		BindingTab(string_view name, JslWrapper *jsl, ButtonID chord = ButtonID::NONE);
-		void draw(ImVec2 &renderingAreaPos, ImVec2 &renderingAreaSize, bool setFocus = false);
+		bool draw(ImVec2 &renderingAreaPos, ImVec2 &renderingAreaSize, bool setFocus = false);
+
+	private:
 		void drawButton(ButtonID btn, ImVec2 size = ImVec2{ 0, 0 });
 		void drawLabel(ButtonID btn);
 		void drawLabel(SettingID stg);
@@ -58,21 +61,30 @@ private:
 		void drawAnyFloat(SettingID stg, bool labeled = false);
 		void drawPercentFloat(SettingID stg, bool labeled = false);
 		void drawAny2Floats(SettingID stg, bool labeled = false);
-		string _name;
-		const ButtonID _chord;
+		template<typename T>
+		T getSettingValue(SettingID setting, JSMVariable<T> **outVariable = nullptr);
+		
+		ButtonID _chord;
+	public:
 		static InputSelector _inputSelector;
+		static AppIf * _app;
+
+		string _name;
 		ButtonID _showPopup = ButtonID::INVALID;
 		SettingID _stickConfigPopup = SettingID::INVALID;
 		JslWrapper *_jsl;
-		static AppIf * _app;
+
+		bool operator<(const BindingTab& rhs)
+		{
+			return _chord < rhs._chord;
+		}
 	};
-	ButtonID newTab = ButtonID::NONE;
-	vector<BindingTab> _tabs;
+	ButtonID _newTab = ButtonID::NONE;
+	map<ButtonID, BindingTab> _tabs;
 	bool show_demo_window = false;
+	bool show_plot_demo_window = false;
 	SDL_Window* window = nullptr;
 	SDL_Renderer* renderer = nullptr;
 	future<bool> threadDone;
-	SDL_Texture *texture = nullptr;
-	SDL_Surface *image = nullptr;
 	JslWrapper *_jsl;
 };

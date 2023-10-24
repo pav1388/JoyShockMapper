@@ -73,7 +73,7 @@ protected:
 		if (setting && argument.compare("NONE") == 0)
 		{
 			setting->markModeshiftForRemoval(modeshift);
-			COUT << "Modeshift " << modeshift << "," << cmd->_name << " has been removed.\n";
+			COUT << "Modeshift " << cmd->_name << " has been removed.\n";
 			return true;
 		}
 		return (*parser)(cmd, argument, label);

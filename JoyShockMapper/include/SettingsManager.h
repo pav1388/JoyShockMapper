@@ -3,6 +3,7 @@
 #include "JoyShockMapper.h"
 #include "JSMVariable.hpp"
 #include <unordered_map>
+#include <ranges>
 
 class SettingsManager
 {
@@ -41,8 +42,10 @@ public:
 
 	static void resetAllSettings();
 
-private:
 	using SettingsMap = unordered_map<SettingID, shared_ptr<JSMVariableBase>>;
+	static ranges::ref_view<SettingsMap> getSettings();
+
+private:
 	static SettingsMap _settings;
 };
 

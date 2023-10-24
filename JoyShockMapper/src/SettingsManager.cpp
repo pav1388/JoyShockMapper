@@ -31,3 +31,8 @@ void SettingsManager::resetAllSettings()
 	};
 	ranges::for_each(_settings | views::filter(exceptions), callReset);
 }
+
+ranges::ref_view<SettingsManager::SettingsMap> SettingsManager::getSettings()
+{
+	return ranges::views::all(_settings);
+}

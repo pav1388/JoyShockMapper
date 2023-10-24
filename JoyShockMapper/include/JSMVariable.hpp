@@ -7,6 +7,60 @@
 // Global ID generator
 static unsigned int _delegateID = 1;
 
+
+class ChordIterator
+{
+public:
+	virtual operator bool() const = 0;
+	virtual const ButtonID &operator*() const = 0;
+	virtual ChordIterator &operator++() = 0;
+};
+
+class ChordIteratorEmpty : public ChordIterator
+{
+public:
+	static const ButtonID DUMMY = ButtonID::NONE;
+	operator bool() const override
+	{
+		return false;
+	}
+	const ButtonID& operator*() const override
+	{
+		return DUMMY;
+	}
+	ChordIterator& operator++() override
+	{
+		return *this;
+	}
+};
+
+template<typename T>
+class ChordIteratorImpl : public ChordIterator
+{
+public:
+	ChordIteratorImpl(const map<ButtonID, T> &map)
+	  : _it(map.cbegin())
+	  , _end(map.cend())
+	{
+	}
+	operator bool() const override
+	{
+		return _it != _end;
+	}
+	const ButtonID &operator*() const override
+	{
+		return _it->first;
+	}
+	ChordIterator &operator++() override
+	{
+		++_it;
+		return *this;
+	}
+
+	map<ButtonID, T>::const_iterator _it;
+	map<ButtonID, T>::const_iterator _end;
+};
+
 class JSMVariableBase
 {
 public:
@@ -23,6 +77,11 @@ public:
 	}
 
 	virtual JSMVariableBase *reset() = 0;
+
+	virtual shared_ptr <ChordIterator> getChords()
+	{
+		return dynamic_pointer_cast<ChordIterator>(make_shared<ChordIteratorEmpty>());
+	}
 
 private:
 	// a user provided label
@@ -169,13 +228,19 @@ class ChordedVariable : public JSMVariable<T>
 
 protected:
 	// Each chord is a separate variable with its own listeners, but will use the same filtering and parsing.
-	map<ButtonID, JSMVariable<T>> _chordedVariables;
+	using ChordMap = map<ButtonID, JSMVariable<T>>;
+	ChordMap _chordedVariables;
 
 public:
 	ChordedVariable(T defval)
 	  : Base(defval)
 	  , _chordedVariables()
 	{
+	}
+
+	shared_ptr<ChordIterator> getChords() override
+	{
+		return shared_ptr<ChordIterator>(new ChordIteratorImpl(_chordedVariables));
 	}
 
 	// Get the chorded variable, creating one if required.

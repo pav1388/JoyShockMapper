@@ -221,6 +221,12 @@ if(SDL OR NOT DEFINED SDL)
         GITHUB_REPOSITORY ocornut/imgui
         GIT_TAG v1.89.9-docking
     )
+    # ImPlot
+    CPMAddPackage (
+        NAME implot
+        GITHUB_REPOSITORY epezent/implot
+        GIT_TAG 1f7a8c0314d838a76695bccebe0f66864f507bc0
+    )
 
     add_library(imgui STATIC
       ${imgui_SOURCE_DIR}/imgui.cpp ${imgui_SOURCE_DIR}/imgui.h
@@ -230,23 +236,18 @@ if(SDL OR NOT DEFINED SDL)
       ${imgui_SOURCE_DIR}/imstb_rectpack.h ${imgui_SOURCE_DIR}/imstb_textedit.h
       ${imgui_SOURCE_DIR}/imstb_truetype.h
       ${imgui_SOURCE_DIR}/backends/imgui_impl_sdl2.h ${imgui_SOURCE_DIR}/backends/imgui_impl_sdl2.cpp
-      ${imgui_SOURCE_DIR}/backends/imgui_impl_sdlrenderer2.h ${imgui_SOURCE_DIR}/backends/imgui_impl_sdlrenderer2.cpp)
+      ${imgui_SOURCE_DIR}/backends/imgui_impl_sdlrenderer2.h ${imgui_SOURCE_DIR}/backends/imgui_impl_sdlrenderer2.cpp
+      ${implot_SOURCE_DIR}/implot.h ${implot_SOURCE_DIR}/implot.cpp ${implot_SOURCE_DIR}/implot_internal.h
+      ${implot_SOURCE_DIR}/implot_items.cpp ${implot_SOURCE_DIR}/implot_demo.cpp
+    )
 
-    target_include_directories(imgui PUBLIC ${imgui_SOURCE_DIR})
+    target_include_directories(imgui PUBLIC ${imgui_SOURCE_DIR} ${implot_SOURCE_DIR})
     target_link_libraries(imgui PUBLIC SDL2::SDL2)
 
     target_link_libraries(${BINARY_NAME} PUBLIC imgui)
 
     target_include_directories(${BINARY_NAME} PUBLIC ${PROJECT_BINARY_DIR}/_deps/imgui-src
                                                      ${PROJECT_BINARY_DIR}/_deps/imgui-src/backends)
-
-    add_custom_command(
-	    TARGET ${BINARY_NAME}
-	    POST_BUILD
-	    COMMAND ${CMAKE_COMMAND} -E copy
-	    "${PROJECT_SOURCE_DIR}/dist/ds4.bmp"
-	    "$<TARGET_FILE_DIR:${PROJECT_NAME}>/ds4.bmp"
-    )
 
     # FetchContent_MakeAvailable(imgui)
 
