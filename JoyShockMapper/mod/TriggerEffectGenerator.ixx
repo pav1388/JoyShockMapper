@@ -1,13 +1,7 @@
-module;
-
-#include <cstdint>
-
-export module TriggerEffectGenerator;
-
 /*
  * MIT License
  *
- * Copyright (c) 2021 John "Nielk1" Klein
+ * Copyright (c) 2021-2022 John "Nielk1" Klein
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -26,29 +20,44 @@ export module TriggerEffectGenerator;
  * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
- *
- * This file is the CPP-fication of Nielk1's ExtendInput.DataTools.DualSense.TriggerEffectGenerator.cs
- * found at https://gist.github.com/Nielk1/6d54cc2c00d2201ccb8c2720ad7538db under
- * the same MIT license.
  */
 
+export module TriggerEffectGenerator;
+
+import std.core;
+
+/// <remarks>
+/// Actual effect uint8_t values sent to the controller. More complex effects may be build through the combination of these
+/// values and specific paramaters.
+/// </remarks>
 enum class TriggerEffectType : uint8_t
 {
-	SimpleResistance = 0x01,       // 00 00 0 001 // Suggest don't use
-	SimpleSemiAutomaticGun = 0x02, // 00 00 0 100 // Suggest don't use
-	reset = 0x05,                  // 00 00 0 101 // Safe to Use, part of libpad
-	SimpleAutomaticGun = 0x06,     // 00 00 0 110 // Suggest don't use
+	// Offically recognized modes
+	// These are 100% safe and are the only effects that modify the trigger status nybble
+	Off = 0x05,       // 00 00 0 101
+	Feedback = 0x21,  // 00 10 0 001
+	Weapon = 0x25,    // 00 10 0 101
+	Vibration = 0x26, // 00 10 0 110
 
-	LimitedResistance = 0x11,       // 00 01 0 001 // Suggest don't use
-	LimitedSemiAutomaticGun = 0x12, // 00 01 0 010 // Suggest don't use
+	// Unofficial but unique effects left in the firmware
+	// These might be removed in the future
+	Bow = 0x22,       // 00 10 0 010
+	Galloping = 0x23, // 00 10 0 011
+	Machine = 0x27,   // 00 10 0 111
 
-	Resistance = 0x21,       // 00 10 0 001 // Safe to Use, part of libpad
-	Bow = 0x22,              // 00 10 0 010 // Suspect, part of safe block
-	Galloping = 0x23,        // 00 10 0 011 // Suspect, part of safe block
-	SemiAutomaticGun = 0x25, // 00 10 0 101 // Safe to Use, part of libpad
-	AutomaticGun = 0x26,     // 00 10 0 110 // Safe to Use, part of libpad
-	Machine = 0x27,          // 00 10 0 111 // Suspect, part of safe block
+	// Leftover versions of offical modes with simpler logic and no paramater protections
+	// These should not be used
+	Simple_Feedback = 0x01,  // 00 00 0 001
+	Simple_Weapon = 0x02,    // 00 00 0 010
+	Simple_Vibration = 0x06, // 00 00 0 110
 
+	// Leftover versions of offical modes with limited paramater ranges
+	// These should not be used
+	Limited_Feedback = 0x11, // 00 01 0 001
+	Limited_Weapon = 0x12,   // 00 01 0 010
+
+	// Debug or Calibration functions
+	// Don't use these as they will courrupt the trigger state until the reset button is pressed
 	DebugFC = 0xFC, // 11 11 1 100
 	DebugFD = 0xFD, // 11 11 1 101
 	DebugFE = 0xFE, // 11 11 1 110
@@ -56,69 +65,85 @@ enum class TriggerEffectType : uint8_t
 
 export namespace ExtendInput::DataTools::DualSense
 {
+/**
+ * Changelog
+ * Revision 1: Initial
+ * Revision 2: Added Apple approximated adapter factories. (This may not be correct, please test if you have access to Apple APIs.)
+ *             Added Sony factories that use Sony's names.
+ *             Added Raw factories for Resistance and AutomaticGun that give direct access to bit-packed region data.
+ *             Added ReWASD factories that replicate reWASD effects, warts and all.
+ *             Trigger enumerations now public and wrapper classes static.
+ *             Minor documentation fixes.
+ * Revision 3: Corrected Apple factories based on new capture log tests that show only simple rounding was needed.
+ * Revision 4: Added 3 new Apple factories based on documentation and capture logs.
+ *             These effects are not fully confirmed and are poorly documented even in Apple's docs.
+ *             Two of these new effects are similar to our existing raw effect functions.
+ * Revision 5: Reorganized and renamed functions and paramaters to be more inline with Sony's API.
+ *             Information on the API was exposed by Apple and now further Steamworks version 1.55.
+ *             Information is offically source from Apple documentation and Steamworks via logging
+ *             HID writes to device based in inputs to new Steamworks functions. Interestingly, my
+ *             Raw factories now have equivilents in Sony's offical API and will also be renamed.
+ *             Full change list:
+ *               TriggerEffectType Enum is re-organized for clarity and comment typoes corrected
+ *               TriggerEffectType::Reset is now TriggerEffectType::Off
+ *               TriggerEffectType::Resistance is now TriggerEffectType::Feedback
+ *               TriggerEffectType::SemiAutomaticGun is now TriggerEffectType::Weapon
+ *               TriggerEffectType::AutomaticGun is now TriggerEffectType::Vibration
+ *               TriggerEffectType::SimpleResistance is now TriggerEffectType::Simple_Feedback
+ *               TriggerEffectType::SimpleSemiAutomaticGun is now TriggerEffectType::Simple_Weapon
+ *               TriggerEffectType::SimpleAutomaticGun is now TriggerEffectType::Simple_Vibration
+ *               TriggerEffectType::LimitedResistance is now TriggerEffectType::Limited_Feedback
+ *               TriggerEffectType::LimitedSemiAutomaticGun is now TriggerEffectType::Limited_Weapon
+ *               -----------------------------------------------------------------------------------
+ *               TriggerEffectGenerator.Reset(uint8_t *destinationArray, int destinationIndex) is now TriggerEffectGenerator.Off(uint8_t *destinationArray, int destinationIndex)
+ *               TriggerEffectGenerator.Resistance(uint8_t *destinationArray, int destinationIndex, uint8_t start, uint8_t force) is now TriggerEffectGenerator.Feedback(uint8_t *destinationArray, int destinationIndex, uint8_t position, uint8_t strength)
+ *               TriggerEffectGenerator.SemiAutomaticGun(uint8_t *destinationArray, int destinationIndex, uint8_t start, uint8_t end, uint8_t force) is now TriggerEffectGenerator.Weapon(uint8_t *destinationArray, int destinationIndex, uint8_t startPosition, uint8_t endPosition, uint8_t strength)
+ *               TriggerEffectGenerator.AutomaticGun(uint8_t *destinationArray, int destinationIndex, uint8_t start, uint8_t strength, uint8_t frequency) is now TriggerEffectGenerator.Vibration(uint8_t *destinationArray, int destinationIndex, uint8_t position, uint8_t amplitude, uint8_t frequency)
+ *               -----------------------------------------------------------------------------------
+ *               TriggerEffectGenerator.Bow(uint8_t *destinationArray, int destinationIndex, uint8_t start, uint8_t end, uint8_t force, uint8_t snapForce) is now TriggerEffectGenerator.
+ *               TriggerEffectGenerator.Galloping(uint8_t *destinationArray, int destinationIndex, uint8_t start, uint8_t end, uint8_t firstFoot, uint8_t secondFoot, uint8_t frequency) is now TriggerEffectGenerator.Galloping(uint8_t *destinationArray, int destinationIndex, uint8_t startPosition, uint8_t endPosition, uint8_t firstFoot, uint8_t secondFoot, uint8_t frequency)
+ *               TriggerEffectGenerator.Machine(uint8_t *destinationArray, int destinationIndex, uint8_t start, uint8_t end, uint8_t strengthA, uint8_t strengthB, uint8_t frequency, uint8_t period) is now TriggerEffectGenerator.Machine(uint8_t *destinationArray, int destinationIndex, uint8_t startPosition, uint8_t endPosition, uint8_t amplitudeA, uint8_t amplitudeB, uint8_t frequency, uint8_t period)
+ *               -----------------------------------------------------------------------------------
+ *               TriggerEffectGenerator.SimpleResistance(uint8_t *destinationArray, int destinationIndex, uint8_t start, uint8_t force) is now TriggerEffectGenerator.Simple_Feedback(uint8_t *destinationArray, int destinationIndex, uint8_t position, uint8_t strength)
+ *               TriggerEffectGenerator.SimpleSemiAutomaticGun(uint8_t *destinationArray, int destinationIndex, uint8_t start, uint8_t end, uint8_t force) is now TriggerEffectGenerator.Simple_Weapon(uint8_t *destinationArray, int destinationIndex, uint8_t startPosition, uint8_t endPosition, uint8_t strength)
+ *               TriggerEffectGenerator.SimpleAutomaticGun(uint8_t *destinationArray, int destinationIndex, uint8_t start, uint8_t strength, uint8_t frequency) is now TriggerEffectGenerator.Simple_Vibration(uint8_t *destinationArray, int destinationIndex, uint8_t position, uint8_t amplitude, uint8_t frequency)
+ *               -----------------------------------------------------------------------------------
+ *               TriggerEffectGenerator.LimitedResistance(uint8_t *destinationArray, int destinationIndex, uint8_t start, uint8_t force) is now TriggerEffectGenerator.Limited_Feedback(uint8_t *destinationArray, int destinationIndex, uint8_t position, uint8_t strength)
+ *               TriggerEffectGenerator.LimitedSemiAutomaticGun(uint8_t *destinationArray, int destinationIndex, uint8_t start, uint8_t end, uint8_t force) is now TriggerEffectGenerator.Limited_Weapon(uint8_t *destinationArray, int destinationIndex, uint8_t startPosition, uint8_t endPosition, uint8_t strength)
+ *               -----------------------------------------------------------------------------------
+ *               TriggerEffectGenerator.Raw.ResistanceRaw(uint8_t *destinationArray, int destinationIndex, uint8_t *force) is now TriggerEffectGenerator.MultiplePositionFeedback(uint8_t *destinationArray, int destinationIndex, uint8_t *strength)
+ *               TriggerEffectGenerator.Raw.AutomaticGunRaw(uint8_t *destinationArray, int destinationIndex, uint8_t *strength, uint8_t frequency) is now TriggerEffectGenerator.MultiplePositionVibration(uint8_t *destinationArray, int destinationIndex, uint8_t frequency, uint8_t *amplitude)
+ * Revision 6: Fixed MultiplePositionVibration not using frequency paramater.
+ */
 
+/// <summary>
 /// DualSense controller trigger effect generators.
-/// Revision: 1
+/// Revision: 6
+///
+/// If you are converting from offical Sony code you will need to convert your chosen effect enum to its chosen factory
+/// function and your paramater struct to paramaters for that function. Please also note that you will need to track the
+/// controller's currently set effect yourself. Note that all effect factories will return false and not modify the
+/// destinationArray if invalid paramaters are used. If paramaters that would result in zero effect are used, the
+/// <see cref="TriggerEffectType::Off">Off</see> effect is applied instead in line with Sony's offical behavior.
+/// All Unofficial, simple, and limited effects are defined as close to the offical effect implementations as possible.
+/// </summary>
 class TriggerEffectGenerator
 {
 public:
-	/// Simplistic resistance effect data generator.
-	/// This is not used by libpad and may be removed in a future DualSense firmware.
-	/// @note Use <see cref="Resistance(uint8_t[], int, uint8_t, uint8_t)"/> instead.
-	/// @param destinationArray The uint8_t[] that receives the data.
-	/// @param destinationIndex A 32-bit integer that represents the index in the destinationArray at which storing begins.
-	/// @param start The starting zone of the trigger effect.
-	/// @param force The force of the resistance.
-	/// @returns The success of the effect write.
-	static bool SimpleResistance(uint8_t *destinationArray, int destinationIndex, uint8_t start, uint8_t force)
-	{
-		destinationArray[destinationIndex + 0] = (uint8_t)TriggerEffectType::SimpleResistance;
-		destinationArray[destinationIndex + 1] = start;
-		destinationArray[destinationIndex + 2] = force;
-		destinationArray[destinationIndex + 3] = 0x00;
-		destinationArray[destinationIndex + 4] = 0x00;
-		destinationArray[destinationIndex + 5] = 0x00;
-		destinationArray[destinationIndex + 6] = 0x00;
-		destinationArray[destinationIndex + 7] = 0x00;
-		destinationArray[destinationIndex + 8] = 0x00;
-		destinationArray[destinationIndex + 9] = 0x00;
-		destinationArray[destinationIndex + 10] = 0x00;
-		return true;
-	}
+	// Helper alias 
+	template<typename T>
+	using arrayOf10 = std::array<T,10>;
 
-	/// Simplistic semi-automatic gun effect data generator.
-	/// This is not used by libpad and may be removed in a future DualSense firmware.
-	/// @note Use <see cref="SemiAutomaticGun(uint8_t[], int, uint8_t, uint8_t, uint8_t)"/> instead.
-	/// @param destinationArray The uint8_t[] that receives the data.
-	/// @param destinationIndex A 32-bit integer that represents the index in the destinationArray at which storing begins.
-	/// @param start The starting zone of the trigger effect.
-	/// @param end The ending zone of the trigger effect.
-	/// @param force The force of the resistance.
-	/// @returns The success of the effect write.
-	static bool SimpleSemiAutomaticGun(uint8_t *destinationArray, int destinationIndex, uint8_t start, uint8_t end, uint8_t force)
+	/// <summary>
+	/// Turn the trigger effect off and return the trigger stop to the neutral position.
+	/// This is an offical effect and is expected to be present in future DualSense firmware.
+	/// </summary>
+	/// <param name="destinationArray">The uint8_t *that receives the data.</param>
+	/// <param name="destinationIndex">A 32-bit integer that represents the index in the destinationArray at which storing begins.</param>
+	/// <returns>The success of the effect write.</returns>
+	static bool Off(uint8_t *destinationArray, int destinationIndex)
 	{
-		destinationArray[destinationIndex + 0] = (uint8_t)TriggerEffectType::SimpleSemiAutomaticGun;
-		destinationArray[destinationIndex + 1] = start;
-		destinationArray[destinationIndex + 2] = end;
-		destinationArray[destinationIndex + 3] = force;
-		destinationArray[destinationIndex + 4] = 0x00;
-		destinationArray[destinationIndex + 5] = 0x00;
-		destinationArray[destinationIndex + 6] = 0x00;
-		destinationArray[destinationIndex + 7] = 0x00;
-		destinationArray[destinationIndex + 8] = 0x00;
-		destinationArray[destinationIndex + 9] = 0x00;
-		destinationArray[destinationIndex + 10] = 0x00;
-		return true;
-	}
-
-	/// reset effect data generator.
-	/// This is used by libpad and is expected to be present in future DualSense firmware.
-	/// @param destinationArray The uint8_t[] that receives the data.
-	/// @param destinationIndex A 32-bit integer that represents the index in the destinationArray at which storing begins.
-	/// @returns The success of the effect write.
-	static bool reset(uint8_t *destinationArray, int destinationIndex)
-	{
-		destinationArray[destinationIndex + 0] = (uint8_t)TriggerEffectType::reset;
+		destinationArray[destinationIndex + 0] = uint8_t(TriggerEffectType::Off);
 		destinationArray[destinationIndex + 1] = 0x00;
 		destinationArray[destinationIndex + 2] = 0x00;
 		destinationArray[destinationIndex + 3] = 0x00;
@@ -132,125 +157,34 @@ public:
 		return true;
 	}
 
-	/// Simplistic automatic gun effect data generator.
-	/// This is not used by libpad and may be removed in a future DualSense firmware.
-	/// @note Use <see cref="AutomaticGun(uint8_t[], int, uint8_t, uint8_t, uint8_t)"/> instead.
-	/// @param destinationArray The uint8_t[] that receives the data.
-	/// @param destinationIndex A 32-bit integer that represents the index in the destinationArray at which storing begins.
-	/// @param start The starting zone of the trigger effect.
-	/// @param force Strength of the automatic cycling action.
-	/// @param frequency Frequency of the automatic cycling action in hertz.
-	/// @returns The success of the effect write.
-	static bool SimpleAutomaticGun(uint8_t *destinationArray, int destinationIndex, uint8_t start, uint8_t strength, uint8_t frequency)
+	/// <summary>
+	/// Trigger will resist movement beyond the start position.
+	/// The trigger status nybble will report 0 before the effect and 1 when in the effect.
+	/// This is an offical effect and is expected to be present in future DualSense firmware.
+	/// </summary>
+	/// <param name="destinationArray">The uint8_t *that receives the data.</param>
+	/// <param name="destinationIndex">A 32-bit integer that represents the index in the destinationArray at which storing begins.</param>
+	/// <param name="position">The starting zone of the trigger effect. Must be between 0 and 9 inclusive.</param>
+	/// <param name="strength">The force of the resistance. Must be between 0 and 8 inclusive.</param>
+	/// <returns>The success of the effect write.</returns>
+	static bool Feedback(uint8_t *destinationArray, int destinationIndex, uint8_t position, uint8_t strength)
 	{
-		if (frequency > 0 && strength > 0)
+		if (position > 9)
+			return false;
+		if (strength > 8)
+			return false;
+		if (strength > 0)
 		{
-			destinationArray[destinationIndex + 0] = (uint8_t)TriggerEffectType::SimpleAutomaticGun;
-			destinationArray[destinationIndex + 1] = frequency;
-			destinationArray[destinationIndex + 2] = strength;
-			destinationArray[destinationIndex + 3] = start;
-			destinationArray[destinationIndex + 4] = 0x00;
-			destinationArray[destinationIndex + 5] = 0x00;
-			destinationArray[destinationIndex + 6] = 0x00;
-			destinationArray[destinationIndex + 7] = 0x00;
-			destinationArray[destinationIndex + 8] = 0x00;
-			destinationArray[destinationIndex + 9] = 0x00;
-			destinationArray[destinationIndex + 10] = 0x00;
-			return true;
-		}
-		return reset(destinationArray, destinationIndex);
-	}
-
-	/// Simplistic resistance effect data generator with stricter paramater limits.
-	/// This is not used by libpad and may be removed in a future DualSense firmware.
-	/// @note <see cref="Resistance(uint8_t[], int, uint8_t, uint8_t)"/> instead.
-	/// @param destinationArray The uint8_t[] that receives the data.
-	/// @param destinationIndex A 32-bit integer that represents the index in the destinationArray at which storing begins.
-	/// @param start The starting zone of the trigger effect.
-	/// @param force The force of the resistance. Must be between 0 and 10 inclusive.
-	/// @returns The success of the effect write.
-	static bool LimitedResistance(uint8_t *destinationArray, int destinationIndex, uint8_t start, uint8_t force)
-	{
-		if (force > 10)
-			return false;
-		if (force > 0)
-		{
-			destinationArray[destinationIndex + 0] = (uint8_t)TriggerEffectType::LimitedResistance;
-			destinationArray[destinationIndex + 1] = start;
-			destinationArray[destinationIndex + 2] = force;
-			destinationArray[destinationIndex + 3] = 0x00;
-			destinationArray[destinationIndex + 4] = 0x00;
-			destinationArray[destinationIndex + 5] = 0x00;
-			destinationArray[destinationIndex + 6] = 0x00;
-			destinationArray[destinationIndex + 7] = 0x00;
-			destinationArray[destinationIndex + 8] = 0x00;
-			destinationArray[destinationIndex + 9] = 0x00;
-			destinationArray[destinationIndex + 10] = 0x00;
-			return true;
-		}
-		return reset(destinationArray, destinationIndex);
-	}
-
-	/// Simplistic semi-automatic gun effect data generator with stricter paramater limits.
-	/// This is not used by libpad and may be removed in a future DualSense firmware.
-	/// @note <see cref="SemiAutomaticGun(uint8_t[], int, uint8_t, uint8_t, uint8_t)"/> instead.
-	/// @param destinationArray The uint8_t[] that receives the data.
-	/// @param destinationIndex A 32-bit integer that represents the index in the destinationArray at which storing begins.
-	/// @param start The starting zone of the trigger effect. Must be 16 or higher.
-	/// @param end The ending zone of the trigger effect. Must be between <paramref name="start"/> and <paramref name="start"/>+100 inclusive.
-	/// @param force The force of the resistance. Must be between 0 and 10 inclusive.
-	/// @returns The success of the effect write.
-	static bool LimitedSemiAutomaticGun(uint8_t *destinationArray, int destinationIndex, uint8_t start, uint8_t end, uint8_t force)
-	{
-		if (start < 0x10)
-			return false;
-		if (end < start || (start + 100) < end)
-			return false;
-		if (force > 10)
-			return false;
-		if (force > 0)
-		{
-			destinationArray[destinationIndex + 0] = (uint8_t)TriggerEffectType::LimitedSemiAutomaticGun;
-			destinationArray[destinationIndex + 1] = start;
-			destinationArray[destinationIndex + 2] = end;
-			destinationArray[destinationIndex + 3] = force;
-			destinationArray[destinationIndex + 4] = 0x00;
-			destinationArray[destinationIndex + 5] = 0x00;
-			destinationArray[destinationIndex + 6] = 0x00;
-			destinationArray[destinationIndex + 7] = 0x00;
-			destinationArray[destinationIndex + 8] = 0x00;
-			destinationArray[destinationIndex + 9] = 0x00;
-			destinationArray[destinationIndex + 10] = 0x00;
-			return true;
-		}
-		return reset(destinationArray, destinationIndex);
-	}
-
-	/// Resistance effect data generator.
-	/// This is used by libpad and is expected to be present in future DualSense firmware.
-	/// @param destinationArray The uint8_t[] that receives the data.
-	/// @param destinationIndex A 32-bit integer that represents the index in the destinationArray at which storing begins.
-	/// @param start The starting zone of the trigger effect. Must be between 0 and 9 inclusive.
-	/// @param force The force of the resistance. Must be between 0 and 8 inclusive.
-	/// @returns The success of the effect write.
-	static bool Resistance(uint8_t *destinationArray, int destinationIndex, uint8_t start, uint8_t force)
-	{
-		if (start > 9)
-			return false;
-		if (force > 8)
-			return false;
-		if (force > 0)
-		{
-			uint8_t forceValue = (uint8_t)((force - 1) & 0x07);
+			uint8_t forceValue = (uint8_t)((strength - 1) & 0x07);
 			uint32_t forceZones = 0;
 			uint16_t activeZones = 0;
-			for (int i = start; i < 10; i++)
+			for (int i = position; i < 10; i++)
 			{
 				forceZones |= (uint32_t)(forceValue << (3 * i));
 				activeZones |= (uint16_t)(1 << i);
 			}
 
-			destinationArray[destinationIndex + 0] = (uint8_t)TriggerEffectType::Resistance;
+			destinationArray[destinationIndex + 0] = (uint8_t)TriggerEffectType::Feedback;
 			destinationArray[destinationIndex + 1] = (uint8_t)((activeZones >> 0) & 0xff);
 			destinationArray[destinationIndex + 2] = (uint8_t)((activeZones >> 8) & 0xff);
 			destinationArray[destinationIndex + 3] = (uint8_t)((forceZones >> 0) & 0xff);
@@ -263,34 +197,250 @@ public:
 			destinationArray[destinationIndex + 10] = 0x00;
 			return true;
 		}
-		return reset(destinationArray, destinationIndex);
+		return Off(destinationArray, destinationIndex);
 	}
 
-	/// Bow effect data generator.
-	/// This is not used by libpad but is in the used effect block, it may be removed in a future DualSense firmware.
-	/// @param destinationArray The uint8_t[] that receives the data.
-	/// @param destinationIndex A 32-bit integer that represents the index in the destinationArray at which storing begins.
-	/// @param start The starting zone of the trigger effect. Must be between 0 and 8 inclusive.
-	/// @param end The ending zone of the trigger effect. Must be between <paramref name="start"/> + 1 and 8 inclusive.
-	/// @param force The force of the resistance. Must be between 0 and 8 inclusive.
-	/// @param snapForce The force of the snap-back. Must be between 0 and 8 inclusive.
-	/// @returns The success of the effect write.
-	static bool Bow(uint8_t *destinationArray, int destinationIndex, uint8_t start, uint8_t end, uint8_t force, uint8_t snapForce)
+	/// <summary>
+	/// Trigger will resist movement beyond the start position until the end position.
+	/// The trigger status nybble will report 0 before the effect and 1 when in the effect,
+	/// and 2 after until again before the start position.
+	/// This is an offical effect and is expected to be present in future DualSense firmware.
+	/// </summary>
+	/// <param name="destinationArray">The uint8_t *that receives the data.</param>
+	/// <param name="destinationIndex">A 32-bit integer that represents the index in the destinationArray at which storing begins.</param>
+	/// <param name="startPosition">The starting zone of the trigger effect. Must be between 2 and 7 inclusive.</param>
+	/// <param name="endPosition">The ending zone of the trigger effect. Must be between <paramref name="startPosition"/>+1 and 8 inclusive.</param>
+	/// <param name="strength">The force of the resistance. Must be between 0 and 8 inclusive.</param>
+	/// <returns>The success of the effect write.</returns>
+	static bool Weapon(uint8_t *destinationArray, int destinationIndex, uint8_t startPosition, uint8_t endPosition, uint8_t strength)
 	{
-		if (start > 8)
+		if (startPosition > 7 || startPosition < 2)
 			return false;
-		if (end > 8)
+		if (endPosition > 8)
 			return false;
-		if (start >= end)
+		if (endPosition <= startPosition)
 			return false;
-		if (force > 8)
+		if (strength > 8)
+			return false;
+		if (strength > 0)
+		{
+			uint16_t startAndStopZones = (uint16_t)((1 << startPosition) | (1 << endPosition));
+
+			destinationArray[destinationIndex + 0] = (uint8_t)TriggerEffectType::Weapon;
+			destinationArray[destinationIndex + 1] = (uint8_t)((startAndStopZones >> 0) & 0xff);
+			destinationArray[destinationIndex + 2] = (uint8_t)((startAndStopZones >> 8) & 0xff);
+			destinationArray[destinationIndex + 3] = (uint8_t)(strength - 1); // this is actually packed into 3 bits, but since it's only one why bother with the fancy code?
+			destinationArray[destinationIndex + 4] = 0x00;
+			destinationArray[destinationIndex + 5] = 0x00;
+			destinationArray[destinationIndex + 6] = 0x00;
+			destinationArray[destinationIndex + 7] = 0x00;
+			destinationArray[destinationIndex + 8] = 0x00;
+			destinationArray[destinationIndex + 9] = 0x00;
+			destinationArray[destinationIndex + 10] = 0x00;
+			return true;
+		}
+		return Off(destinationArray, destinationIndex);
+	}
+	/// <summary>
+	/// Trigger will vibrate with the input amplitude and frequency beyond the start position.
+	/// The trigger status nybble will report 0 before the effect and 1 when in the effect.
+	/// This is an offical effect and is expected to be present in future DualSense firmware.
+	/// </summary>
+	/// <param name="destinationArray">The uint8_t *that receives the data.</param>
+	/// <param name="destinationIndex">A 32-bit integer that represents the index in the destinationArray at which storing begins.</param>
+	/// <param name="position">The starting zone of the trigger effect. Must be between 0 and 9 inclusive.</param>
+	/// <param name="amplitude">Strength of the automatic cycling action. Must be between 0 and 8 inclusive.</param>
+	/// <param name="frequency">Frequency of the automatic cycling action in hertz.</param>
+	/// <returns>The success of the effect write.</returns>
+	static bool Vibration(uint8_t *destinationArray, int destinationIndex, uint8_t position, uint8_t amplitude, uint8_t frequency)
+	{
+		if (position > 9)
+			return false;
+		if (amplitude > 8)
+			return false;
+		if (amplitude > 0 && frequency > 0)
+		{
+			uint8_t strengthValue = (uint8_t)((amplitude - 1) & 0x07);
+			uint32_t amplitudeZones = 0;
+			uint16_t activeZones = 0;
+			for (int i = position; i < 10; i++)
+			{
+				amplitudeZones |= (uint32_t)(strengthValue << (3 * i));
+				activeZones |= (uint16_t)(1 << i);
+			}
+
+			destinationArray[destinationIndex + 0] = (uint8_t)TriggerEffectType::Vibration;
+			destinationArray[destinationIndex + 1] = (uint8_t)((activeZones >> 0) & 0xff);
+			destinationArray[destinationIndex + 2] = (uint8_t)((activeZones >> 8) & 0xff);
+			destinationArray[destinationIndex + 3] = (uint8_t)((amplitudeZones >> 0) & 0xff);
+			destinationArray[destinationIndex + 4] = (uint8_t)((amplitudeZones >> 8) & 0xff);
+			destinationArray[destinationIndex + 5] = (uint8_t)((amplitudeZones >> 16) & 0xff);
+			destinationArray[destinationIndex + 6] = (uint8_t)((amplitudeZones >> 24) & 0xff);
+			destinationArray[destinationIndex + 7] = 0x00; // (uint8_t)((strengthZones >> 32) & 0xff); // need 64bit for this, but we already have enough space
+			destinationArray[destinationIndex + 8] = 0x00; // (uint8_t)((strengthZones >> 40) & 0xff); // need 64bit for this, but we already have enough space
+			destinationArray[destinationIndex + 9] = frequency;
+			destinationArray[destinationIndex + 10] = 0x00;
+			return true;
+		}
+		return Off(destinationArray, destinationIndex);
+	}
+
+	/// <summary>
+	/// Trigger will resist movement at varrying strengths in 10 regions.
+	/// This is an offical effect and is expected to be present in future DualSense firmware.
+	/// </summary>
+	/// <seealso cref="Feedback(uint8_t[], int, uint8_t, uint8_t)"/>
+	/// <param name="destinationArray">The uint8_t *that receives the data.</param>
+	/// <param name="destinationIndex">A 32-bit integer that represents the index in the destinationArray at which storing begins.</param>
+	/// <param name="strength">Array of 10 resistance values for zones 0 through 9. Must be between 0 and 8 inclusive.</param>
+	/// <returns>The success of the effect write.</returns>
+	static bool MultiplePositionFeedback(uint8_t *destinationArray, int destinationIndex, arrayOf10<uint8_t> const& strength)
+	{
+		if (std::ranges::find_if(strength, [](auto dr) { return dr > 0; }) != strength.end())
+		{
+			uint32_t forceZones = 0;
+			uint16_t activeZones = 0;
+			for (int i = 0; i < 10; i++)
+			{
+				if (strength[i] > 0)
+				{
+					uint8_t forceValue = (uint8_t)((strength[i] - 1) & 0x07);
+					forceZones |= (uint32_t)(forceValue << (3 * i));
+					activeZones |= (uint16_t)(1 << i);
+				}
+			}
+
+			destinationArray[destinationIndex + 0] = (uint8_t)TriggerEffectType::Feedback;
+			destinationArray[destinationIndex + 1] = (uint8_t)((activeZones >> 0) & 0xff);
+			destinationArray[destinationIndex + 2] = (uint8_t)((activeZones >> 8) & 0xff);
+			destinationArray[destinationIndex + 3] = (uint8_t)((forceZones >> 0) & 0xff);
+			destinationArray[destinationIndex + 4] = (uint8_t)((forceZones >> 8) & 0xff);
+			destinationArray[destinationIndex + 5] = (uint8_t)((forceZones >> 16) & 0xff);
+			destinationArray[destinationIndex + 6] = (uint8_t)((forceZones >> 24) & 0xff);
+			destinationArray[destinationIndex + 7] = 0x00; // (uint8_t)((forceZones >> 32) & 0xff); // need 64bit for this, but we already have enough space
+			destinationArray[destinationIndex + 8] = 0x00; // (uint8_t)((forceZones >> 40) & 0xff); // need 64bit for this, but we already have enough space
+			destinationArray[destinationIndex + 9] = 0x00;
+			destinationArray[destinationIndex + 10] = 0x00;
+			return true;
+		}
+		return Off(destinationArray, destinationIndex);
+	}
+
+	/// <summary>
+	/// Trigger will resist movement at a linear range of strengths.
+	/// This is an offical effect and is expected to be present in future DualSense firmware.
+	/// </summary>
+	/// <seealso cref="Feedback(uint8_t[], int, uint8_t, uint8_t)"/>
+	/// <param name="destinationArray">The uint8_t *that receives the data.</param>
+	/// <param name="destinationIndex">A 32-bit integer that represents the index in the destinationArray at which storing begins.</param>
+	/// <param name="startPosition">The starting zone of the trigger effect. Must be between 0 and 8 inclusive.</param>
+	/// <param name="endPosition">The ending zone of the trigger effect. Must be between <paramref name="startPosition"/>+1 and 9 inclusive.</param>
+	/// <param name="startStrength">The force of the resistance at the start. Must be between 1 and 8 inclusive.</param>
+	/// <param name="endStrength">The force of the resistance at the end. Must be between 1 and 8 inclusive.</param>
+	/// <returns>The success of the effect write.</returns>
+	static bool SlopeFeedback(uint8_t *destinationArray, int destinationIndex, uint8_t startPosition, uint8_t endPosition, uint8_t startStrength, uint8_t endStrength)
+	{
+		if (startPosition > 8 || startPosition < 0)
+			return false;
+		if (endPosition > 9)
+			return false;
+		if (endPosition <= startPosition)
+			return false;
+		if (startStrength > 8)
+			return false;
+		if (startStrength < 1)
+			return false;
+		if (endStrength > 8)
+			return false;
+		if (endStrength < 1)
+			return false;
+
+		arrayOf10<uint8_t> strength;
+		float slope = 1.0f * (endStrength - startStrength) / (endPosition - startPosition);
+		for (int i = (int)startPosition; i < 10; i++)
+			if (i <= endPosition)
+				strength[i] = uint8_t(std::round(startStrength + slope * (i - startPosition)));
+			else
+				strength[i] = endStrength;
+
+		return MultiplePositionFeedback(destinationArray, destinationIndex, strength);
+	}
+
+	/// <summary>
+	/// Trigger will vibrate movement at varrying amplitudes and one frequency in 10 regions.
+	/// This is an offical effect and is expected to be present in future DualSense firmware.
+	/// </summary>
+	/// <remarks>
+	/// Note this factory's results may not perform as expected.
+	/// </remarks>
+	/// <seealso cref="Vibration(uint8_t[], int, uint8_t, uint8_t, uint8_t)"/>
+	/// <param name="destinationArray">The uint8_t *that receives the data.</param>
+	/// <param name="destinationIndex">A 32-bit integer that represents the index in the destinationArray at which storing begins.</param>
+	/// <param name="amplitude">Array of 10 strength values for zones 0 through 9. Must be between 0 and 8 inclusive.</param>
+	/// <param name="frequency">Frequency of the automatic cycling action in hertz.</param>
+	/// <returns>The success of the effect write.</returns>
+	static bool MultiplePositionVibration(uint8_t *destinationArray, int destinationIndex, uint8_t frequency, arrayOf10<uint8_t> const& amplitude)
+	{
+		if (std::ranges::find_if(amplitude, [](auto dr) { return dr > 0; }) != amplitude.end())
+		{
+			uint32_t strengthZones = 0;
+			uint16_t activeZones = 0;
+			for (int i = 0; i < 10; i++)
+			{
+				if (amplitude[i] > 0)
+				{
+					uint8_t strengthValue = (uint8_t)((amplitude[i] - 1) & 0x07);
+					strengthZones |= (uint32_t)(strengthValue << (3 * i));
+					activeZones |= (uint16_t)(1 << i);
+				}
+			}
+
+			destinationArray[destinationIndex + 0] = (uint8_t)TriggerEffectType::Vibration;
+			destinationArray[destinationIndex + 1] = (uint8_t)((activeZones >> 0) & 0xff);
+			destinationArray[destinationIndex + 2] = (uint8_t)((activeZones >> 8) & 0xff);
+			destinationArray[destinationIndex + 3] = (uint8_t)((strengthZones >> 0) & 0xff);
+			destinationArray[destinationIndex + 4] = (uint8_t)((strengthZones >> 8) & 0xff);
+			destinationArray[destinationIndex + 5] = (uint8_t)((strengthZones >> 16) & 0xff);
+			destinationArray[destinationIndex + 6] = (uint8_t)((strengthZones >> 24) & 0xff);
+			destinationArray[destinationIndex + 7] = 0x00; // (uint8_t)((forceZones >> 32) & 0xff); // need 64bit for this, but we already have enough space
+			destinationArray[destinationIndex + 8] = 0x00; // (uint8_t)((forceZones >> 40) & 0xff); // need 64bit for this, but we already have enough space
+			destinationArray[destinationIndex + 9] = frequency;
+			destinationArray[destinationIndex + 10] = 0x00;
+			return true;
+		}
+		return Off(destinationArray, destinationIndex);
+	}
+// Offical Effects
+
+// Unofficial but Unique Effects
+	/// <summary>
+	/// The effect resembles the <see cref="Weapon(uint8_t[], int, uint8_t, uint8_t, uint8_t)">Weapon</see>
+	/// effect, however there is a snap-back force that attempts to reset the trigger.
+	/// This is not an offical effect and may be removed in a future DualSense firmware.
+	/// </summary>
+	/// <param name="destinationArray">The uint8_t *that receives the data.</param>
+	/// <param name="destinationIndex">A 32-bit integer that represents the index in the destinationArray at which storing begins.</param>
+	/// <param name="startPosition">The starting zone of the trigger effect. Must be between 0 and 8 inclusive.</param>
+	/// <param name="endPosition">The ending zone of the trigger effect. Must be between <paramref name="startPosition"/>+1 and 8 inclusive.</param>
+	/// <param name="strength">The force of the resistance. Must be between 0 and 8 inclusive.</param>
+	/// <param name="snapForce">The force of the snap-back. Must be between 0 and 8 inclusive.</param>
+	/// <returns>The success of the effect write.</returns>
+	static bool Bow(uint8_t *destinationArray, int destinationIndex, uint8_t startPosition, uint8_t endPosition, uint8_t strength, uint8_t snapForce)
+	{
+		if (startPosition > 8)
+			return false;
+		if (endPosition > 8)
+			return false;
+		if (startPosition >= endPosition)
+			return false;
+		if (strength > 8)
 			return false;
 		if (snapForce > 8)
 			return false;
-		if (end > 0 && force > 0 && snapForce > 0)
+		if (endPosition > 0 && strength > 0 && snapForce > 0)
 		{
-			uint16_t startAndStopZones = (uint16_t)((1 << start) | (1 << end));
-			uint32_t forcePair = (uint32_t)((((force - 1) & 0x07) << (3 * 0)) | (((snapForce - 1) & 0x07) << (3 * 1)));
+			uint16_t startAndStopZones = (uint16_t)((1 << startPosition) | (1 << endPosition));
+			uint32_t forcePair = (uint32_t)((((strength - 1) & 0x07) << (3 * 0)) | (((snapForce - 1) & 0x07) << (3 * 1)));
 
 			destinationArray[destinationIndex + 0] = (uint8_t)TriggerEffectType::Bow;
 			destinationArray[destinationIndex + 1] = (uint8_t)((startAndStopZones >> 0) & 0xff);
@@ -305,26 +455,29 @@ public:
 			destinationArray[destinationIndex + 10] = 0x00;
 			return true;
 		}
-		return reset(destinationArray, destinationIndex);
+		return Off(destinationArray, destinationIndex);
 	}
 
-	/// Galloping effect data generator.
-	/// This is not used by libpad but is in the used effect block, it may be removed in a future DualSense firmware.
-	/// @param destinationArray The uint8_t[] that receives the data.
-	/// @param destinationIndex A 32-bit integer that represents the index in the destinationArray at which storing begins.
-	/// @param start The starting zone of the trigger effect. Must be between 0 and 8 inclusive.
-	/// @param end The ending zone of the trigger effect. Must be between <paramref name="start"/> + 1 and 9 inclusive.
-	/// @param firstFoot Position of second foot in cycle. Must be between 0 and 6 inclusive.
-	/// @param secondFoot Position of second foot in cycle. Must be between <paramref name="firstFoot"/> + 1 and 7 inclusive.
-	/// @param frequency Frequency of the automatic cycling action in hertz.
-	/// @returns The success of the effect write.
-	static bool Galloping(uint8_t *destinationArray, int destinationIndex, uint8_t start, uint8_t end, uint8_t firstFoot, uint8_t secondFoot, uint8_t frequency)
+	/// <summary>
+	/// Trigger will oscillate in a rythmic pattern resembling galloping. Note that the
+	/// effect is only discernable at low frequency values.
+	/// This is not an offical effect and may be removed in a future DualSense firmware.
+	/// </summary>
+	/// <param name="destinationArray">The uint8_t *that receives the data.</param>
+	/// <param name="destinationIndex">A 32-bit integer that represents the index in the destinationArray at which storing begins.</param>
+	/// <param name="startPosition">The starting zone of the trigger effect. Must be between 0 and 8 inclusive.</param>
+	/// <param name="endPosition">The ending zone of the trigger effect. Must be between <paramref name="startPosition"/>+1 and 9 inclusive.</param>
+	/// <param name="firstFoot">Position of second foot in cycle. Must be between 0 and 6 inclusive.</param>
+	/// <param name="secondFoot">Position of second foot in cycle. Must be between <paramref name="firstFoot"/>+1 and 7 inclusive.</param>
+	/// <param name="frequency">Frequency of the automatic cycling action in hertz.</param>
+	/// <returns>The success of the effect write.</returns>
+	static bool Galloping(uint8_t *destinationArray, int destinationIndex, uint8_t startPosition, uint8_t endPosition, uint8_t firstFoot, uint8_t secondFoot, uint8_t frequency)
 	{
-		if (start > 8)
+		if (startPosition > 8)
 			return false;
-		if (end > 9)
+		if (endPosition > 9)
 			return false;
-		if (start >= end)
+		if (startPosition >= endPosition)
 			return false;
 		if (secondFoot > 7)
 			return false;
@@ -334,7 +487,7 @@ public:
 			return false;
 		if (frequency > 0)
 		{
-			uint16_t startAndStopZones = (uint16_t)((1 << start) | (1 << end));
+			uint16_t startAndStopZones = (uint16_t)((1 << startPosition) | (1 << endPosition));
 			uint32_t timeAndRatio = (uint32_t)(((secondFoot & 0x07) << (3 * 0)) | ((firstFoot & 0x07) << (3 * 1)));
 
 			destinationArray[destinationIndex + 0] = (uint8_t)TriggerEffectType::Galloping;
@@ -350,115 +503,39 @@ public:
 			destinationArray[destinationIndex + 10] = 0x00;
 			return true;
 		}
-		return reset(destinationArray, destinationIndex);
+		return Off(destinationArray, destinationIndex);
 	}
 
-	/// Semi-automatic gun effect data generator.
-	/// This is used by libpad and is expected to be present in future DualSense firmware.
-	/// @param destinationArray The uint8_t[] that receives the data.
-	/// @param destinationIndex A 32-bit integer that represents the index in the destinationArray at which storing begins.
-	/// @param start The starting zone of the trigger effect. Must be between 2 and 7 inclusive.
-	/// @param end The ending zone of the trigger effect. Must be between <paramref name="start"/> and 8 inclusive.
-	/// @param force The force of the resistance. Must be between 0 and 8 inclusive.
-	/// @returns The success of the effect write.
-	static bool SemiAutomaticGun(uint8_t *destinationArray, int destinationIndex, uint8_t start, uint8_t end, uint8_t force)
+	/// <summary>
+	/// This effect resembles <see cref="Vibration(uint8_t[], int, uint8_t, uint8_t, uint8_t)">Vibration</see>
+	/// but will oscilate between two amplitudes.
+	/// This is not an offical effect and may be removed in a future DualSense firmware.
+	/// </summary>
+	/// <param name="destinationArray">The uint8_t *that receives the data.</param>
+	/// <param name="destinationIndex">A 32-bit integer that represents the index in the destinationArray at which storing begins.</param>
+	/// <param name="startPosition">The starting zone of the trigger effect. Must be between 0 and 8 inclusive.</param>
+	/// <param name="endPosition">The ending zone of the trigger effect. Must be between <paramref name="startPosition"/> and 9 inclusive.</param>
+	/// <param name="amplitudeA">Primary strength of cycling action. Must be between 0 and 7 inclusive.</param>
+	/// <param name="amplitudeB">Secondary strength of cycling action. Must be between 0 and 7 inclusive.</param>
+	/// <param name="frequency">Frequency of the automatic cycling action in hertz.</param>
+	/// <param name="period">Period of the oscillation between <paramref name="amplitudeA"/> and <paramref name="amplitudeB"/> in tenths of a second.</param>
+	/// <returns>The success of the effect write.</returns>
+	static bool Machine(uint8_t *destinationArray, int destinationIndex, uint8_t startPosition, uint8_t endPosition, uint8_t amplitudeA, uint8_t amplitudeB, uint8_t frequency, uint8_t period)
 	{
-		if (start > 7 || start < 2)
+		if (startPosition > 8)
 			return false;
-		if (end > 8)
+		if (endPosition > 9)
 			return false;
-		if (end <= start)
+		if (endPosition <= startPosition)
 			return false;
-		if (force > 8)
+		if (amplitudeA > 7)
 			return false;
-		if (force > 0)
-		{
-			uint16_t startAndStopZones = (uint16_t)((1 << start) | (1 << end));
-
-			destinationArray[destinationIndex + 0] = (uint8_t)TriggerEffectType::SemiAutomaticGun;
-			destinationArray[destinationIndex + 1] = (uint8_t)((startAndStopZones >> 0) & 0xff);
-			destinationArray[destinationIndex + 2] = (uint8_t)((startAndStopZones >> 8) & 0xff);
-			destinationArray[destinationIndex + 3] = (uint8_t)(force - 1); // this is actually packed into 3 bits, but since it's only one why bother with the fancy code?
-			destinationArray[destinationIndex + 4] = 0x00;
-			destinationArray[destinationIndex + 5] = 0x00;
-			destinationArray[destinationIndex + 6] = 0x00;
-			destinationArray[destinationIndex + 7] = 0x00;
-			destinationArray[destinationIndex + 8] = 0x00;
-			destinationArray[destinationIndex + 9] = 0x00;
-			destinationArray[destinationIndex + 10] = 0x00;
-			return true;
-		}
-		return reset(destinationArray, destinationIndex);
-	}
-
-	/// Automatic gun effect data generator.
-	/// This is used by libpad and is expected to be present in future DualSense firmware.
-	/// @param destinationArray The uint8_t[] that receives the data.
-	/// @param destinationIndex A 32-bit integer that represents the index in the destinationArray at which storing begins.
-	/// @param start The starting zone of the trigger effect. Must be between 0 and 9 inclusive.
-	/// @param force Strength of the automatic cycling action. Must be between 0 and 8 inclusive.
-	/// @param frequency Frequency of the automatic cycling action in hertz.
-	/// @returns The success of the effect write.
-	static bool AutomaticGun(uint8_t *destinationArray, int destinationIndex, uint8_t start, uint8_t strength, uint8_t frequency)
-	{
-		if (start > 9)
-			return false;
-		if (strength > 8)
-			return false;
-		if (strength > 0 && frequency > 0)
-		{
-			uint8_t strengthValue = (uint8_t)((strength - 1) & 0x07);
-			uint32_t strengthZones = 0;
-			uint16_t activeZones = 0;
-			for (int i = start; i < 10; i++)
-			{
-				strengthZones |= (uint32_t)(strengthValue << (3 * i));
-				activeZones |= (uint16_t)(1 << i);
-			}
-
-			destinationArray[destinationIndex + 0] = (uint8_t)TriggerEffectType::AutomaticGun;
-			destinationArray[destinationIndex + 1] = (uint8_t)((activeZones >> 0) & 0xff);
-			destinationArray[destinationIndex + 2] = (uint8_t)((activeZones >> 8) & 0xff);
-			destinationArray[destinationIndex + 3] = (uint8_t)((strengthZones >> 0) & 0xff);
-			destinationArray[destinationIndex + 4] = (uint8_t)((strengthZones >> 8) & 0xff);
-			destinationArray[destinationIndex + 5] = (uint8_t)((strengthZones >> 16) & 0xff);
-			destinationArray[destinationIndex + 6] = (uint8_t)((strengthZones >> 24) & 0xff);
-			destinationArray[destinationIndex + 7] = 0x00; // (uint8_t)((strengthZones >> 32) & 0xff); // need 64bit for this, but we already have enough space
-			destinationArray[destinationIndex + 8] = 0x00; // (uint8_t)((strengthZones >> 40) & 0xff); // need 64bit for this, but we already have enough space
-			destinationArray[destinationIndex + 9] = frequency;
-			destinationArray[destinationIndex + 10] = 0x00;
-			return true;
-		}
-		return reset(destinationArray, destinationIndex);
-	}
-
-	/// Machine effect data generator.
-	/// This is not used by libpad but is in the used effect block, it may be removed in a future DualSense firmware.
-	/// @param destinationArray The uint8_t[] that receives the data.
-	/// @param destinationIndex A 32-bit integer that represents the index in the destinationArray at which storing begins.
-	/// @param start The starting zone of the trigger effect. Must be between 0 and 8 inclusive.
-	/// @param end The starting zone of the trigger effect. Must be between <paramref name="start"/> and 9 inclusive.
-	/// @param strengthA Primary force of cycling action. Must be between 0 and 7 inclusive.
-	/// @param strengthB Secondary force of cycling action. Must be between 0 and 7 inclusive.
-	/// @param frequency Frequency of the automatic cycling action in hertz.
-	/// @param period Period of the oscillation between <paramref name="strengthA"/> and <paramref name="strengthB"/> in tenths of a second.
-	/// @returns The success of the effect write.
-	static bool Machine(uint8_t *destinationArray, int destinationIndex, uint8_t start, uint8_t end, uint8_t strengthA, uint8_t strengthB, uint8_t frequency, uint8_t period)
-	{
-		if (start > 8)
-			return false;
-		if (end > 9)
-			return false;
-		if (end <= start)
-			return false;
-		if (strengthA > 7)
-			return false;
-		if (strengthB > 7)
+		if (amplitudeB > 7)
 			return false;
 		if (frequency > 0)
 		{
-			uint16_t startAndStopZones = (uint16_t)((1 << start) | (1 << end));
-			uint32_t strengthPair = (uint32_t)(((strengthA & 0x07) << (3 * 0)) | ((strengthB & 0x07) << (3 * 1)));
+			uint16_t startAndStopZones = (uint16_t)((1 << startPosition) | (1 << endPosition));
+			uint32_t strengthPair = (uint32_t)(((amplitudeA & 0x07) << (3 * 0)) | ((amplitudeB & 0x07) << (3 * 1)));
 
 			destinationArray[destinationIndex + 0] = (uint8_t)TriggerEffectType::Machine;
 			destinationArray[destinationIndex + 1] = (uint8_t)((startAndStopZones >> 0) & 0xff);
@@ -473,8 +550,565 @@ public:
 			destinationArray[destinationIndex + 10] = 0x00;
 			return true;
 		}
-		return reset(destinationArray, destinationIndex);
+		return Off(destinationArray, destinationIndex);
 	}
-};
 
-} // namespace DualSense
+	/// <summary>
+	/// Simplistic Feedback effect data generator.
+	/// This is not an offical effect and has an offical alternative. It may be removed in a future DualSense firmware.
+	/// </summary>
+	/// <remarks>
+	/// Use <see cref="Feedback(uint8_t[], int, uint8_t, uint8_t)"/> instead.
+	/// </remarks>
+	/// <param name="destinationArray">The uint8_t *that receives the data.</param>
+	/// <param name="destinationIndex">A 32-bit integer that represents the index in the destinationArray at which storing begins.</param>
+	/// <param name="position">The starting zone of the trigger effect.</param>
+	/// <param name="strength">The force of the resistance.</param>
+	/// <returns>The success of the effect write.</returns>
+	static bool Simple_Feedback(uint8_t *destinationArray, int destinationIndex, uint8_t position, uint8_t strength)
+	{
+		destinationArray[destinationIndex + 0] = (uint8_t)TriggerEffectType::Simple_Feedback;
+		destinationArray[destinationIndex + 1] = position;
+		destinationArray[destinationIndex + 2] = strength;
+		destinationArray[destinationIndex + 3] = 0x00;
+		destinationArray[destinationIndex + 4] = 0x00;
+		destinationArray[destinationIndex + 5] = 0x00;
+		destinationArray[destinationIndex + 6] = 0x00;
+		destinationArray[destinationIndex + 7] = 0x00;
+		destinationArray[destinationIndex + 8] = 0x00;
+		destinationArray[destinationIndex + 9] = 0x00;
+		destinationArray[destinationIndex + 10] = 0x00;
+		return true;
+	}
+
+	/// <summary>
+	/// Simplistic Weapon effect data generator.
+	/// This is not an offical effect and has an offical alternative. It may be removed in a future DualSense firmware.
+	/// </summary>
+	/// <remarks>
+	/// Use <see cref="Weapon(uint8_t[], int, uint8_t, uint8_t, uint8_t)"/> instead.
+	/// </remarks>
+	/// <param name="destinationArray">The uint8_t *that receives the data.</param>
+	/// <param name="destinationIndex">A 32-bit integer that represents the index in the destinationArray at which storing begins.</param>
+	/// <param name="startPosition">The starting zone of the trigger effect.</param>
+	/// <param name="endPosition">The ending zone of the trigger effect.</param>
+	/// <param name="strength">The force of the resistance.</param>
+	/// <returns>The success of the effect write.</returns>
+	static bool Simple_Weapon(uint8_t *destinationArray, int destinationIndex, uint8_t startPosition, uint8_t endPosition, uint8_t strength)
+	{
+		destinationArray[destinationIndex + 0] = (uint8_t)TriggerEffectType::Simple_Weapon;
+		destinationArray[destinationIndex + 1] = startPosition;
+		destinationArray[destinationIndex + 2] = endPosition;
+		destinationArray[destinationIndex + 3] = strength;
+		destinationArray[destinationIndex + 4] = 0x00;
+		destinationArray[destinationIndex + 5] = 0x00;
+		destinationArray[destinationIndex + 6] = 0x00;
+		destinationArray[destinationIndex + 7] = 0x00;
+		destinationArray[destinationIndex + 8] = 0x00;
+		destinationArray[destinationIndex + 9] = 0x00;
+		destinationArray[destinationIndex + 10] = 0x00;
+		return true;
+	}
+
+	/// <summary>
+	/// Simplistic Vibration effect data generator.
+	/// This is not an offical effect and has an offical alternative. It may be removed in a future DualSense firmware.
+	/// </summary>
+	/// <remarks>
+	/// Use <see cref="Vibration(uint8_t[], int, uint8_t, uint8_t, uint8_t)"/> instead.
+	/// </remarks>
+	/// <param name="destinationArray">The uint8_t *that receives the data.</param>
+	/// <param name="destinationIndex">A 32-bit integer that represents the index in the destinationArray at which storing begins.</param>
+	/// <param name="position">The starting zone of the trigger effect.</param>
+	/// <param name="amplitude">Strength of the automatic cycling action.</param>
+	/// <param name="frequency">Frequency of the automatic cycling action in hertz.</param>
+	/// <returns>The success of the effect write.</returns>
+	static bool Simple_Vibration(uint8_t *destinationArray, int destinationIndex, uint8_t position, uint8_t amplitude, uint8_t frequency)
+	{
+		if (frequency > 0 && amplitude > 0)
+		{
+			destinationArray[destinationIndex + 0] = (uint8_t)TriggerEffectType::Simple_Vibration;
+			destinationArray[destinationIndex + 1] = frequency;
+			destinationArray[destinationIndex + 2] = amplitude;
+			destinationArray[destinationIndex + 3] = position;
+			destinationArray[destinationIndex + 4] = 0x00;
+			destinationArray[destinationIndex + 5] = 0x00;
+			destinationArray[destinationIndex + 6] = 0x00;
+			destinationArray[destinationIndex + 7] = 0x00;
+			destinationArray[destinationIndex + 8] = 0x00;
+			destinationArray[destinationIndex + 9] = 0x00;
+			destinationArray[destinationIndex + 10] = 0x00;
+			return true;
+		}
+		return Off(destinationArray, destinationIndex);
+	}
+
+	/// <summary>
+	/// Simplistic Feedback effect data generator with stricter paramater limits.
+	/// This is not an offical effect and has an offical alternative. It may be removed in a future DualSense firmware.
+	/// </summary>
+	/// <remarks>
+	/// Use <see cref="Feedback(uint8_t[], int, uint8_t, uint8_t)"/> instead.
+	/// </remarks>
+	/// <param name="destinationArray">The uint8_t *that receives the data.</param>
+	/// <param name="destinationIndex">A 32-bit integer that represents the index in the destinationArray at which storing begins.</param>
+	/// <param name="position">The starting zone of the trigger effect.</param>
+	/// <param name="strength">The force of the resistance. Must be between 0 and 10 inclusive.</param>
+	/// <returns>The success of the effect write.</returns>
+	static bool Limited_Feedback(uint8_t *destinationArray, int destinationIndex, uint8_t position, uint8_t strength)
+	{
+		if (strength > 10)
+			return false;
+		if (strength > 0)
+		{
+			destinationArray[destinationIndex + 0] = (uint8_t)TriggerEffectType::Limited_Feedback;
+			destinationArray[destinationIndex + 1] = position;
+			destinationArray[destinationIndex + 2] = strength;
+			destinationArray[destinationIndex + 3] = 0x00;
+			destinationArray[destinationIndex + 4] = 0x00;
+			destinationArray[destinationIndex + 5] = 0x00;
+			destinationArray[destinationIndex + 6] = 0x00;
+			destinationArray[destinationIndex + 7] = 0x00;
+			destinationArray[destinationIndex + 8] = 0x00;
+			destinationArray[destinationIndex + 9] = 0x00;
+			destinationArray[destinationIndex + 10] = 0x00;
+			return true;
+		}
+		return Off(destinationArray, destinationIndex);
+	}
+
+	/// <summary>
+	/// Simplistic Weapon effect data generator with stricter paramater limits.
+	/// This is not an offical effect and has an offical alternative. It may be removed in a future DualSense firmware.
+	/// </summary>
+	/// <remarks>
+	/// Use <see cref="Weapon(uint8_t[], int, uint8_t, uint8_t, uint8_t)"/> instead.
+	/// </remarks>
+	/// <param name="destinationArray">The uint8_t *that receives the data.</param>
+	/// <param name="destinationIndex">A 32-bit integer that represents the index in the destinationArray at which storing begins.</param>
+	/// <param name="startPosition">The starting zone of the trigger effect. Must be 16 or higher.</param>
+	/// <param name="endPosition">The ending zone of the trigger effect. Must be between <paramref name="startPosition"/> and <paramref name="startPosition"/>+100 inclusive.</param>
+	/// <param name="strength">The force of the resistance. Must be between 0 and 10 inclusive.</param>
+	/// <returns>The success of the effect write.</returns>
+	static bool Limited_Weapon(uint8_t *destinationArray, int destinationIndex, uint8_t startPosition, uint8_t endPosition, uint8_t strength)
+	{
+		if (startPosition < 0x10)
+			return false;
+		if (endPosition < startPosition || (startPosition + 100) < endPosition)
+			return false;
+		if (strength > 10)
+			return false;
+		if (strength > 0)
+		{
+			destinationArray[destinationIndex + 0] = (uint8_t)TriggerEffectType::Limited_Weapon;
+			destinationArray[destinationIndex + 1] = startPosition;
+			destinationArray[destinationIndex + 2] = endPosition;
+			destinationArray[destinationIndex + 3] = strength;
+			destinationArray[destinationIndex + 4] = 0x00;
+			destinationArray[destinationIndex + 5] = 0x00;
+			destinationArray[destinationIndex + 6] = 0x00;
+			destinationArray[destinationIndex + 7] = 0x00;
+			destinationArray[destinationIndex + 8] = 0x00;
+			destinationArray[destinationIndex + 9] = 0x00;
+			destinationArray[destinationIndex + 10] = 0x00;
+			return true;
+		}
+		return Off(destinationArray, destinationIndex);
+	}
+
+	/// <summary>
+	/// Interface adapaters patterned after Apple's GCDualSenseAdaptiveTrigger classs.
+	/// </summary>
+	class Apple
+	{
+		/// <summary>
+		/// Sets the adaptive trigger to feedback mode. The start position and strength of the effect can be set arbitrarily. The trigger arm will continue to provide a
+		/// constant degree of feedback whenever it is depressed further than the start position.
+		/// </summary>
+		/// <remarks>
+		/// Documentation ported from Apple's API Docs.
+		/// </remarks>
+		/// <seealso cref="Off(uint8_t[], int)"/>
+		/// <param name="destinationArray">The uint8_t *that receives the data.</param>
+		/// <param name="destinationIndex">A 32-bit integer that represents the index in the destinationArray at which storing begins.</param>
+		/// <returns>The success of the effect write.</returns>
+		static bool SetModeOff(uint8_t *destinationArray, int destinationIndex)
+		{
+			return Off(destinationArray, destinationIndex);
+		}
+
+		/// <summary>
+		/// Sets the adaptive trigger to feedback mode. The start position and strength of the effect can be set arbitrarily. The trigger arm will continue to provide a
+		/// constant degree of feedback whenever it is depressed further than the start position.
+		/// </summary>
+		/// <remarks>
+		/// Documentation ported from Apple's API Docs.
+		/// </remarks>
+		/// <seealso cref="Feedback(uint8_t[], int, uint8_t, uint8_t)"/>
+		/// <param name="destinationArray">The uint8_t *that receives the data.</param>
+		/// <param name="destinationIndex">A 32-bit integer that represents the index in the destinationArray at which storing begins.</param>
+		/// <param name="startPosition">A normalized float from [0-1], with 0 representing the smallest possible trigger depression and 1 representing the maximum trigger depression.</param>
+		/// <param name="resistiveStrength">A normalized float from [0-1], with 0 representing the minimum effect strength (off entirely) and 1 representing the maximum effect strength.</param>
+		/// <returns>The success of the effect write.</returns>
+		static bool SetModeFeedbackWithStartPosition(uint8_t *destinationArray, int destinationIndex, float startPosition, float resistiveStrength)
+		{
+			startPosition = float(std::round(startPosition * 9.0f));
+			resistiveStrength = float(std::round(resistiveStrength * 8.0f));
+			return Feedback(destinationArray, destinationIndex, (uint8_t)startPosition, (uint8_t)resistiveStrength);
+		}
+
+		/// <summary>
+		/// Sets the adaptive trigger to weapon mode. The start position, end position, and strength of the effect can be set arbitrarily; however the end position must be larger than the start position.
+		/// The trigger arm will continue to provide a constant degree of feedback whenever it is depressed further than the start position. Once the trigger arm has been depressed past the end
+		/// position, the strength of the effect will immediately fall to zero, providing a "sense of release" similar to that provided by pulling the trigger of a weapon.
+		/// </summary>
+		/// <remarks>
+		/// Documentation ported from Apple's API Docs.
+		/// </remarks>
+		/// <seealso cref="Weapon(uint8_t[], int, uint8_t, uint8_t, uint8_t)"/>
+		/// <param name="destinationArray">The uint8_t *that receives the data.</param>
+		/// <param name="destinationIndex">A 32-bit integer that represents the index in the destinationArray at which storing begins.</param>
+		/// <param name="startPosition">A normalized float from [0-1], with 0 representing the smallest possible depression and 1 representing the maximum trigger depression. The effect will begin once the trigger is depressed beyond this point.</param>
+		/// <param name="endPosition">A normalized float from [0-1], with 0 representing the smallest possible depression and 1 representing the maximum trigger depression. Must be greater than startPosition. The effect will end once the trigger is depressed beyond this point.</param>
+		/// <param name="resistiveStrength">A normalized float from [0-1], with 0 representing the minimum effect strength (off entirely) and 1 representing the maximum effect strength.</param>
+		/// <returns>The success of the effect write.</returns>
+		static bool SetModeWeaponWithStartPosition(uint8_t *destinationArray, int destinationIndex, float startPosition, float endPosition, float resistiveStrength)
+		{
+			startPosition = (float)std::round(startPosition * 9.0f);
+			endPosition = (float)std::round(endPosition * 9.0f);
+			resistiveStrength = (float)std::round(resistiveStrength * 8.0f);
+			return Weapon(destinationArray, destinationIndex, (uint8_t)startPosition, (uint8_t)endPosition, (uint8_t)resistiveStrength);
+		}
+
+		/// <summary>
+		/// Sets the adaptive trigger to vibration mode. The start position, amplitude, and frequency of the effect can be set arbitrarily. The trigger arm will continue to strike against
+		/// the trigger whenever it is depressed further than the start position, providing a "sense of vibration".
+		/// </summary>
+		/// <remarks>
+		/// Documentation ported from Apple's API Docs.
+		/// </remarks>
+		/// <seealso cref="Vibration(uint8_t[], int, uint8_t, uint8_t, uint8_t)"/>
+		/// <param name="destinationArray">The uint8_t *that receives the data.</param>
+		/// <param name="destinationIndex">A 32-bit integer that represents the index in the destinationArray at which storing begins.</param>
+		/// <param name="startPosition">A normalized float from [0-1], with 0 representing the smallest possible depression and 1 representing the maximum trigger depression. The effect will begin once the trigger is depressed beyond this point.</param>
+		/// <param name="amplitude">A normalized float from [0-1], with 0 representing the minimum effect strength (off entirely) and 1 representing the maximum effect strength.</param>
+		/// <param name="frequency">A normalized float from [0-1], with 0 representing the minimum frequency and 1 representing the maximum frequency of the vibration effect.</param>
+		/// <returns>The success of the effect write.</returns>
+		static bool SetModeVibrationWithStartPosition(uint8_t *destinationArray, int destinationIndex, float startPosition, float amplitude, float frequency)
+		{
+			startPosition = (float)std::round(startPosition * 9.0f);
+			amplitude = (float)std::round(amplitude * 8.0f);
+			frequency = (float)std::round(frequency * 255.0f);
+			return Vibration(destinationArray, destinationIndex, (uint8_t)startPosition, (uint8_t)amplitude, (uint8_t)frequency);
+		}
+
+		/// <summary>
+		/// Sets the adaptive trigger to feedback mode. The strength of the effect can be set arbitrarily per zone.
+		/// This implementation is not confirmed.
+		/// </summary>
+		/// <remarks>
+		/// Documentation ported from Apple's API Docs.
+		/// </remarks>
+		/// <seealso cref="MultiplePositionFeedback(uint8_t[], int, uint8_t[])"/>
+		/// <param name="destinationArray">The uint8_t *that receives the data.</param>
+		/// <param name="destinationIndex">A 32-bit integer that represents the index in the destinationArray at which storing begins.</param>
+		/// <param name="positionalResistiveStrengths">An array of 10 normalized floats from [0-1], with 0 representing the minimum effect strength (off entirely) and 1 representing the maximum effect strength.</param>
+		/// <returns>The success of the effect write.</returns>
+		static bool SetModeFeedback(uint8_t *destinationArray, int destinationIndex, arrayOf10<float> const& positionalResistiveStrengths)
+		{
+			arrayOf10<uint8_t> force;
+			for (int i = 0; i < 10; i++)
+				force[i] = (uint8_t)std::round(positionalResistiveStrengths[i] * 8.0f);
+
+			return MultiplePositionFeedback(destinationArray, destinationIndex, force);
+		}
+
+		/// <summary>
+		/// Sets the adaptive trigger to feedback mode. The strength of the effect will change across zones based on a slope.
+		/// This implementation is not confirmed.
+		/// </summary>
+		/// <remarks>
+		/// Documentation ported from Apple's API Docs.
+		/// </remarks>
+		/// <seealso cref="MultiplePositionFeedback(uint8_t[], int, uint8_t)"/>
+		/// <param name="destinationArray">The uint8_t *that receives the data.</param>
+		/// <param name="destinationIndex">A 32-bit integer that represents the index in the destinationArray at which storing begins.</param>
+		/// <param name="startPosition">A normalized float from [0-1], with 0 representing the smallest possible depression and 1 representing the maximum trigger depression. The effect will begin once the trigger is depressed beyond this point.</param>
+		/// <param name="endPosition">A normalized float from [0-1], with 0 representing the smallest possible depression and 1 representing the maximum trigger depression. Must be greater than startPosition. The effect will end once the trigger is depressed beyond this point.</param>
+		/// <param name="startStrength">A normalized float from [0-1], with 0 representing the minimum effect strength (off entirely) and 1 representing the maximum effect strength.</param>
+		/// <param name="endStrength">A normalized float from [0-1], with 0 representing the minimum effect strength (off entirely) and 1 representing the maximum effect strength.</param>
+		/// <returns>The success of the effect write.</returns>
+		static bool setModeSlopeFeedback(uint8_t *destinationArray, int destinationIndex, float startPosition, float endPosition, float startStrength, float endStrength)
+		{
+			startPosition = std::round(startPosition * 9.0f);
+			endPosition = std::round(endPosition * 9.0f);
+			startStrength = std::round(startStrength * 8.0f);
+			endStrength = std::round(endStrength * 8.0f);
+
+			return SlopeFeedback(destinationArray, destinationIndex, (uint8_t)startPosition, (uint8_t)endPosition, (uint8_t)startStrength, (uint8_t)endStrength);
+		}
+
+		/// <summary>
+		/// Sets the adaptive trigger to vibration mode. The frequency of the effect can be set arbitrarily and the amplitude arbitrarily per zone.
+		/// This implementation is not confirmed.
+		/// </summary>
+		/// <remarks>
+		/// Documentation ported from Apple's API Docs.
+		/// </remarks>
+		/// <seealso cref="MultiplePositionVibration(uint8_t[], int, uint8_t, uint8_t[])"/>
+		/// <param name="destinationArray">The uint8_t *that receives the data.</param>
+		/// <param name="destinationIndex">A 32-bit integer that represents the index in the destinationArray at which storing begins.</param>
+		/// <param name="positionalAmplitudes">An array of 10 normalized floats from [0-1], with 0 representing the minimum effect strength (off entirely) and 1 representing the maximum effect strength.</param>
+		/// <param name="frequency">A normalized float from [0-1], with 0 representing the minimum frequency and 1 representing the maximum frequency of the vibration effect.</param>
+		/// <returns>The success of the effect write.</returns>
+		static bool setModeVibration(uint8_t *destinationArray, int destinationIndex, arrayOf10<float> const& positionalAmplitudes, float frequency)
+		{
+			frequency = (float)std::round(frequency * 255.0f);
+
+			arrayOf10<uint8_t> strength;
+			for (int i = 0; i < 10; i++)
+				strength[i] = (uint8_t)std::round(positionalAmplitudes[i] * 8.0f);
+
+			return MultiplePositionVibration(destinationArray, destinationIndex, (uint8_t)frequency, strength);
+		}
+	};
+
+	/// <summary>
+	/// Interface adapaters patterned after reWASD's actual interface.
+	/// </summary>
+	/// <remarks>
+	/// This information is based on sniffing the USB traffic from reWASD. Broken implementations are kept though immaterial inaccuracies are corrected.
+	/// </remarks>
+	class ReWASD
+	{
+		/// <summary>
+		/// Full Press trigger stop effect data generator.
+		/// </summary>
+		/// <remarks>
+		/// Uses Simple_Weapon with a start value of 0x90, end value of 0xa0, and a force of 0xff.
+		/// </remarks>
+		/// <seealso cref="Simple_Weapon(uint8_t[], int, uint8_t, uint8_t, uint8_t)"/>
+		/// <seealso cref="Weapon(uint8_t[], int, uint8_t, uint8_t, uint8_t)"/>
+		/// <param name="destinationArray">The uint8_t *that receives the data.</param>
+		/// <param name="destinationIndex">A 32-bit integer that represents the index in the destinationArray at which storing begins.</param>
+		/// <returns>The success of the effect write.</returns>
+		static bool FullPress(uint8_t *destinationArray, int destinationIndex)
+		{
+			return Simple_Weapon(destinationArray, destinationIndex, 0x90, 0xa0, 0xff);
+		}
+
+		/// <summary>
+		/// Soft Press trigger stop effect data generator.
+		/// </summary>
+		/// <remarks>
+		/// Uses Simple_Weapon with a start value of 0x70, end value of 0xa0, and a force of 0xff.
+		/// </remarks>
+		/// <seealso cref="Simple_Weapon(uint8_t[], int, uint8_t, uint8_t, uint8_t)"/>
+		/// <seealso cref="Weapon(uint8_t[], int, uint8_t, uint8_t, uint8_t)"/>
+		/// <param name="destinationArray">The uint8_t *that receives the data.</param>
+		/// <param name="destinationIndex">A 32-bit integer that represents the index in the destinationArray at which storing begins.</param>
+		/// <returns>The success of the effect write.</returns>
+		static bool SoftPress(uint8_t *destinationArray, int destinationIndex)
+		{
+			return Simple_Weapon(destinationArray, destinationIndex, 0x70, 0xa0, 0xff);
+		}
+
+		/// <summary>
+		/// Medium Press trigger stop effect data generator.
+		/// </summary>
+		/// <remarks>
+		/// Uses Simple_Weapon with a start value of 0x45, end value of 0xa0, and a force of 0xff.
+		/// </remarks>
+		/// <seealso cref="Simple_Weapon(uint8_t[], int, uint8_t, uint8_t, uint8_t)"/>
+		/// <seealso cref="Weapon(uint8_t[], int, uint8_t, uint8_t, uint8_t)"/>
+		/// <param name="destinationArray">The uint8_t *that receives the data.</param>
+		/// <param name="destinationIndex">A 32-bit integer that represents the index in the destinationArray at which storing begins.</param>
+		/// <returns>The success of the effect write.</returns>
+		static bool MediumPress(uint8_t *destinationArray, int destinationIndex)
+		{
+			return Simple_Weapon(destinationArray, destinationIndex, 0x45, 0xa0, 0xff);
+		}
+
+		/// <summary>
+		/// Hard Press trigger stop effect data generator.
+		/// </summary>
+		/// <remarks>
+		/// Uses Simple_Weapon with a start value of 0x20, end value of 0xa0, and a force of 0xff.
+		/// </remarks>
+		/// <seealso cref="Simple_Weapon(uint8_t[], int, uint8_t, uint8_t, uint8_t)"/>
+		/// <seealso cref="Weapon(uint8_t[], int, uint8_t, uint8_t, uint8_t)"/>
+		/// <param name="destinationArray">The uint8_t *that receives the data.</param>
+		/// <param name="destinationIndex">A 32-bit integer that represents the index in the destinationArray at which storing begins.</param>
+		/// <returns>The success of the effect write.</returns>
+		static bool HardPress(uint8_t *destinationArray, int destinationIndex)
+		{
+			return Simple_Weapon(destinationArray, destinationIndex, 0x20, 0xa0, 0xff);
+		}
+
+		/// <summary>
+		/// Pulse trigger stop effect data generator.
+		/// </summary>
+		/// <remarks>
+		/// Uses Simple_Weapon with a start value of 0x00, end value of 0x00, and a force of 0x00.
+		/// </remarks>
+		/// <seealso cref="Simple_Weapon(uint8_t[], int, uint8_t, uint8_t, uint8_t)"/>
+		/// <seealso cref="Weapon(uint8_t[], int, uint8_t, uint8_t, uint8_t)"/>
+		/// <param name="destinationArray">The uint8_t *that receives the data.</param>
+		/// <param name="destinationIndex">A 32-bit integer that represents the index in the destinationArray at which storing begins.</param>
+		/// <returns>The success of the effect write.</returns>
+		static bool Pulse(uint8_t *destinationArray, int destinationIndex)
+		{
+			return Simple_Weapon(destinationArray, destinationIndex, 0x00, 0x00, 0x00);
+		}
+
+		/// <summary>
+		/// Choppy resistance effect data generator.
+		/// </summary>
+		/// <remarks>
+		/// Abuses Feedback effect to set a resistance in 3 of 10 trigger regions.
+		/// </remarks>
+		/// <seealso cref="Feedback(uint8_t[], int, uint8_t, uint8_t)"/>
+		/// <param name="destinationArray">The uint8_t *that receives the data.</param>
+		/// <param name="destinationIndex">A 32-bit integer that represents the index in the destinationArray at which storing begins.</param>
+		/// <returns>The success of the effect write.</returns>
+		static bool Choppy(uint8_t *destinationArray, int destinationIndex)
+		{
+			destinationArray[destinationIndex + 0] = (uint8_t)TriggerEffectType::Feedback;
+			destinationArray[destinationIndex + 1] = (uint8_t)0x02; // region enables
+			destinationArray[destinationIndex + 2] = (uint8_t)0x27; // region enables
+			destinationArray[destinationIndex + 3] = (uint8_t)0x18; // reWASD uses 0x1f here, but some bits apply to regions not enabled above
+			destinationArray[destinationIndex + 4] = (uint8_t)0x00;
+			destinationArray[destinationIndex + 5] = (uint8_t)0x00; // reWASD uses 0x27 here, but some bits apply to regions not enabled above
+			destinationArray[destinationIndex + 6] = (uint8_t)0x26;
+			destinationArray[destinationIndex + 7] = (uint8_t)0x00;
+			destinationArray[destinationIndex + 8] = (uint8_t)0x00;
+			destinationArray[destinationIndex + 9] = (uint8_t)0x00;
+			destinationArray[destinationIndex + 10] = (uint8_t)0x00;
+			return true;
+		}
+
+		/// <summary>
+		/// Soft Rigidity feedback effect data generator.
+		/// </summary>
+		/// <remarks>
+		/// Uses Simple_Feedback with a start value of 0x00 and a force of 0x00.
+		/// </remarks>
+		/// <seealso cref="Simple_Feedback(uint8_t[], int, uint8_t, uint8_t)"/>
+		/// <seealso cref="Feedback(uint8_t[], int, uint8_t, uint8_t)"/>
+		/// <param name="destinationArray">The uint8_t *that receives the data.</param>
+		/// <param name="destinationIndex">A 32-bit integer that represents the index in the destinationArray at which storing begins.</param>
+		/// <returns>The success of the effect write.</returns>
+		static bool SoftRigidity(uint8_t *destinationArray, int destinationIndex)
+		{
+			return Simple_Feedback(destinationArray, destinationIndex, 0x00, 0x00);
+		}
+
+		/// <summary>
+		/// Medium Rigidity feedback effect data generator.
+		/// </summary>
+		/// <remarks>
+		/// Uses Simple_Feedback with a start value of 0x00 and a force of 0x64.
+		/// </remarks>
+		/// <seealso cref="Simple_Feedback(uint8_t[], int, uint8_t, uint8_t)"/>
+		/// <seealso cref="Feedback(uint8_t[], int, uint8_t, uint8_t)"/>
+		/// <param name="destinationArray">The uint8_t *that receives the data.</param>
+		/// <param name="destinationIndex">A 32-bit integer that represents the index in the destinationArray at which storing begins.</param>
+		/// <returns>The success of the effect write.</returns>
+		static bool MediumRigidity(uint8_t *destinationArray, int destinationIndex)
+		{
+			return Simple_Feedback(destinationArray, destinationIndex, 0x00, 0x64);
+		}
+
+		/// <summary>
+		/// Max Rigidity feedback effect data generator.
+		/// </summary>
+		/// <remarks>
+		/// Uses Simple_Feedback with a start value of 0x00 and a force of 0xdc.
+		/// </remarks>
+		/// <seealso cref="Simple_Feedback(uint8_t[], int, uint8_t, uint8_t)"/>
+		/// <seealso cref="Feedback(uint8_t[], int, uint8_t, uint8_t)"/>
+		/// <param name="destinationArray">The uint8_t *that receives the data.</param>
+		/// <param name="destinationIndex">A 32-bit integer that represents the index in the destinationArray at which storing begins.</param>
+		/// <returns>The success of the effect write.</returns>
+		static bool MaxRigidity(uint8_t *destinationArray, int destinationIndex)
+		{
+			return Simple_Feedback(destinationArray, destinationIndex, 0x00, 0xdc);
+		}
+
+		/// <summary>
+		/// Half Press feedback effect data generator.
+		/// </summary>
+		/// <remarks>
+		/// Uses Simple_Feedback with a start value of 0x55 and a force of 0x64.
+		/// </remarks>
+		/// <seealso cref="Simple_Feedback(uint8_t[], int, uint8_t, uint8_t)"/>
+		/// <seealso cref="Feedback(uint8_t[], int, uint8_t, uint8_t)"/>
+		/// <param name="destinationArray">The uint8_t *that receives the data.</param>
+		/// <param name="destinationIndex">A 32-bit integer that represents the index in the destinationArray at which storing begins.</param>
+		/// <returns>The success of the effect write.</returns>
+		static bool HalfPress(uint8_t *destinationArray, int destinationIndex)
+		{
+			return Simple_Feedback(destinationArray, destinationIndex, 0x55, 0x64);
+		}
+
+		/// <summary>
+		/// Rifle vibration effect data generator with some wasted bits.
+		/// Bad coding from reWASD was faithfully replicated.
+		/// </summary>
+		/// <param name="destinationArray">The uint8_t *that receives the data.</param>
+		/// <param name="destinationIndex">A 32-bit integer that represents the index in the destinationArray at which storing begins.</param>
+		/// <param name="frequency">Frequency of the automatic cycling action in hertz. Must be between 2 and 20 inclusive.</param>
+		/// <returns>The success of the effect write.</returns>
+		static bool Rifle(uint8_t *destinationArray, int destinationIndex, uint8_t frequency = 10)
+		{
+			if (frequency < 2)
+				return false;
+			if (frequency > 20)
+				return false;
+
+			destinationArray[destinationIndex + 0] = (uint8_t)TriggerEffectType::Vibration;
+			destinationArray[destinationIndex + 1] = (uint8_t)0x00;
+			destinationArray[destinationIndex + 2] = (uint8_t)0x03; // reWASD uses 0xFF here but the top 6 bits are unused
+			destinationArray[destinationIndex + 3] = (uint8_t)0x00;
+			destinationArray[destinationIndex + 4] = (uint8_t)0x00;
+			destinationArray[destinationIndex + 5] = (uint8_t)0x00;
+			destinationArray[destinationIndex + 6] = (uint8_t)0x3F; // reWASD uses 0xFF here but the top 2 bits are unused
+			destinationArray[destinationIndex + 7] = (uint8_t)0x00;
+			destinationArray[destinationIndex + 8] = (uint8_t)0x00;
+			destinationArray[destinationIndex + 9] = frequency;
+			destinationArray[destinationIndex + 10] = (uint8_t)0x00;
+			return true;
+		}
+
+		/// <summary>
+		/// Vibration vibration effect with incorrect strength handling.
+		/// Bad coding from reWASD was faithfully replicated.
+		/// </summary>
+		/// <param name="destinationArray">The uint8_t *that receives the data.</param>
+		/// <param name="destinationIndex">A 32-bit integer that represents the index in the destinationArray at which storing begins.</param>
+		/// <param name="strength">Strength of the automatic cycling action. Must be between 1 and 255 inclusive. This is two 3 bit numbers with the remaining 2 high bits unused. Yes, reWASD uses this value incorrectly.</param>
+		/// <param name="frequency">Frequency of the automatic cycling action in hertz. Must be between 1 and 255 inclusive.</param>
+		/// <returns>The success of the effect write.</returns>
+		static bool Vibration(uint8_t *destinationArray, int destinationIndex, uint8_t strength = 220, uint8_t frequency = 30)
+		{
+			if (strength < 1)
+				return false;
+			if (frequency < 1)
+				return false;
+
+			destinationArray[destinationIndex + 0] = (uint8_t)TriggerEffectType::Vibration;
+			destinationArray[destinationIndex + 1] = (uint8_t)0x00; // reWASD uses 0x1E here but this is invalid and is ignored save for minor glitches
+			destinationArray[destinationIndex + 2] = (uint8_t)0x03; // reWASD uses 0xFF here but the top 6 bits are unused
+			destinationArray[destinationIndex + 3] = (uint8_t)0x00;
+			destinationArray[destinationIndex + 4] = (uint8_t)0x00;
+			destinationArray[destinationIndex + 5] = (uint8_t)0x00;
+			destinationArray[destinationIndex + 6] = strength; // reWASD maxes at 0xFF here but the top 2 bits are unused
+			destinationArray[destinationIndex + 7] = (uint8_t)0x00;
+			destinationArray[destinationIndex + 8] = (uint8_t)0x00;
+			destinationArray[destinationIndex + 9] = frequency;
+			destinationArray[destinationIndex + 10] = (uint8_t)0x00;
+			return true;
+		}
+	};
+};
+} // namespace ExtendInput.DataTools. DualSense

@@ -142,7 +142,7 @@ struct ControllerDevice
 	}
 
 private:
-	void LoadTriggerEffect(Uint8 *rgucTriggerEffect, const AdaptiveTriggerSetting *trigger_effect)
+	void LoadTriggerEffect(uint8_t *rgucTriggerEffect, const AdaptiveTriggerSetting *trigger_effect)
 	{
 		using namespace ExtendInput::DataTools::DualSense;
 		//ExtendInput::DataTools::DualSense::TriggerEffectGenerator::Bow(rgucTriggerEffect, 0, 0, 5, 3, 8);
@@ -151,15 +151,15 @@ private:
 		switch (trigger_effect->mode)
 		{
         case AdaptiveTriggerMode::RESISTANCE_RAW:
-			TriggerEffectGenerator::SimpleResistance(rgucTriggerEffect, 0, trigger_effect->start, trigger_effect->force);
+			TriggerEffectGenerator::Simple_Feedback(rgucTriggerEffect, 0, trigger_effect->start, trigger_effect->force);
 			break;
 		case AdaptiveTriggerMode::SEGMENT:
 			rgucTriggerEffect[1] = trigger_effect->start;
 			rgucTriggerEffect[2] = trigger_effect->end;
-			rgucTriggerEffect[3] = trigger_effect->force >> 8;
+			rgucTriggerEffect[3] = trigger_effect->force;
 			break;
 		case AdaptiveTriggerMode::RESISTANCE:
-			TriggerEffectGenerator::Resistance(rgucTriggerEffect, 0, trigger_effect->start, trigger_effect->force);
+			TriggerEffectGenerator::Feedback(rgucTriggerEffect, 0, trigger_effect->start, trigger_effect->force);
 			break;
 		case AdaptiveTriggerMode::BOW:
 			TriggerEffectGenerator::Bow(rgucTriggerEffect, 0, trigger_effect->start, trigger_effect->end, trigger_effect->force, trigger_effect->forceExtra);
@@ -168,10 +168,10 @@ private:
 			TriggerEffectGenerator::Galloping(rgucTriggerEffect, 0, trigger_effect->start, trigger_effect->end, trigger_effect->force, trigger_effect->forceExtra, trigger_effect->frequency);
 			break;
 	    case AdaptiveTriggerMode::SEMI_AUTOMATIC:
-			TriggerEffectGenerator::SemiAutomaticGun(rgucTriggerEffect, 0, trigger_effect->start, trigger_effect->end, trigger_effect->force);
+			TriggerEffectGenerator::Weapon(rgucTriggerEffect, 0, trigger_effect->start, trigger_effect->end, trigger_effect->force);
 			break;
 		case AdaptiveTriggerMode::AUTOMATIC:
-			TriggerEffectGenerator::AutomaticGun(rgucTriggerEffect, 0, trigger_effect->start, trigger_effect->force, trigger_effect->frequency);
+			TriggerEffectGenerator::Vibration(rgucTriggerEffect, 0, trigger_effect->start, trigger_effect->force, trigger_effect->frequency);
 			break;
 		case AdaptiveTriggerMode::MACHINE:
 			TriggerEffectGenerator::Machine(rgucTriggerEffect, 0, trigger_effect->start, trigger_effect->end, trigger_effect->force, trigger_effect->forceExtra, trigger_effect->frequency, trigger_effect->frequencyExtra);
@@ -251,7 +251,8 @@ public:
 
 			lock_guard guard(controller_lock);
 			SDL_GameControllerUpdate();
-			for (auto iter = _controllerMap.begin(); iter != _controllerMap.end(); ++iter)
+			auto iter = _controllerMap.begin();
+			while ( iter != _controllerMap.end())
 			{
 				if (g_callback)
 				{
@@ -270,6 +271,7 @@ public:
 				// Perform rumble
 				SDL_GameControllerRumble(iter->second->_sdlController, iter->second->_big_rumble, iter->second->_small_rumble, Uint32(tick_time + 5));
 			}
+			++iter;
 		}
 
 		return 1;
