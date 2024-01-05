@@ -1,4 +1,4 @@
-set (BINARY_NAME ${PROJECT_NAME})
+set (BINARY_NAME "JoyShockMapper")
 
 git_describe(GIT_TAG --tags --dirty=_d)
 
@@ -25,10 +25,12 @@ add_executable (
     src/DigitalButton.cpp
     src/MotionImpl.cpp
     src/Mapping.cpp
+    src/TriggerEffectGenerator.cpp
     src/AutoLoad.cpp
     src/SettingsManager.cpp
     src/Stick.cpp
     src/JoyShock.cpp
+    include/TriggerEffectGenerator.h
     include/InputHelpers.h
     include/PlatformDefinitions.h
     include/TrayIcon.h
@@ -48,13 +50,6 @@ add_executable (
 	include/SettingsManager.h
     include/Stick.h
     include/JoyShock.h
-)
-
-# modules
-target_sources(${BINARY_NAME}
-  PUBLIC
-    FILE_SET CXX_MODULES FILES
-      mod/TriggerEffectGenerator.ixx
 )
 
 if (WINDOWS)
@@ -112,7 +107,7 @@ if (WINDOWS)
             POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy
                 "$<TARGET_FILE:SDL2>"
-                "$<TARGET_FILE_DIR:${PROJECT_NAME}>/$<TARGET_FILE_NAME:SDL2>"
+                "$<TARGET_FILE_DIR:${BINARY_NAME}>/$<TARGET_FILE_NAME:SDL2>"
         )
     else()
         add_custom_command(
@@ -120,19 +115,20 @@ if (WINDOWS)
             POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy
                 "$<TARGET_FILE:JoyShockLibrary>"
-                "$<TARGET_FILE_DIR:${PROJECT_NAME}>/$<TARGET_FILE_NAME:JoyShockLibrary>"
+                "$<TARGET_FILE_DIR:${BINARY_NAME}>/$<TARGET_FILE_NAME:JoyShockLibrary>"
         )
     endif()
+	
+	set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT ${BINARY_NAME})
     
     set_target_properties (
         ${BINARY_NAME} PROPERTIES
          WIN32_EXECUTABLE ON
-         VS_STARTUP_PROJECT "${BINARY_NAME}"
          VS_DEBUGGER_WORKING_DIRECTORY "$(ProjectDir)/$(Configuration)/"
          VS_DEBUGGER_COMMAND_ARGUMENTS "$(SolutionDir)../dist"
     )
 
-     add_definitions(/bigobj)
+     add_definitions(/bigobj) # /experimental:module
 endif ()
 
 if (LINUX)
@@ -169,7 +165,7 @@ target_compile_definitions (
 target_include_directories (
     ${BINARY_NAME} PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/include"
-    "${PROJECT_BINARY_DIR}/${PROJECT_NAME}/include"
+    "${PROJECT_BINARY_DIR}/${BINARY_NAME}/include"
 )
 
 if(SDL OR NOT DEFINED SDL)
