@@ -9,6 +9,7 @@
 #include "quatMaths.cpp"
 #include "Gamepad.h"
 #include "AutoLoad.h"
+#include "AutoConnect.h"
 #include "SettingsManager.h"
 #include "Stick.h"
 
@@ -37,7 +38,7 @@ const KeyCode KeyCode::EMPTY = KeyCode();
 const Mapping Mapping::NO_MAPPING = Mapping("NONE");
 std::string NONAME;
 function<bool(in_string)> Mapping::_isCommandValid = function<bool(in_string)>();
-unique_ptr<JslWrapper> jsl;
+shared_ptr<JslWrapper> jsl;
 unique_ptr<TrayIcon> tray;
 unique_ptr<Whitelister> whitelister;
 
@@ -68,6 +69,7 @@ vector<JSMButton> mappings;      // array enables use of for each loop and other
 float os_mouse_speed = 1.0;
 float last_flick_and_rotation = 0.0;
 unique_ptr<PollingThread> autoLoadThread;
+unique_ptr<JSM::AutoConnect> autoConnectThread;
 unique_ptr<PollingThread> minimizeThread;
 bool devicesCalibrating = false;
 unordered_map<int, shared_ptr<JoyShock>> handle_to_joyshock;
@@ -3206,6 +3208,11 @@ void beforeShowTrayMenu()
 		  { SettingsManager::get<Switch>(SettingID::AUTOLOAD)->set(isChecked ? Switch::ON : Switch::OFF); },
 		  bind(&PollingThread::isRunning, autoLoadThread.get()));
 
+		tray->AddMenuItem(
+		  U("AutoConnect"), [](bool isChecked)
+		  { SettingsManager::get<Switch>(SettingID::AUTOLOAD)->set(isChecked ? Switch::ON : Switch::OFF); },
+		  bind(&PollingThread::isRunning, autoLoadThread.get()));
+
 		if (whitelister && whitelister->IsAvailable())
 		{
 			tray->AddMenuItem(
@@ -4193,6 +4200,14 @@ void initJsmSettings(CmdRegistry *commandRegistry)
 	SettingsManager::add(SettingID::AUTOLOAD, autoloadSwitch);
 	auto *autoloadCmd = new JSMAssignment<Switch>("AUTOLOAD", *autoloadSwitch);
 	commandRegistry->add(autoloadCmd);
+
+	auto autoconnectSwitch = new JSMVariable<Switch>(Switch::ON);
+	autoConnectThread.reset(new JSM::AutoConnect(commandRegistry, autoloadSwitch->value() == Switch::ON)); // Start by default
+	autoConnectThread.get()->linkJslWrapper(&jsl);
+	autoconnectSwitch->setFilter(&filterInvalidValue<Switch, Switch::INVALID>)->addOnChangeListener(bind(&UpdateThread, autoConnectThread.get(), placeholders::_1));
+	SettingsManager::add(SettingID::AUTOCONNECT, autoconnectSwitch);
+	auto *autoconnectCmd = new JSMAssignment<Switch>("AUTOCONNECT", *autoconnectSwitch);
+	commandRegistry->add(autoconnectCmd);
 
 	auto grid_size = new JSMVariable(FloatXY{ 2.f, 1.f });
 	grid_size->setFilter([](auto current, auto next)

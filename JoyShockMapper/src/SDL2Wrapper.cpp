@@ -298,6 +298,12 @@ public:
 		return SDL_NumJoysticks();
 	}
 
+	int GetDeviceCount() override
+	{
+		std::lock_guard guard(controller_lock);
+		return SDL_NumJoysticks();
+	}
+
 	int GetConnectedDeviceHandles(int *deviceHandleArray, int size) override
 	{
 		std::lock_guard guard(controller_lock);

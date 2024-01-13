@@ -26,6 +26,7 @@ add_executable (
     src/Mapping.cpp
     src/TriggerEffectGenerator.cpp
     src/AutoLoad.cpp
+	src/AutoConnect.cpp
     src/SettingsManager.cpp
     src/Stick.cpp
     include/TriggerEffectGenerator.h
@@ -45,6 +46,7 @@ add_executable (
     include/JslWrapper.h
     include/Mapping.h
     include/AutoLoad.h
+	include/AutoConnect.h
     include/SettingsManager.h
     include/Stick.h
 )
