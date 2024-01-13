@@ -3210,8 +3210,8 @@ void beforeShowTrayMenu()
 
 		tray->AddMenuItem(
 		  U("AutoConnect"), [](bool isChecked)
-		  { SettingsManager::get<Switch>(SettingID::AUTOLOAD)->set(isChecked ? Switch::ON : Switch::OFF); },
-		  bind(&PollingThread::isRunning, autoLoadThread.get()));
+		  { SettingsManager::get<Switch>(SettingID::AUTOCONNECT)->set(isChecked ? Switch::ON : Switch::OFF); },
+		  bind(&PollingThread::isRunning, autoConnectThread.get()));
 
 		if (whitelister && whitelister->IsAvailable())
 		{
@@ -4201,13 +4201,12 @@ void initJsmSettings(CmdRegistry *commandRegistry)
 	auto *autoloadCmd = new JSMAssignment<Switch>("AUTOLOAD", *autoloadSwitch);
 	commandRegistry->add(autoloadCmd);
 
-	auto autoconnectSwitch = new JSMVariable<Switch>(Switch::ON);
-	autoConnectThread.reset(new JSM::AutoConnect(commandRegistry, autoloadSwitch->value() == Switch::ON)); // Start by default
+	auto autoConnectSwitch = new JSMVariable<Switch>(Switch::ON);
+	autoConnectThread.reset(new JSM::AutoConnect(commandRegistry, autoConnectSwitch->value() == Switch::ON)); // Start by default
 	autoConnectThread.get()->linkJslWrapper(&jsl);
-	autoconnectSwitch->setFilter(&filterInvalidValue<Switch, Switch::INVALID>)->addOnChangeListener(bind(&UpdateThread, autoConnectThread.get(), placeholders::_1));
-	SettingsManager::add(SettingID::AUTOCONNECT, autoconnectSwitch);
-	auto *autoconnectCmd = new JSMAssignment<Switch>("AUTOCONNECT", *autoconnectSwitch);
-	commandRegistry->add(autoconnectCmd);
+	autoConnectSwitch->setFilter(&filterInvalidValue<Switch, Switch::INVALID>)->addOnChangeListener(bind(&UpdateThread, autoConnectThread.get(), placeholders::_1));
+	SettingsManager::add(SettingID::AUTOCONNECT, autoConnectSwitch);
+	commandRegistry->add((new JSMAssignment<Switch>("AUTOCONNECT", *autoConnectSwitch))->SetHelp("Enable or disable device hotplugging. Valid values are ON and OFF."));
 
 	auto grid_size = new JSMVariable(FloatXY{ 2.f, 1.f });
 	grid_size->setFilter([](auto current, auto next)
