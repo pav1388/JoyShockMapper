@@ -53,4 +53,4 @@ bool AutoLoad::AutoLoadPoll(void* param)
 	return true;
 }
 
-} // JSM
+} // namespace JSM

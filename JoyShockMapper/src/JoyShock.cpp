@@ -4,7 +4,7 @@
 #define _USE_MATH_DEFINES
 #include <math.h> // M_PI
 
-extern unique_ptr<JslWrapper> jsl;
+extern shared_ptr<JslWrapper> jsl;
 extern vector<JSMButton> mappings;
 extern vector<JSMButton> grid_mappings;
 extern float os_mouse_speed;
