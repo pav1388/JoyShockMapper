@@ -112,9 +112,16 @@ In order to build on Linux, the following dependencies must be met, with their r
 - hidapi
 
 **Distribution-Specific Package Names:**
+- Ubuntu:
+  * ```sudo apt-get install -y libappindicator3-dev gir1.2-appindicator3-0.1 libgtk-3-dev libgtkmm-3.0-dev clang libsdl2-dev libdrm-dev libhidapi-dev libusb-1.0-0 libusb-1.0-0-dev libevdev-dev```
+  * Ubuntu's current repositories appear to be missing the `libdecor-0` package. Compile and install `libdecor-0` from [here](https://gitlab.gnome.org/jadahl/libdecor)
+    * `sudo apt install -y meson libwayland-dev wayland-protocols libpango1.0-dev libdbus-1-dev libegl-dev libxkbcommon-dev`
+    * Download and unpack source code to a folder
+    * ```meson build --buildtype release```
+    * ```meson install -C build```
 
-* Fedora: ```clang SDL2-devel libappindicator-gtk3-devel libevdev-devel gtk3-devel libusb-devel hidapi-devel```
-* Arch: ```clang sdl2 libappindicator-gtk3 libevdev gtk3 libusb hidapi```
+- Fedora: ```clang SDL2-devel libappindicator-gtk3-devel libevdev-devel gtk3-devel libusb-devel hidapi-devel```
+- Arch: ```clang sdl2 libappindicator-gtk3 libevdev gtk3 libusb hidapi```
 * Gentoo: ```media-libs/libsdl2 dev-libs/libayatana-appindicator dev-libs/libevdev x11-libs/gtk+ dev-libs/libusb dev-libs/hidapi``` The clang installed by default is sufficent to build the program. However you will need to rename the include from ```libappindicator``` to ```libayatana-appindicator``` in ```./JoyShockMapper/include/linux/StatusNotifierItem.h``` and ```./JoyShockMapper/src/linux/StatusNotifierItem.cpp```. You will also need to change line 7 in ```./cmake/LinuxConfig.cmake``` to ```pkg_search_module (appindicator REQUIRED IMPORTED_TARGET ayatana-appindicator3-0.1)```
 * Please provide an issue report or pull request to have additional library lists added.
 
