@@ -232,10 +232,10 @@ void calibrateTriggers(shared_ptr<JoyShock> jc)
 	auto rpos = jsl->GetRightTrigger(jc->_handle);
 	auto lpos = jsl->GetLeftTrigger(jc->_handle);
 	auto tick_time = *SettingsManager::get<float>(SettingID::TICK_TIME);
-	static auto &right_trigger_offset = *SettingsManager::get<int>(SettingID::RIGHT_TRIGGER_OFFSET);
-	static auto &right_trigger_range = *SettingsManager::get<int>(SettingID::RIGHT_TRIGGER_RANGE);
-	static auto &left_trigger_offset = *SettingsManager::get<int>(SettingID::LEFT_TRIGGER_OFFSET);
-	static auto &left_trigger_range = *SettingsManager::get<int>(SettingID::LEFT_TRIGGER_RANGE);
+	static auto &right_trigger_offset = *SettingsManager::getV<int>(SettingID::RIGHT_TRIGGER_OFFSET);
+	static auto &right_trigger_range = *SettingsManager::getV<int>(SettingID::RIGHT_TRIGGER_RANGE);
+	static auto &left_trigger_offset = *SettingsManager::getV<int>(SettingID::LEFT_TRIGGER_OFFSET);
+	static auto &left_trigger_range = *SettingsManager::getV<int>(SettingID::LEFT_TRIGGER_RANGE);
 	switch (triggerCalibrationStep)
 	{
 	case 1:
