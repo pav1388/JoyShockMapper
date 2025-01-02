@@ -311,7 +311,7 @@ void Application::cleanUp()
 	SDL_DestroyWindow(window);
 }
 
-void Application::draw()
+void Application::draw(SDL_GameController * controller)
 {
 	// Poll and handle events (inputs, window resize, etc.)
 	// You can read the io.WantCaptureMouse, io.WantCaptureKeyboard flags to tell if dear imgui wants to use your inputs.

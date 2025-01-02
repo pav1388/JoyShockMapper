@@ -36,7 +36,7 @@ public:
 
 	void cleanUp();
 
-	void draw();
+	void draw(SDL_GameController *controller);
 
 protected:
 	void createChord(ButtonID chord) override;

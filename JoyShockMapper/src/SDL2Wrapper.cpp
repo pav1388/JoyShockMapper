@@ -275,9 +275,14 @@ public:
 					}
 					// Perform rumble
 					SDL_GameControllerRumble(iter->second->_sdlController, iter->second->_big_rumble, iter->second->_small_rumble, Uint32(tick_time + 5));
+
+					if (iter == _controllerMap.begin())
+					{
+						_gui.draw(_controllerMap.begin()->second->_sdlController);
+					}
+					// else TODO: Please connect a controller and click here
 				}
 			}
-			_gui.draw();
 		}
 		_gui.cleanUp();
 		return 1;
