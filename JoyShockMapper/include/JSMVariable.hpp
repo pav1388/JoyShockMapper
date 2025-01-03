@@ -272,6 +272,35 @@ public:
 // A combo map is an item of _simMappings below. It holds an alternative variable when ButtonID is pressed.
 typedef pair<const ButtonID, JSMVariable<Mapping>> ComboMap;
 
+class MapIterator
+{
+	const map<ButtonID, JSMVariable<Mapping>> *_mapping;
+	map<ButtonID, JSMVariable<Mapping>>::const_iterator _iter;
+
+public:
+	MapIterator(const map<ButtonID, JSMVariable<Mapping>> &mapping)
+	  : _mapping(&mapping)
+	  , _iter(_mapping->begin())
+	{
+	}
+
+	operator bool() const
+	{
+		return _iter != _mapping->cend();
+	}
+
+	void operator++()
+	{
+		_iter++;
+	}
+
+	const ComboMap *operator->() const
+	{
+		return &*_iter;
+	}
+};
+
+
 // Button mappings includes not only chorded mappings, but also simultaneous press mappings
 class JSMButton : public ChordedVariable<Mapping>
 {
@@ -281,59 +310,42 @@ public:
 
 protected:
 	map<ButtonID, JSMVariable<Mapping>> _simMappings;
+	map<ButtonID, JSMVariable<Mapping>> _diagMappings;
 
 	// Store listener IDs for its sim presses. This is required for Cross updates
-	map<ButtonID, unsigned int> _simListeners;
+	map<ButtonID, unsigned int> _mapping;
 
 public:
 	JSMButton(ButtonID id, Mapping def)
 	  : ChordedVariable(def)
 	  , _id(id)
 	  , _simMappings()
-	  , _simListeners()
+	  , _diagMappings()
+	  , _mapping()
 	{
 	}
 
 	virtual ~JSMButton()
 	{
-		for (auto id : _simListeners)
+		for (auto id : _mapping)
 		{
-			_simMappings[id.first].removeOnChangeListener(id.second);
+			if (!_simMappings[id.first].removeOnChangeListener(id.second))
+			{
+				_diagMappings[id.first].removeOnChangeListener(id.second);
+			}
 		}
 	}
 
-	class SimMapIterator
+	// Obtain the Variable for a sim press if any.
+	MapIterator getSimMapIter() const
 	{
-		const map<ButtonID, JSMVariable<Mapping>> *_simListeners;
-		map<ButtonID, JSMVariable<Mapping>>::const_iterator _iter;
-
-	public:
-		SimMapIterator(const map<ButtonID, JSMVariable<Mapping>> &simListeners)
-		  : _simListeners(&simListeners)
-		  , _iter(_simListeners->begin())
-		{
-		}
-
-		operator bool() const
-		{
-			return _iter != _simListeners->cend();
-		}
-
-		void operator++()
-		{
-			_iter++;
-		}
-
-		const ComboMap *operator->() const
-		{
-			return &*_iter;
-		}
-	};
+		return MapIterator(_simMappings);
+	}
 
 	// Obtain the Variable for a sim press if any.
-	SimMapIterator getSimMapIter() const
+	MapIterator getDiagMapIter() const
 	{
-		return SimMapIterator(_simMappings);
+		return MapIterator(_diagMappings);
 	}
 
 	// Double Press mappings are stored in the chorded variables
@@ -344,10 +356,14 @@ public:
 	}
 
 	// Indicate whether any sim press mappings are present
-	// This function additionally removes any empty sim mappings.
 	inline bool hasSimMappings() const
 	{
 		return !_simMappings.empty();
+	}
+
+	inline bool hasDiagMappings() const
+	{
+		return !_diagMappings.empty();
 	}
 
 	virtual Mapping set(Mapping baseValue) override
@@ -390,15 +406,28 @@ public:
 		return string();
 	}
 
+	string getDiagPressName(ButtonID simBtn) const
+	{
+		if (simBtn > ButtonID::NONE)
+		{
+			stringstream ss;
+			ss << simBtn << '*' << _id;
+			return ss.str();
+		}
+		return string();
+	}
+
 	// Resetting a button also clears all assigned sim presses
 	virtual JSMButton *reset() override
 	{
 		ChordedVariable<Mapping>::reset();
-		for (auto id : _simListeners)
+		for (auto id : _mapping)
 		{
 			_simMappings[id.first].removeOnChangeListener(id.second);
+			_diagMappings[id.first].removeOnChangeListener(id.second);
 		}
 		_simMappings.clear();
+		_diagMappings.clear();
 		return this;
 	}
 
@@ -408,20 +437,42 @@ public:
 	JSMVariable<Mapping> *atSimPress(ButtonID chord)
 	{
 		auto existingSim = _simMappings.find(chord);
-		if (existingSim != _simMappings.end())
+		if (existingSim == _simMappings.end())
 		{
 			JSMVariable<Mapping> var(*this, Mapping());
 			_simMappings.emplace(chord, var);
-			_simListeners[chord] = _simMappings[chord].addOnChangeListener(
+			_mapping[chord] = _simMappings[chord].addOnChangeListener(
 			  bind(&updateSimPressPartner, chord, _id, placeholders::_1));
 		}
 		return &_simMappings[chord];
+	}
+
+	// Get the SimPress variable, creating one if required.
+	// An additional listener is required for the complementary sim press
+	// to be updated when this value changes.
+	JSMVariable<Mapping> *atDiagPress(ButtonID chord)
+	{
+		auto existingDiag = _diagMappings.find(chord);
+		if (existingDiag == _diagMappings.end())
+		{
+			JSMVariable<Mapping> var(*this, Mapping());
+			_diagMappings.emplace(chord, var);
+			_mapping[chord] = _diagMappings[chord].addOnChangeListener(
+			  bind(&updateDiagPressPartner, chord, _id, placeholders::_1));
+		}
+		return &_diagMappings[chord];
 	}
 
 	const JSMVariable<Mapping> *atSimPress(ButtonID chord) const
 	{
 		auto existingSim = _simMappings.find(chord);
 		return existingSim != _simMappings.end() ? &existingSim->second : nullptr;
+	}
+
+	const JSMVariable<Mapping> *atDiagPress(ButtonID chord) const
+	{
+		auto existingSim = _diagMappings.find(chord);
+		return existingSim != _diagMappings.end() ? &existingSim->second : nullptr;
 	}
 
 	void processChordRemoval(ButtonID chord, const JSMVariable<Mapping> *value)
@@ -444,6 +495,18 @@ public:
 			if (chordVar != _simMappings.end())
 			{
 				_simMappings.erase(chordVar);
+			}
+		}
+	}
+
+	void processDiagPressRemoval(ButtonID chord, const JSMVariable<Mapping> *value)
+	{
+		if (value && value->value() == Mapping::NO_MAPPING)
+		{
+			auto chordVar = _diagMappings.find(chord);
+			if (chordVar != _diagMappings.end())
+			{
+				_diagMappings.erase(chordVar);
 			}
 		}
 	}

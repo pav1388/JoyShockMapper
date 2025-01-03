@@ -1210,6 +1210,17 @@ void updateSimPressPartner(ButtonID sim, ButtonID origin, const Mapping &newVal)
 		CERR << "Cannot find the button " << sim << '\n';
 }
 
+void updateDiagPressPartner(ButtonID diag, ButtonID origin, const Mapping &newVal)
+{
+	JSMButton *button = int(diag) < mappings.size()         ? &mappings[int(diag)] :
+	  int(diag) - FIRST_TOUCH_BUTTON < grid_mappings.size() ? &grid_mappings[int(diag) - FIRST_TOUCH_BUTTON] :
+	                                                         nullptr;
+	if (button)
+		button->atDiagPress(origin)->set(newVal);
+	else
+		CERR << "Cannot find the button " << diag << '\n';
+}
+
 void updateThread(PollingThread *thread, const Switch &newValue)
 {
 	if (thread)

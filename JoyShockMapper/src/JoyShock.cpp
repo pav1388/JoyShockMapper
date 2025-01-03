@@ -52,6 +52,7 @@ JoyShock::JoyShock(int uniqueHandle, int controllerSplitType, shared_ptr<Digital
 	_light_bar = getSetting<Color>(SettingID::LIGHT_BAR);
 
 	_context->_getMatchingSimBtn = bind(&JoyShock::getMatchingSimBtn, this, placeholders::_1);
+	_context->_getMatchingDiagBtn = bind(&JoyShock::getMatchingDiagBtn, this, placeholders::_1, placeholders::_2);
 	_context->_rumble = bind(&JoyShock::sendRumble, this, placeholders::_1, placeholders::_2);
 
 	_buttons.reserve(LAST_ANALOG_TRIGGER); // Don't include touch stick _buttons
@@ -288,6 +289,47 @@ DigitalButton *JoyShock::getMatchingSimBtn(ButtonID index)
 				CERR << "Cannot find the button " << button2 << '\n';
 			}
 			else if (index != iter->first && button1->getState() == button2->getState())
+			{
+				return button2;
+			}
+		}
+	}
+	return nullptr;
+}
+
+DigitalButton *JoyShock::getMatchingDiagBtn(ButtonID index, optional<MapIterator> &iter)
+{
+	JSMButton *mapping = int(index) < mappings.size()        ? &mappings[int(index)] :
+	  int(index) - FIRST_TOUCH_BUTTON < grid_mappings.size() ? &grid_mappings[int(index) - FIRST_TOUCH_BUTTON] :
+	                                                           nullptr;
+	DigitalButton *button1 = int(index) < mappings.size()    ? &_buttons[int(index)] :
+	  int(index) - FIRST_TOUCH_BUTTON < grid_mappings.size() ? &_gridButtons[int(index) - FIRST_TOUCH_BUTTON] :
+	                                                           nullptr;
+	if (!mapping)
+	{
+		CERR << "Cannot find the button " << index << '\n';
+	}
+	else if (!button1)
+	{
+		CERR << "Cannot find the button " << button1 << '\n';
+	}
+	else
+	{
+		// Find the diagMapping where the other btn is in the same state as this btn.
+		if (!iter)
+			iter = mapping->getDiagMapIter();
+		for (; *iter; ++*iter)
+		{
+			int i = int((*iter)->first);
+			DigitalButton *button2 = i < mappings.size()    ? &_buttons[i] :
+			  i - FIRST_TOUCH_BUTTON < grid_mappings.size() ? &_gridButtons[i - FIRST_TOUCH_BUTTON] :
+			                                                                 nullptr;
+
+			if (!button2)
+			{
+				CERR << "Cannot find the button " << button2 << '\n';
+			}
+			else if (index != (*iter)->first && button2->getState() != BtnState::NoPress)
 			{
 				return button2;
 			}

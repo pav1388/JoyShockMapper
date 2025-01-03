@@ -478,6 +478,7 @@ class Mapping;
 // This function is defined in main.cpp. It enables two sim press variables to
 // listen to each other and make sure they both hold the same values.
 void updateSimPressPartner(ButtonID sim, ButtonID origin, const Mapping &newVal);
+void updateDiagPressPartner(ButtonID diag, ButtonID origin, const Mapping &newVal);
 
 // This operator enables reading any enum from string
 template<class E, class = std::enable_if_t<std::is_enum<E>{}>>
