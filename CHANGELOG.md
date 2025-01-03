@@ -6,7 +6,7 @@ This is a summary of new features and bugfixes. Read the README to learn how to 
 ## Known issues
 * SDL always merges joycons behind the scene into a single controller. JSM is not able to split them. Use legacy-JSL version to use this feature.
 
-## 3.5.4
+## 3.5.5
 
 Adding a highly requested new feature!
 
