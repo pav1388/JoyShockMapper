@@ -53,6 +53,8 @@ add_executable (
     include/JoyShock.h
 )
 
+set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT ${BINARY_NAME})
+
 if (WINDOWS)
     if(SDL)
         target_sources (
@@ -116,8 +118,6 @@ if (WINDOWS)
         )
     endif()
 	
-	set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT ${BINARY_NAME})
-    
     set_target_properties (
         ${BINARY_NAME} PROPERTIES
          WIN32_EXECUTABLE ON
@@ -171,7 +171,7 @@ if(SDL OR NOT DEFINED SDL)
 	CPMAddPackage (
 		NAME SDL2
         GITHUB_REPOSITORY libsdl-org/SDL
-        GIT_TAG release-2.28.5
+        GIT_TAG release-2.30.11
 	)
 	
 	set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")

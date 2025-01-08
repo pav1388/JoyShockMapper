@@ -229,6 +229,8 @@ public:
 		SDL_SetHint(SDL_HINT_GAMECONTROLLER_USE_BUTTON_LABELS, "0");
 		SDL_SetHint(SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, "1");
 		SDL_SetHint(SDL_HINT_JOYSTICK_HIDAPI_JOY_CONS, "1");
+		SDL_SetHint(SDL_HINT_JOYSTICK_HIDAPI_COMBINE_JOY_CONS, "0");
+		SDL_SetHint(SDL_HINT_JOYSTICK_HIDAPI_VERTICAL_JOY_CONS, "1");
 		SDL_SetHint(SDL_HINT_JOYSTICK_HIDAPI_SWITCH_HOME_LED, "0");
 		SDL_SetHint(SDL_HINT_JOYSTICK_HIDAPI_PS4_RUMBLE, "1");
 		SDL_SetHint(SDL_HINT_JOYSTICK_HIDAPI_PS5_RUMBLE, "1");
@@ -442,31 +444,31 @@ public:
 		int buttons = 0;
 		if (_controllerMap[deviceId]->_ctrlr_type == JS_TYPE_JOYCON_LEFT)
 		{
-			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_A) > 0 ? 1 << JSOFFSET_LEFT : 0;
-			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_B) > 0 ? 1 << JSOFFSET_DOWN : 0;
-			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_X) > 0 ? 1 << JSOFFSET_UP : 0;
-			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_Y) > 0 ? 1 << JSOFFSET_RIGHT : 0;
-			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_GUIDE) > 0 ? 1 << JSOFFSET_CAPTURE : 0;
-			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_START) > 0 ? 1 << JSOFFSET_MINUS : 0;
-			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_LEFTSHOULDER) > 0 ? 1 << JSOFFSET_SL : 0;
-			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_RIGHTSHOULDER) > 0 ? 1 << JSOFFSET_SR : 0;
-			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_PADDLE2) > 0 ? 1 << JSOFFSET_L : 0;
-			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_PADDLE4) > 0 ? 1 << JSOFFSET_ZL : 0;
+			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_DPAD_LEFT) > 0 ? 1 << JSOFFSET_LEFT : 0;
+			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_DPAD_DOWN) > 0 ? 1 << JSOFFSET_DOWN : 0;
+			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_DPAD_UP) > 0 ? 1 << JSOFFSET_UP : 0;
+			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_DPAD_RIGHT) > 0 ? 1 << JSOFFSET_RIGHT : 0;
+			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_MISC1) > 0 ? 1 << JSOFFSET_CAPTURE : 0;
+			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_BACK) > 0 ? 1 << JSOFFSET_MINUS : 0;
+			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_PADDLE2) > 0 ? 1 << JSOFFSET_SL : 0;
+			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_PADDLE4) > 0 ? 1 << JSOFFSET_SR : 0;
+			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_LEFTSHOULDER) > 0 ? 1 << JSOFFSET_L : 0;
+			buttons |= SDL_GameControllerGetAxis(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_AXIS_TRIGGERLEFT) > 0 ? 1 << JSOFFSET_ZL : 0;
 			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_LEFTSTICK) > 0 ? 1 << JSOFFSET_LCLICK : 0;
 		}
 		else if (_controllerMap[deviceId]->_ctrlr_type == JS_TYPE_JOYCON_RIGHT)
 		{
-			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_A) > 0 ? 1 << JSOFFSET_E : 0;
-			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_B) > 0 ? 1 << JSOFFSET_N : 0;
-			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_X) > 0 ? 1 << JSOFFSET_S : 0;
-			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_Y) > 0 ? 1 << JSOFFSET_W : 0;
+			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_B) > 0 ? 1 << JSOFFSET_E : 0;
+			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_Y) > 0 ? 1 << JSOFFSET_N : 0;
+			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_A) > 0 ? 1 << JSOFFSET_S : 0;
+			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_X) > 0 ? 1 << JSOFFSET_W : 0;
 			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_GUIDE) > 0 ? 1 << JSOFFSET_HOME : 0;
 			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_START) > 0 ? 1 << JSOFFSET_PLUS : 0;
-			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_LEFTSHOULDER) > 0 ? 1 << JSOFFSET_SL : 0;
-			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_RIGHTSHOULDER) > 0 ? 1 << JSOFFSET_SR : 0;
-			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_PADDLE1) > 0 ? 1 << JSOFFSET_R : 0;
-			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_PADDLE3) > 0 ? 1 << JSOFFSET_ZR : 0;
-			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_LEFTSTICK) > 0 ? 1 << JSOFFSET_RCLICK : 0;
+			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_PADDLE1) > 0 ? 1 << JSOFFSET_SL : 0;
+			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_PADDLE3) > 0 ? 1 << JSOFFSET_SR : 0;
+			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_RIGHTSHOULDER) > 0 ? 1 << JSOFFSET_R : 0;
+			buttons |= SDL_GameControllerGetAxis(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_AXIS_TRIGGERRIGHT) > 0 ? 1 << JSOFFSET_ZR : 0;
+			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_RIGHTSTICK) > 0 ? 1 << JSOFFSET_RCLICK : 0;
 		}
 		else
 		{

@@ -52,6 +52,7 @@ JoyShockMapper is primarily developed on Windows. JoyShockMapper should now be a
   * **[OnStartup.txt](#1-onstartuptxt)**
   * **[OnReset.txt](#2-onresettxt)**
   * **[Autoload feature](#3-autoload-feature)**
+  * **[Autoconnect feature](#4-autoload-feature)**
 * **[Troubleshooting](#troubleshooting)**
 * **[Known and Perceived Issues](#known-and-perceived-issues)**
 * **[Credits](#credits)**
@@ -1120,6 +1121,9 @@ This enables the user to swap focus between your text editor of choice and the g
 
 Autoload can be turned off by entering the command ```AUTOLOAD = OFF```. You can enable it again with ```AUTOLOAD = ON```.
 
+### 4. Autoconnect feature
+
+The SDL version of JoyShockMapper can monitor the number of connected controllers and launch the RECONNECT\_CONTROLLERS automatically when a new one is detected_
 
 ## Troubleshooting
 Some third-party devices that work as controllers on Switch, PS4, or PS5 may not work with JoyShockMapper. It only _officially_ supports first-party controllers. Issues may still arise with those, though. Reach out, and hopefully we can figure out where the problem is.
