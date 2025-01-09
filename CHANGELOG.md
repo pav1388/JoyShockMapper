@@ -3,8 +3,12 @@
 Most recent updates will appear first.
 This is a summary of new features and bugfixes. Read the README to learn how to use the features mentioned here.
 
-## Known issues
-* SDL always merges joycons behind the scene into a single controller. JSM is not able to split them. Use legacy-JSL version to use this feature.
+## 3.6
+
+Adding the new AUTOCONNECT feature. RECONNECT_CONTROLLERS will be called automagically when the controller count changes.
+This does not include virtual controllers. 
+
+Rehandling how SDL2 handles joycon to be on par with legacy/JSL version. RECONNECT_CONTROLLERS \[MERGE|SPLIT\] now work as expected!
 
 ## 3.5.5
 

@@ -1,6 +1,7 @@
 #include "AutoConnect.h"
 #include "JslWrapper.h"
 #include "InputHelpers.h"
+#include "Gamepad.h"
 
 
 namespace JSM
@@ -17,12 +18,12 @@ bool AutoConnect::AutoConnectPoll(void* param)
 	//int deviceHandleArray[100];
 	//int size = 100;
 	//int real_size = jsl->GetConnectedDeviceHandles(deviceHandleArray, size);
-	int realSize = jsl->GetDeviceCount();
+	int realSize = jsl->GetDeviceCount() - Gamepad::getCount();
 	if(lastSize != realSize)
 	{
 		COUT_INFO << "Found " << realSize << " devices, expected " << lastSize << "; reloading" << endl;
 		lastSize = realSize;
-		WriteToConsole("RECONNECT_CONTROLLERS");
+		WriteToConsole("RECONNECT_CONTROLLERS"); // MERGE? SPLIT?
 	}
 	return true;
 }

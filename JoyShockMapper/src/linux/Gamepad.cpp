@@ -1,5 +1,18 @@
 #include "Gamepad.h"
 
+size_t Gamepad::_count = 0;
+
+Gamepad::Gamepad()
+{
+	++_count;
+}
+
+Gamepad::~Gamepad()
+{
+	--_count;
+}
+
+
 class GamepadImpl : public Gamepad
 {
 public:

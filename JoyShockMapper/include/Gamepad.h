@@ -16,11 +16,16 @@ public:
 	typedef function<void(uint8_t largeMotor, uint8_t smallMotor, Indicator indicator)> Callback;
 
 protected:
-	Gamepad() { }
+	Gamepad();
 
 public:
 	static Gamepad* getNew(ControllerScheme scheme, Callback notification = nullptr);
-	virtual ~Gamepad() { }
+	static inline size_t getCount()
+	{
+		return _count;
+	}
+
+	virtual ~Gamepad();
 
 	virtual bool isInitialized(string* errorMsg = nullptr) const = 0;
 	inline string getError() const
@@ -42,4 +47,5 @@ public:
 
 protected:
 	string _errorMsg;
+	static size_t _count;
 };
