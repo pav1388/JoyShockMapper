@@ -3,17 +3,13 @@
 #include "JslWrapper.h"
 
 
-class CmdRegistry;
-
-
 namespace JSM
 {
 
 class AutoConnect : public PollingThread
 {
 public:
-	AutoConnect(CmdRegistry* commandRegistry, bool start);
-	void linkJslWrapper(shared_ptr<JslWrapper>* joyshock);
+	AutoConnect(shared_ptr<JslWrapper> joyshock, bool start);
 	virtual ~AutoConnect() = default;
 
 private:

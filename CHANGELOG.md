@@ -5,13 +5,23 @@ This is a summary of new features and bugfixes. Read the README to learn how to 
 
 ## 3.6.0
 
-Adding the new AUTOCONNECT feature. RECONNECT_CONTROLLERS will be called automagically when the controller count changes.
-This does not include virtual controllers.
-Failure to open a controller is followed by 2 more retries. (HIDAPI issue at times)
+New features, bugfixes and all around improvements!
 
-Rehandling how SDL2 handles joycon to be on par with legacy/JSL version. RECONNECT_CONTROLLERS \[MERGE|SPLIT\] now work as expected!
+Biggest improvement is reworking how SDL2 deals with joycon to be on par with legacy/JSL version.
+RECONNECT_CONTROLLERS \[MERGE|SPLIT\] now work as expected!
 
-Update SDL2 to v2.30.11
+Update SDL2 to from v2.28.5 to v2.30.11
+
+### Features
+
+* (SDL2 only) AUTOCONNECT thread will connect new controllers automatically when the count changes. Disable with ```AUTOCONNECT = OFF```.
+* New Action Modifier: Release (-) can be used to send key-up/release at the timing if your choosing!
+* If SDL2 struggles to reconnect controllers (HIDAPI issue at times), it will retry up to 2 times.
+
+### Bugfixes
+
+* SDL2 now handles joycons the same way JSL does. Call ```RECONNECT_CONTROLLERS [MERGE|SPLIT]``` to count pairs as separate or not. The command remembers which was used last time. Default is MERGE.
+* Instant press and turbo presses would not trigger events as expected. This is now fixed.
 
 ## 3.5.5
 

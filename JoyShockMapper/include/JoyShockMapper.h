@@ -379,7 +379,6 @@ enum class BtnEvent
 	OnRelease,
 	OnTapRelease,
 	OnHoldRelease,
-	OnInstantRelease,
 	INVALID
 };
 enum class Switch : char

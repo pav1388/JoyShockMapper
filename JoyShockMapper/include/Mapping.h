@@ -9,7 +9,7 @@ class EventActionIf
 public:
 	typedef function<void(EventActionIf *)> Callback;
 
-	virtual void RegisterInstant(BtnEvent evt) = 0;
+	virtual void RegisterInstant(BtnEvent evt, Callback cb) = 0;
 	virtual void ApplyGyroAction(KeyCode gyroAction) = 0;
 	virtual void RemoveGyroAction() = 0;
 	virtual void SetRumble(int smallRumble, int bigRumble) = 0;
@@ -32,6 +32,7 @@ public:
 		None,
 		Toggle,
 		Instant,
+		Release,
 		INVALID
 	};
 	enum class EventModifier

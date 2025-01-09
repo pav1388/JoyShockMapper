@@ -21,13 +21,14 @@ istream &operator>>(istream &in, Mapping &mapping)
 	int count = 0;
 
 	mapping._command = valueName;
-	static constexpr string_view rgx = R"(\s*([!\^]?)((\".*?\")|\w*[0-9A-Z]|\W)([\\\/+'_]?)\s*(.*))";
+	static constexpr string_view rgx = R"(\s*([!\^-]?)((\".*?\")|\w*[0-9A-Z]|\W)([\\\/+'_]?)\s*(.*))";
 	while (regex_match(valueName, results, regex(rgx.data())) && !results[0].str().empty())
 	{
 		Mapping::ActionModifier actMod =
 		  results[1].str().empty()   ? Mapping::ActionModifier::None :
 		  results[1].str()[0] == '!' ? Mapping::ActionModifier::Instant :
 		  results[1].str()[0] == '^' ? Mapping::ActionModifier::Toggle :
+		  results[1].str()[0] == '-' ? Mapping::ActionModifier::Release :
 		                               Mapping::ActionModifier::INVALID;
 
 		string keyStr(results[2]);
@@ -134,9 +135,12 @@ void Mapping::ProcessEvent(BtnEvent evt, EventActionIf &button) const
 
 void Mapping::InsertEventMapping(BtnEvent evt, EventActionIf::Callback action)
 {
-	auto existingActions = _eventMapping.find(evt);
-	_eventMapping[evt] = existingActions == _eventMapping.end() ? action :
-	                                                              bind(&RunBothActions, placeholders::_1, existingActions->second, action); // Chain with already existing mapping, if any
+	if (action)
+	{
+		auto existingActions = _eventMapping.find(evt);
+		_eventMapping[evt] = existingActions == _eventMapping.end() ? action :
+		                                                              bind(&RunBothActions, placeholders::_1, existingActions->second, action); // Chain with already existing mapping, if any
+	}
 }
 
 bool Mapping::AddMapping(KeyCode key, EventModifier evtMod, ActionModifier actMod)
@@ -206,14 +210,11 @@ bool Mapping::AddMapping(KeyCode key, EventModifier evtMod, ActionModifier actMo
 	case EventModifier::ReleasePress:
 		// Acttion Modifier is required
 		applyEvt = BtnEvent::OnRelease;
-		releaseEvt = BtnEvent::OnInstantRelease;
+		releaseEvt = BtnEvent::OnRelease;
 		break;
 	case EventModifier::TurboPress:
 		applyEvt = BtnEvent::OnTurbo;
-		releaseEvt = BtnEvent::OnInstantRelease;
-		apply2 = bind(&EventActionIf::RegisterInstant, placeholders::_1, applyEvt);
-		if (actMod == ActionModifier::None)
-			std::swap(apply, release);
+		releaseEvt = BtnEvent::OnRelease;
 		break;
 	default: // EventModifier::INVALID or None
 		return false;
@@ -223,24 +224,31 @@ bool Mapping::AddMapping(KeyCode key, EventModifier evtMod, ActionModifier actMo
 	{
 	case ActionModifier::Toggle:
 		apply = bind(&EventActionIf::ApplyButtonToggle, placeholders::_1, key, apply, release);
-		release = EventActionIf::Callback();
+		release = nullptr;
 		break;
 	case ActionModifier::Instant:
-	{
-		apply2 = bind(&EventActionIf::RegisterInstant, placeholders::_1, applyEvt);
+		apply2 = bind(&EventActionIf::RegisterInstant, placeholders::_1, applyEvt, release);
 		apply = bind(&Mapping::RunBothActions, placeholders::_1, apply, apply2);
-	}
-	break;
+		release = nullptr;
+		break;
+	case ActionModifier::Release:
+		apply = release;
+		release = nullptr;
+		break;
 	case ActionModifier::INVALID:
 		return false;
 		// None applies no modification... Hey!
 	}
 
+	// Extra turbo handling
 	if (evtMod == EventModifier::TurboPress)
 	{
-		apply = bind(&Mapping::RunBothActions, placeholders::_1, apply, apply2);
-		// On turbo you also always need to clear the turbo on release
-		InsertEventMapping(BtnEvent::OnRelease, actMod == ActionModifier::Instant ? release : apply);
+		if (actMod == ActionModifier::None) // Regular turbo holds key down and pulses up during the instant window
+		{
+			apply2 = bind(&EventActionIf::RegisterInstant, placeholders::_1, applyEvt, apply);// send key down on instant
+			apply = bind(&Mapping::RunBothActions, placeholders::_1, release, apply2); // send key up and register key down
+		}
+		// else handled already in instant case above
 	}
 
 	InsertEventMapping(applyEvt, apply);

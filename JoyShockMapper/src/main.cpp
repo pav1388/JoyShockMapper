@@ -1276,17 +1276,28 @@ bool do_RESET_MAPPINGS(CmdRegistry *registry)
 
 bool do_RECONNECT_CONTROLLERS(string_view arguments)
 {
-	bool mergeJoycons = arguments.empty() || (arguments.compare("MERGE") == 0);
-	if (mergeJoycons || arguments.rfind("SPLIT", 0) == 0)
+	static bool mergeJoycons = true;
+	if (arguments.compare("MERGE") == 0)
 	{
-		COUT << "Reconnecting controllers: " << arguments << '\n';
-		jsl->DisconnectAndDisposeAll();
-		connectDevices(mergeJoycons);
-		jsl->SetCallback(&joyShockPollCallback);
-		jsl->SetTouchCallback(&touchCallback);
-		return true;
+		mergeJoycons = true;
 	}
-	return false;
+	else if(arguments.compare("SPLIT") == 0)
+	{
+		mergeJoycons = false;
+	}
+	else if(!arguments.empty())
+	{
+		CERR << "Invalid argument: " << arguments << '\n';
+		return false;
+	}
+	// else remember last
+	 
+	COUT << "Reconnecting controllers: " << (mergeJoycons ? "MERGE" : "SPLIT") << '\n';
+	jsl->DisconnectAndDisposeAll();
+	connectDevices(mergeJoycons);
+	jsl->SetCallback(&joyShockPollCallback);
+	jsl->SetTouchCallback(&touchCallback);
+	return true;
 }
 
 bool do_COUNTER_OS_MOUSE_SPEED()
@@ -2460,8 +2471,7 @@ void initJsmSettings(CmdRegistry *commandRegistry)
 	commandRegistry->add(autoloadCmd);
 
 	auto autoConnectSwitch = new JSMVariable<Switch>(Switch::ON);
-	autoConnectThread.reset(new JSM::AutoConnect(commandRegistry, autoConnectSwitch->value() == Switch::ON)); // Start by default
-	autoConnectThread.get()->linkJslWrapper(&jsl);
+	autoConnectThread.reset(new JSM::AutoConnect(jsl, autoConnectSwitch->value() == Switch::ON)); // Start by default
 	autoConnectSwitch->setFilter(&filterInvalidValue<Switch, Switch::INVALID>)->addOnChangeListener(bind(&updateThread, autoConnectThread.get(), placeholders::_1));
 	SettingsManager::add(SettingID::AUTOCONNECT, autoConnectSwitch);
 	commandRegistry->add((new JSMAssignment<Switch>("AUTOCONNECT", *autoConnectSwitch))->setHelp("Enable or disable device hotplugging. Valid values are ON and OFF."));

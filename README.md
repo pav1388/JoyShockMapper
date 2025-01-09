@@ -52,7 +52,7 @@ JoyShockMapper is primarily developed on Windows. JoyShockMapper should now be a
   * **[OnStartup.txt](#1-onstartuptxt)**
   * **[OnReset.txt](#2-onresettxt)**
   * **[Autoload feature](#3-autoload-feature)**
-  * **[Autoconnect feature](#4-autoload-feature)**
+  * **[Autoconnect feature](#4-autoconnect-feature)**
 * **[Troubleshooting](#troubleshooting)**
 * **[Known and Perceived Issues](#known-and-perceived-issues)**
 * **[Credits](#credits)**
@@ -306,9 +306,10 @@ Before we dive in, there's a few notions to understand. A key press always invol
 
 There are two kinds of modifiers that can be applied to key bindings: action modifiers and event modifiers. They are represented by symbols added before and after the key name respectively. And each binding can only ever have one of each. You can however have multiple keys bound to the same events, thus sending multiple key presses at once.
 
-**Action modifiers** affect how the **key down** and **key up** actions are bound to the events. They come in two kinds: **toggle (^)** and **instant (!)**.
+**Action modifiers** affect how the **key down** and **key up** actions are bound to the events. They come in three kinds: **toggle (^)**, **instant (!)** and **release (-)**.
 * ^ Toggle makes it so that the key will alternate between applying and releasing the key at each press.
 * ! Instant will send the key up action very shortly after the key down, making it seem instant.
+* \- Release simply sends the key up action. This can be used to clear toggles or process key up prematurely.
 
 **Event Modifiers** affect what button events the key up and key down actions will be bound to. They come in five kinds: **start press (\\)**, **release press (/)**, **tap press (')**, **hold press (_)**,\ and **turbo (+)**.
 * \\ Start press is the default event modifier when there is only a single key bind. It will apply the key down action as soon as the button is pressed and the key up when the button is released by default. This can be useful to have a key held while other keys are being activated.

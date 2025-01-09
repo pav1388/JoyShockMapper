@@ -52,7 +52,7 @@ private:
 	};
 
 public:
-	vector<BtnEvent> _instantReleaseQueue;
+	multimap<BtnEvent, Callback> _instantReleaseQueue;
 	unsigned int _turboApplies = 0;
 	unsigned int _turboReleases = 0;
 	DigitalButtonImpl(JSMButton &mapping, shared_ptr<DigitalButton::Context> context)
@@ -63,7 +63,6 @@ public:
 	  , _mapping(mapping)
 	  , _instantReleaseQueue()
 	{
-		_instantReleaseQueue.reserve(2);
 	}
 
 	const ButtonID _id; // Always ID first for easy debugging
@@ -101,15 +100,14 @@ public:
 
 	bool ReleaseInstant(BtnEvent instantEvent)
 	{
-		auto instant = find(_instantReleaseQueue.begin(), _instantReleaseQueue.end(), instantEvent);
-		if (instant != _instantReleaseQueue.end())
+		auto range = _instantReleaseQueue.equal_range(instantEvent);
+		for (auto i = range.first; i != range.second; ++i)
 		{
 			// DEBUG_LOG << "Button " << _id << " releases instant " << instantEvent << '\n';
-			_keyToRelease->ProcessEvent(BtnEvent::OnInstantRelease, *this);
-			_instantReleaseQueue.erase(instant);
-			return true;
+			i->second(this);
 		}
-		return false;
+		_instantReleaseQueue.erase(range.first, range.second);
+		return true;
 	}
 
 	optional<Mapping> GetPressMapping()
@@ -133,10 +131,10 @@ public:
 		return _keyToRelease;
 	}
 
-	void RegisterInstant(BtnEvent evt) override
+	void RegisterInstant(BtnEvent evt, Callback cb) override
 	{
 		// DEBUG_LOG << "Button " << _id << " registers instant " << evt << '\n';
-		_instantReleaseQueue.push_back(evt);
+		_instantReleaseQueue.emplace(evt, cb);
 	}
 
 	void ApplyGyroAction(KeyCode gyroAction) override
