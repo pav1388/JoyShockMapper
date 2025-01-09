@@ -1123,7 +1123,7 @@ Autoload can be turned off by entering the command ```AUTOLOAD = OFF```. You can
 
 ### 4. Autoconnect feature
 
-The SDL version of JoyShockMapper can monitor the number of connected controllers and launch the RECONNECT\_CONTROLLERS automatically when a new one is detected_
+The SDL version of JoyShockMapper can monitor the number of connected controllers and run RECONNECT\_CONTROLLERS automatically when a new one is detected. This is very handy to relieve you from running it manually. Should the feature give you grief, you can always disable with the command ```AUTOCONNECT=OFF```.
 
 ## Troubleshooting
 Some third-party devices that work as controllers on Switch, PS4, or PS5 may not work with JoyShockMapper. It only _officially_ supports first-party controllers. Issues may still arise with those, though. Reach out, and hopefully we can figure out where the problem is.

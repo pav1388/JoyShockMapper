@@ -3,12 +3,15 @@
 Most recent updates will appear first.
 This is a summary of new features and bugfixes. Read the README to learn how to use the features mentioned here.
 
-## 3.6
+## 3.6.0
 
 Adding the new AUTOCONNECT feature. RECONNECT_CONTROLLERS will be called automagically when the controller count changes.
-This does not include virtual controllers. 
+This does not include virtual controllers.
+Failure to open a controller is followed by 2 more retries. (HIDAPI issue at times)
 
 Rehandling how SDL2 handles joycon to be on par with legacy/JSL version. RECONNECT_CONTROLLERS \[MERGE|SPLIT\] now work as expected!
+
+Update SDL2 to v2.30.11
 
 ## 3.5.5
 
