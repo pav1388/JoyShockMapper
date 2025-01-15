@@ -70,6 +70,9 @@ JoyShock::JoyShock(int uniqueHandle, int controllerSplitType, shared_ptr<Digital
 	{
 		_touchpads.push_back(TouchStick(i, _context, _handle));
 	}
+	_leftStick.scroll.init(_buttons[int(ButtonID::LLEFT)], _buttons[int(ButtonID::LRIGHT)]);
+	_rightStick.scroll.init(_buttons[int(ButtonID::RLEFT)], _buttons[int(ButtonID::RRIGHT)]);
+	_motionStick.scroll.init(_buttons[int(ButtonID::MLEFT)], _buttons[int(ButtonID::MRIGHT)]);
 	_touchScrollX.init(_touchpads[0].buttons.find(ButtonID::TLEFT)->second, _touchpads[0].buttons.find(ButtonID::TRIGHT)->second);
 	_touchScrollY.init(_touchpads[0].buttons.find(ButtonID::TUP)->second, _touchpads[0].buttons.find(ButtonID::TDOWN)->second);
 	updateGridSize();
@@ -125,7 +128,7 @@ void JoyShock::onVirtualControllerNotification(uint8_t largeMotor, uint8_t small
 	// auto diff = ((float)chrono::duration_cast<chrono::microseconds>(now - last_call).count()) / 1000000.0f;
 	// last_call = now;
 	// COUT_INFO << "Time since last vigem rumble is " << diff << " us\n";
-	lock_guard guard(this->_context->callback_lock);
+	lock_guard guard(_context->callback_lock);
 	switch (_controllerType)
 	{
 	case JS_TYPE_DS4:

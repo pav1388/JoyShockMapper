@@ -133,8 +133,11 @@ public:
 
 	void RegisterInstant(BtnEvent evt, Callback cb) override
 	{
-		// DEBUG_LOG << "Button " << _id << " registers instant " << evt << '\n';
-		_instantReleaseQueue.emplace(evt, cb);
+		if (cb)
+		{
+			// DEBUG_LOG << "Button " << _id << " registers instant " << evt << '\n';
+			_instantReleaseQueue.emplace(evt, cb);
+		}
 	}
 
 	void ApplyGyroAction(KeyCode gyroAction) override

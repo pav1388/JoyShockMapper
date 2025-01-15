@@ -1035,7 +1035,7 @@ void joyShockPollCallback(int jcHandle, JOY_SHOCK_STATE state, JOY_SHOCK_STATE l
 		{
 			jc->handleButtonChange(ButtonID::CAPTURE, buttons & (1 << JSOFFSET_CAPTURE));
 			jc->handleButtonChange(ButtonID::LSL, buttons & (1 << JSOFFSET_SL));
-			jc->handleButtonChange(ButtonID::LSR, buttons & (1 << JSOFFSET_FNL));
+			jc->handleButtonChange(ButtonID::LSR, buttons & (1 << JSOFFSET_SR));
 		}
 		break;
 		}
@@ -1057,8 +1057,6 @@ void joyShockPollCallback(int jcHandle, JOY_SHOCK_STATE state, JOY_SHOCK_STATE l
 		jc->handleButtonChange(ButtonID::PLUS, buttons & (1 << JSOFFSET_PLUS));
 		jc->handleButtonChange(ButtonID::HOME, buttons & (1 << JSOFFSET_HOME));
 		jc->handleButtonChange(ButtonID::R3, buttons & (1 << JSOFFSET_RCLICK));
-		jc->handleButtonChange(ButtonID::RSR, buttons & (1 << JSOFFSET_SR));
-		jc->handleButtonChange(ButtonID::RSL, buttons & (1 << JSOFFSET_FNR));
 
 		float rTrigger = jsl->GetRightTrigger(jc->_handle);
 		jc->handleTriggerChange(ButtonID::ZR, ButtonID::ZRF, jc->getSetting<TriggerMode>(SettingID::ZR_MODE), rTrigger, jc->_rightEffect);
@@ -1144,6 +1142,7 @@ void joyShockPollCallback(int jcHandle, JOY_SHOCK_STATE state, JOY_SHOCK_STATE l
 void connectDevices(bool mergeJoycons = true)
 {
 	handle_to_joyshock.clear();
+	this_thread::sleep_for(100ms);
 	int numConnected = jsl->ConnectDevices();
 	vector<int> deviceHandles(numConnected, 0);
 	if (numConnected > 0)
@@ -1168,6 +1167,7 @@ void connectDevices(bool mergeJoycons = true)
 			if (mergeJoycons && otherJoyCon != handle_to_joyshock.end())
 			{
 				// The second JC points to the same common _buttons as the other one.
+				COUT << "Found a joycon pair!\n";
 				handle_to_joyshock[handle] = make_shared<JoyShock>(handle, type, otherJoyCon->second->_context);
 			}
 			else
