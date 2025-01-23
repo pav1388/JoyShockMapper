@@ -3,12 +3,12 @@
 #include "JSMVariable.hpp"
  #include "TriggerEffectGenerator.h"
 #include "SettingsManager.h"
-#include "SDL.h"
+#include "SDL3/SDL.h"
 #include <map>
 #include <mutex>
 #include <atomic>
-#define INCLUDE_MATH_DEFINES
-#include <cmath> // M_PI
+#define _USE_MATH_DEFINES
+#include <math.h> // M_PI
 #include <algorithm>
 #include <memory>
 #include <iostream>
@@ -47,12 +47,12 @@ struct ControllerDevice
 	{
 		_prevTouchState.t0Down = false;
 		_prevTouchState.t1Down = false;
-		if (SDL_IsGameController(id))
+		if (SDL_IsGamepad(id))
 		{
 			_sdlController = nullptr;
 			for (int retry = 3; retry > 0 && _sdlController == nullptr; --retry)
 			{
-				_sdlController = SDL_GameControllerOpen(id);
+				_sdlController = SDL_OpenGamepad(id);
 
 				if (_sdlController == nullptr)
 				{
@@ -61,43 +61,43 @@ struct ControllerDevice
 				}
 				else
 				{
-					_has_gyro = SDL_GameControllerHasSensor(_sdlController, SDL_SENSOR_GYRO);
-					_has_accel = SDL_GameControllerHasSensor(_sdlController, SDL_SENSOR_ACCEL);
+					_has_gyro = SDL_GamepadHasSensor(_sdlController, SDL_SENSOR_GYRO);
+					_has_accel = SDL_GamepadHasSensor(_sdlController, SDL_SENSOR_ACCEL);
 
 					if (_has_gyro)
 					{
-						SDL_GameControllerSetSensorEnabled(_sdlController, SDL_SENSOR_GYRO, SDL_TRUE);
+						SDL_SetGamepadSensorEnabled(_sdlController, SDL_SENSOR_GYRO, true);
 					}
 					if (_has_accel)
 					{
-						SDL_GameControllerSetSensorEnabled(_sdlController, SDL_SENSOR_ACCEL, SDL_TRUE);
+						SDL_SetGamepadSensorEnabled(_sdlController, SDL_SENSOR_ACCEL, true);
 					}
 
-					int vid = SDL_GameControllerGetVendor(_sdlController);
-					int pid = SDL_GameControllerGetProduct(_sdlController);
+					int vid = SDL_GetGamepadVendor(_sdlController);
+					int pid = SDL_GetGamepadProduct(_sdlController);
 
-					auto sdl_ctrlr_type = SDL_GameControllerGetType(_sdlController);
+					auto sdl_ctrlr_type = SDL_GetGamepadType(_sdlController);
 					switch (sdl_ctrlr_type)
 					{
-					case SDL_GameControllerType::SDL_CONTROLLER_TYPE_NINTENDO_SWITCH_JOYCON_LEFT:
+					case SDL_GamepadType::SDL_GAMEPAD_TYPE_NINTENDO_SWITCH_JOYCON_LEFT:
 						_ctrlr_type = JS_TYPE_JOYCON_LEFT;
 						_split_type = JS_SPLIT_TYPE_LEFT;
 						break;
-					case SDL_GameControllerType::SDL_CONTROLLER_TYPE_NINTENDO_SWITCH_JOYCON_RIGHT:
+					case SDL_GamepadType::SDL_GAMEPAD_TYPE_NINTENDO_SWITCH_JOYCON_RIGHT:
 						_ctrlr_type = JS_TYPE_JOYCON_RIGHT;
 						_split_type = JS_SPLIT_TYPE_RIGHT;
 						break;
-					case SDL_GameControllerType::SDL_CONTROLLER_TYPE_NINTENDO_SWITCH_JOYCON_PAIR:
-					case SDL_GameControllerType::SDL_CONTROLLER_TYPE_NINTENDO_SWITCH_PRO:
+					case SDL_GamepadType::SDL_GAMEPAD_TYPE_NINTENDO_SWITCH_JOYCON_PAIR:
+					case SDL_GamepadType::SDL_GAMEPAD_TYPE_NINTENDO_SWITCH_PRO:
 						_ctrlr_type = JS_TYPE_PRO_CONTROLLER;
 						break;
-					case SDL_GameControllerType::SDL_CONTROLLER_TYPE_PS4:
+					case SDL_GamepadType::SDL_GAMEPAD_TYPE_PS4:
 						_ctrlr_type = JS_TYPE_DS4;
 						break;
-					case SDL_GameControllerType::SDL_CONTROLLER_TYPE_PS5:
+					case SDL_GamepadType::SDL_GAMEPAD_TYPE_PS5:
 						_ctrlr_type = JS_TYPE_DS;
 						break;
-					case SDL_GameControllerType::SDL_CONTROLLER_TYPE_XBOXONE:
+					case SDL_GamepadType::SDL_GAMEPAD_TYPE_XBOXONE:
 						_ctrlr_type = JS_TYPE_XBOXONE;
 						if (vid == 0x0e6f) // PDP Vendor ID
 						{
@@ -142,7 +142,7 @@ struct ControllerDevice
 		_big_rumble = 0;
 		_small_rumble = 0;
 		SendEffect();
-		SDL_GameControllerClose(_sdlController);
+		SDL_CloseGamepad(_sdlController);
 	}
 
 	inline bool isValid()
@@ -213,7 +213,7 @@ public:
 			effectPacket.ucMicLightMode = _micLight; /* Bitmask, 0x00 = off, 0x01 = solid, 0x02 = pulse */
 
 			// Send to controller
-			SDL_GameControllerSendEffect(_sdlController, &effectPacket, sizeof(effectPacket));
+			SDL_SendGamepadEffect(_sdlController, &effectPacket, sizeof(effectPacket));
 		}
 	}
 
@@ -226,7 +226,7 @@ public:
 	AdaptiveTriggerSetting _leftTriggerEffect;
 	AdaptiveTriggerSetting _rightTriggerEffect;
 	uint8_t _micLight = 0;
-	SDL_GameController *_sdlController = nullptr;
+	SDL_Gamepad *_sdlController = nullptr;
 	TOUCH_STATE _prevTouchState;
 };
 
@@ -235,17 +235,20 @@ struct SdlInstance : public JslWrapper
 public:
 	SdlInstance()
 	{
-		SDL_SetHint(SDL_HINT_GAMECONTROLLER_USE_BUTTON_LABELS, "0");
 		SDL_SetHint(SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, "1");
 		SDL_SetHint(SDL_HINT_JOYSTICK_HIDAPI_JOY_CONS, "1");
+		SDL_SetHint(SDL_HINT_JOYSTICK_HIDAPI_XBOX, "1");
+		SDL_SetHint(SDL_HINT_JOYSTICK_HIDAPI_PS3, "1");
+		SDL_SetHint(SDL_HINT_JOYSTICK_HIDAPI_PS4, "1");
+		SDL_SetHint(SDL_HINT_JOYSTICK_HIDAPI_PS5, "1");
+		SDL_SetHint(SDL_HINT_JOYSTICK_HIDAPI_GAMECUBE, "1");
 		SDL_SetHint(SDL_HINT_JOYSTICK_HIDAPI_COMBINE_JOY_CONS, "0");
 		SDL_SetHint(SDL_HINT_JOYSTICK_HIDAPI_VERTICAL_JOY_CONS, "1");
+		SDL_SetHint(SDL_HINT_JOYSTICK_HIDAPI_JOYCON_HOME_LED, "0");
 		SDL_SetHint(SDL_HINT_JOYSTICK_HIDAPI_SWITCH_HOME_LED, "0");
-		SDL_SetHint(SDL_HINT_JOYSTICK_HIDAPI_PS4_RUMBLE, "1");
-		SDL_SetHint(SDL_HINT_JOYSTICK_HIDAPI_PS5_RUMBLE, "1");
-		SDL_SetHint(SDL_HINT_JOYSTICK_HIDAPI_XBOX, "1");
+		SDL_SetHint(SDL_HINT_JOYSTICK_ENHANCED_REPORTS, "1");
 		SDL_SetHint(SDL_HINT_JOYSTICK_THREAD, "1");
-		SDL_Init(SDL_INIT_GAMECONTROLLER);
+		SDL_Init(SDL_INIT_GAMEPAD);
 	}
 
 	virtual ~SdlInstance()
@@ -261,7 +264,7 @@ public:
 			SDL_Delay(Uint32(tick_time));
 
 			lock_guard guard(controller_lock);
-			SDL_GameControllerUpdate();
+			SDL_UpdateGamepads();
 			for (auto iter = _controllerMap.begin(); iter != _controllerMap.end(); ++iter)
 			{
 				if (g_callback)
@@ -279,13 +282,14 @@ public:
 					iter->second->_prevTouchState = touch;
 				}
 				// Perform rumble
-				SDL_GameControllerRumble(iter->second->_sdlController, iter->second->_big_rumble, iter->second->_small_rumble, Uint32(tick_time + 5));
+				SDL_RumbleGamepad(iter->second->_sdlController, iter->second->_big_rumble, iter->second->_small_rumble, Uint32(tick_time + 5));
 			}
 		}
 
 		return 1;
 	}
 
+	SDL_JoystickID * _joysticksArray = nullptr;
 	map<int, ControllerDevice *> _controllerMap;
 	void (*g_callback)(int, JOY_SHOCK_STATE, JOY_SHOCK_STATE, IMU_STATE, IMU_STATE, float) = nullptr;
 	void (*g_touch_callback)(int, TOUCH_STATE, TOUCH_STATE, float) = nullptr;
@@ -306,14 +310,20 @@ public:
 			  "Poll Devices", this);
 			SDL_DetachThread(controller_polling_thread);
 		}
-		SDL_GameControllerUpdate(); // Refresh driver listing
-		return SDL_NumJoysticks();
+		SDL_UpdateGamepads(); // Refresh driver listing
+		SDL_free(_joysticksArray);
+		int count = 0;
+		_joysticksArray = SDL_GetJoysticks(&count);
+		return count;
 	}
 
 	int GetDeviceCount() override
 	{
 		std::lock_guard guard(controller_lock);
-		return SDL_NumJoysticks();
+		SDL_free(_joysticksArray);
+		int count = 0;
+		_joysticksArray = SDL_GetJoysticks(&count);
+		return count;
 	}
 
 	int GetConnectedDeviceHandles(int *deviceHandleArray, int size) override
@@ -327,7 +337,7 @@ public:
 		}
 		for (int i = 0; i < size; i++)
 		{
-			ControllerDevice *device = new ControllerDevice(i);
+			ControllerDevice *device = new ControllerDevice(_joysticksArray[i]);
 			if (device->isValid())
 			{
 				deviceHandleArray[i] = i + 1;
@@ -354,6 +364,8 @@ public:
 			delete iter->second;
 			iter = _controllerMap.erase(iter);
 		}
+		SDL_free(_joysticksArray);
+		_joysticksArray = nullptr;
 		SDL_Delay(200);
 	}
 
@@ -369,7 +381,7 @@ public:
 		if (_controllerMap[deviceId]->_has_gyro)
 		{
 			array<float, 3> gyro;
-			SDL_GameControllerGetSensorData(_controllerMap[deviceId]->_sdlController, SDL_SENSOR_GYRO, &gyro[0], 3);
+			SDL_GetGamepadSensorData(_controllerMap[deviceId]->_sdlController, SDL_SENSOR_GYRO, &gyro[0], 3);
 			static constexpr float toDegPerSec = float(180. / M_PI);
 			imuState.gyroX = gyro[0] * toDegPerSec;
 			imuState.gyroY = gyro[1] * toDegPerSec;
@@ -378,7 +390,7 @@ public:
 		if (_controllerMap[deviceId]->_has_accel)
 		{
 			array<float, 3> accel;
-			SDL_GameControllerGetSensorData(_controllerMap[deviceId]->_sdlController, SDL_SENSOR_ACCEL, &accel[0], 3);
+			SDL_GetGamepadSensorData(_controllerMap[deviceId]->_sdlController, SDL_SENSOR_ACCEL, &accel[0], 3);
 			static constexpr float toGs = 1.f / 9.8f;
 			imuState.accelX = accel[0] * toGs;
 			imuState.accelY = accel[1] * toGs;
@@ -394,14 +406,12 @@ public:
 
 	TOUCH_STATE GetTouchState(int deviceId, bool previous) override
 	{
-		uint8_t state0 = 0, state1 = 0;
 		TOUCH_STATE state;
 		memset(&state, 0, sizeof(TOUCH_STATE));
-		if( SDL_GameControllerGetTouchpadFinger(_controllerMap[deviceId]->_sdlController, 0, 0, &state0, &state.t0X, &state.t0Y, nullptr) == 0 && 
-			SDL_GameControllerGetTouchpadFinger(_controllerMap[deviceId]->_sdlController, 0, 1, &state1, &state.t1X, &state.t1Y, nullptr) == 0 )
+		if (!SDL_GetGamepadTouchpadFinger(_controllerMap[deviceId]->_sdlController, 0, 0, &state.t0Down, &state.t0X, &state.t0Y, nullptr) || 
+			!SDL_GetGamepadTouchpadFinger(_controllerMap[deviceId]->_sdlController, 0, 1, &state.t1Down, &state.t1X, &state.t1Y, nullptr))
 		{
-			state.t0Down = state0 == SDL_PRESSED;
-			state.t1Down = state1 == SDL_PRESSED;
+			CERR << "Cannot get finger state: " << SDL_GetError() << '\n';
 		}
 		return state;
 	}
@@ -416,7 +426,7 @@ public:
 			{
 			case JS_TYPE_DS4:
 			case JS_TYPE_DS:
-				// Matching SDL2 resolution
+				// Matching SDL resolution
 				sizeX = 1920;
 				sizeY = 920;
 				break;
@@ -433,63 +443,63 @@ public:
 	int GetButtons(int deviceId) override
 	{
 		static const map<int, int> sdl2jsl = {
-			{ SDL_CONTROLLER_BUTTON_A, JSOFFSET_S },
-			{ SDL_CONTROLLER_BUTTON_B, JSOFFSET_E },
-			{ SDL_CONTROLLER_BUTTON_X, JSOFFSET_W },
-			{ SDL_CONTROLLER_BUTTON_Y, JSOFFSET_N },
-			{ SDL_CONTROLLER_BUTTON_BACK, JSOFFSET_MINUS },
-			{ SDL_CONTROLLER_BUTTON_GUIDE, JSOFFSET_HOME },
-			{ SDL_CONTROLLER_BUTTON_START, JSOFFSET_PLUS },
-			{ SDL_CONTROLLER_BUTTON_LEFTSTICK, JSOFFSET_LCLICK },
-			{ SDL_CONTROLLER_BUTTON_RIGHTSTICK, JSOFFSET_RCLICK },
-			{ SDL_CONTROLLER_BUTTON_LEFTSHOULDER, JSOFFSET_L },
-			{ SDL_CONTROLLER_BUTTON_RIGHTSHOULDER, JSOFFSET_R },
-			{ SDL_CONTROLLER_BUTTON_DPAD_UP, JSOFFSET_UP },
-			{ SDL_CONTROLLER_BUTTON_DPAD_DOWN, JSOFFSET_DOWN },
-			{ SDL_CONTROLLER_BUTTON_DPAD_LEFT, JSOFFSET_LEFT },
-			{ SDL_CONTROLLER_BUTTON_DPAD_RIGHT, JSOFFSET_RIGHT }
+			{ SDL_GAMEPAD_BUTTON_SOUTH, JSOFFSET_S },
+			{ SDL_GAMEPAD_BUTTON_EAST, JSOFFSET_E },
+			{ SDL_GAMEPAD_BUTTON_WEST, JSOFFSET_W },
+			{ SDL_GAMEPAD_BUTTON_NORTH, JSOFFSET_N },
+			{ SDL_GAMEPAD_BUTTON_BACK, JSOFFSET_MINUS },
+			{ SDL_GAMEPAD_BUTTON_GUIDE, JSOFFSET_HOME },
+			{ SDL_GAMEPAD_BUTTON_START, JSOFFSET_PLUS },
+			{ SDL_GAMEPAD_BUTTON_LEFT_STICK, JSOFFSET_LCLICK },
+			{ SDL_GAMEPAD_BUTTON_RIGHT_STICK, JSOFFSET_RCLICK },
+			{ SDL_GAMEPAD_BUTTON_LEFT_SHOULDER, JSOFFSET_L },
+			{ SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER, JSOFFSET_R },
+			{ SDL_GAMEPAD_BUTTON_DPAD_UP, JSOFFSET_UP },
+			{ SDL_GAMEPAD_BUTTON_DPAD_DOWN, JSOFFSET_DOWN },
+			{ SDL_GAMEPAD_BUTTON_DPAD_LEFT, JSOFFSET_LEFT },
+			{ SDL_GAMEPAD_BUTTON_DPAD_RIGHT, JSOFFSET_RIGHT }
 		};
 
 		int buttons = 0;
 		for (auto pair : sdl2jsl)
 		{
-			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_GameControllerButton(pair.first)) > 0 ? 1 << pair.second : 0;
+			buttons |= SDL_GetGamepadButton(_controllerMap[deviceId]->_sdlController, SDL_GamepadButton(pair.first)) ? 1 << pair.second : 0;
 
 		}
 		switch (_controllerMap[deviceId]->_ctrlr_type)
 		{
 		case JS_TYPE_JOYCON_LEFT:
-			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_MISC1) > 0 ? 1 << JSOFFSET_CAPTURE : 0;
-			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_PADDLE2) > 0 ? 1 << JSOFFSET_SL : 0;
-			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_PADDLE4) > 0 ? 1 << JSOFFSET_SR : 0;
+			buttons |= SDL_GetGamepadButton(_controllerMap[deviceId]->_sdlController, SDL_GAMEPAD_BUTTON_MISC1) ? 1 << JSOFFSET_CAPTURE : 0;
+			buttons |= SDL_GetGamepadButton(_controllerMap[deviceId]->_sdlController, SDL_GAMEPAD_BUTTON_LEFT_PADDLE1) ? 1 << JSOFFSET_SL : 0;
+			buttons |= SDL_GetGamepadButton(_controllerMap[deviceId]->_sdlController, SDL_GAMEPAD_BUTTON_LEFT_PADDLE2) ? 1 << JSOFFSET_SR : 0;
 			break;
 		case JS_TYPE_JOYCON_RIGHT:
-			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_PADDLE1) > 0 ? 1 << JSOFFSET_SL : 0;
-			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_PADDLE3) > 0 ? 1 << JSOFFSET_SR : 0;
+			buttons |= SDL_GetGamepadButton(_controllerMap[deviceId]->_sdlController, SDL_GAMEPAD_BUTTON_RIGHT_PADDLE1) ? 1 << JSOFFSET_SL : 0;
+			buttons |= SDL_GetGamepadButton(_controllerMap[deviceId]->_sdlController, SDL_GAMEPAD_BUTTON_RIGHT_PADDLE2) ? 1 << JSOFFSET_SR : 0;
 			break;
 		case JS_TYPE_DS:
-			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_MISC1) > 0 ? 1 << JSOFFSET_MIC : 0;
-			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_PADDLE1) > 0 ? 1 << JSOFFSET_SR : 0;
-			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_PADDLE2) > 0 ? 1 << JSOFFSET_SL : 0;
-			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_PADDLE3) > 0 ? 1 << JSOFFSET_FNR : 0;
-			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_PADDLE4) > 0 ? 1 << JSOFFSET_FNL : 0;
+			buttons |= SDL_GetGamepadButton(_controllerMap[deviceId]->_sdlController, SDL_GAMEPAD_BUTTON_MISC1) ? 1 << JSOFFSET_MIC : 0;
+			buttons |= SDL_GetGamepadButton(_controllerMap[deviceId]->_sdlController, SDL_GAMEPAD_BUTTON_RIGHT_PADDLE1) ? 1 << JSOFFSET_SR : 0;
+			buttons |= SDL_GetGamepadButton(_controllerMap[deviceId]->_sdlController, SDL_GAMEPAD_BUTTON_LEFT_PADDLE1) ? 1 << JSOFFSET_SL : 0;
+			buttons |= SDL_GetGamepadButton(_controllerMap[deviceId]->_sdlController, SDL_GAMEPAD_BUTTON_RIGHT_PADDLE2) ? 1 << JSOFFSET_FNR : 0;
+			buttons |= SDL_GetGamepadButton(_controllerMap[deviceId]->_sdlController, SDL_GAMEPAD_BUTTON_LEFT_PADDLE2) ? 1 << JSOFFSET_FNL : 0;
 			// Intentional fall through to the next case
 		case JS_TYPE_DS4:
-			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_TOUCHPAD) > 0 ? 1 << JSOFFSET_CAPTURE : 0;
-			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_PADDLE1) > 0 ? 1 << JSOFFSET_SL : 0;
-			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_PADDLE3) > 0 ? 1 << JSOFFSET_SR : 0;
+			buttons |= SDL_GetGamepadButton(_controllerMap[deviceId]->_sdlController, SDL_GAMEPAD_BUTTON_TOUCHPAD) ? 1 << JSOFFSET_CAPTURE : 0;
+			buttons |= SDL_GetGamepadButton(_controllerMap[deviceId]->_sdlController, SDL_GAMEPAD_BUTTON_RIGHT_PADDLE1) ? 1 << JSOFFSET_SL : 0;
+			buttons |= SDL_GetGamepadButton(_controllerMap[deviceId]->_sdlController, SDL_GAMEPAD_BUTTON_RIGHT_PADDLE2) ? 1 << JSOFFSET_SR : 0;
 			break;
 		case JS_TYPE_PRO_CONTROLLER:
-			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_MISC1) > 0 ? 1 << JSOFFSET_CAPTURE : 0;
-			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_PADDLE1) > 0 ? 1 << JSOFFSET_SR : 0;
-			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_PADDLE2) > 0 ? 1 << JSOFFSET_SL : 0;
-			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_PADDLE3) > 0 ? 1 << JSOFFSET_FNR : 0;
-			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_PADDLE4) > 0 ? 1 << JSOFFSET_FNL : 0;
+			buttons |= SDL_GetGamepadButton(_controllerMap[deviceId]->_sdlController, SDL_GAMEPAD_BUTTON_MISC1) ? 1 << JSOFFSET_CAPTURE : 0;
+			buttons |= SDL_GetGamepadButton(_controllerMap[deviceId]->_sdlController, SDL_GAMEPAD_BUTTON_RIGHT_PADDLE1) ? 1 << JSOFFSET_SR : 0;
+			buttons |= SDL_GetGamepadButton(_controllerMap[deviceId]->_sdlController, SDL_GAMEPAD_BUTTON_LEFT_PADDLE1) ? 1 << JSOFFSET_SL : 0;
+			buttons |= SDL_GetGamepadButton(_controllerMap[deviceId]->_sdlController, SDL_GAMEPAD_BUTTON_RIGHT_PADDLE2) ? 1 << JSOFFSET_FNR : 0;
+			buttons |= SDL_GetGamepadButton(_controllerMap[deviceId]->_sdlController, SDL_GAMEPAD_BUTTON_LEFT_PADDLE2) ? 1 << JSOFFSET_FNL : 0;
 			break;
 		default:
-			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_MISC1) > 0 ? 1 << JSOFFSET_CAPTURE : 0;
-			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_PADDLE3) > 0 ? 1 << JSOFFSET_FNL : 0;
-			buttons |= SDL_GameControllerGetButton(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_BUTTON_PADDLE1) > 0 ? 1 << JSOFFSET_FNR : 0;
+			buttons |= SDL_GetGamepadButton(_controllerMap[deviceId]->_sdlController, SDL_GAMEPAD_BUTTON_MISC1) ? 1 << JSOFFSET_CAPTURE : 0;
+			buttons |= SDL_GetGamepadButton(_controllerMap[deviceId]->_sdlController, SDL_GAMEPAD_BUTTON_RIGHT_PADDLE2) ? 1 << JSOFFSET_FNL : 0;
+			buttons |= SDL_GetGamepadButton(_controllerMap[deviceId]->_sdlController, SDL_GAMEPAD_BUTTON_RIGHT_PADDLE1) ? 1 << JSOFFSET_FNR : 0;
 			break;
 		}
 		return buttons;
@@ -497,32 +507,40 @@ public:
 
 	float GetLeftX(int deviceId) override
 	{
-		return SDL_GameControllerGetAxis(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_AXIS_LEFTX) / (float)SDL_JOYSTICK_AXIS_MAX;
+		return SDL_GetGamepadAxis(_controllerMap[deviceId]->_sdlController, SDL_GAMEPAD_AXIS_LEFTX) / (float)SDL_JOYSTICK_AXIS_MAX;
 	}
 
 	float GetLeftY(int deviceId) override
 	{
-		return -SDL_GameControllerGetAxis(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_AXIS_LEFTY) / (float)SDL_JOYSTICK_AXIS_MAX;
+		return -SDL_GetGamepadAxis(_controllerMap[deviceId]->_sdlController, SDL_GAMEPAD_AXIS_LEFTY) / (float)SDL_JOYSTICK_AXIS_MAX;
 	}
 
 	float GetRightX(int deviceId) override
 	{
-		return SDL_GameControllerGetAxis(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_AXIS_RIGHTX) / (float)SDL_JOYSTICK_AXIS_MAX;
+		return SDL_GetGamepadAxis(_controllerMap[deviceId]->_sdlController, SDL_GAMEPAD_AXIS_RIGHTX) / (float)SDL_JOYSTICK_AXIS_MAX;
 	}
 
 	float GetRightY(int deviceId) override
 	{
-		return -SDL_GameControllerGetAxis(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_AXIS_RIGHTY) / (float)SDL_JOYSTICK_AXIS_MAX;
+		return -SDL_GetGamepadAxis(_controllerMap[deviceId]->_sdlController, SDL_GAMEPAD_AXIS_RIGHTY) / (float)SDL_JOYSTICK_AXIS_MAX;
 	}
 
 	float GetLeftTrigger(int deviceId) override
 	{
-		return SDL_GameControllerGetAxis(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_AXIS_TRIGGERLEFT) / (float)SDL_JOYSTICK_AXIS_MAX;
+		static float lastLT = 0.f;
+		auto lt = (SDL_GetGamepadAxis(_controllerMap[deviceId]->_sdlController, SDL_GAMEPAD_AXIS_LEFT_TRIGGER)) / (float)(SDL_JOYSTICK_AXIS_MAX);
+		
+		if (lt != lastLT)
+		{
+			lastLT = lt;
+			DEBUG_LOG << "Left trigger is at " << lt << '\n';
+		}
+		return lt;
 	}
 
 	float GetRightTrigger(int deviceId) override
 	{
-		return SDL_GameControllerGetAxis(_controllerMap[deviceId]->_sdlController, SDL_CONTROLLER_AXIS_TRIGGERRIGHT) / (float)SDL_JOYSTICK_AXIS_MAX;
+		return (SDL_GetGamepadAxis(_controllerMap[deviceId]->_sdlController, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER)) / (float)(SDL_JOYSTICK_AXIS_MAX);
 	}
 
 	float GetGyroX(int deviceId) override
@@ -530,7 +548,7 @@ public:
 		if (_controllerMap[deviceId]->_has_gyro)
 		{
 			float rawGyro[3];
-			SDL_GameControllerGetSensorData(_controllerMap[deviceId]->_sdlController, SDL_SENSOR_GYRO, rawGyro, 3);
+			SDL_GetGamepadSensorData(_controllerMap[deviceId]->_sdlController, SDL_SENSOR_GYRO, rawGyro, 3);
 		}
 		return float();
 	}
@@ -540,7 +558,7 @@ public:
 		if (_controllerMap[deviceId]->_has_gyro)
 		{
 			float rawGyro[3];
-			SDL_GameControllerGetSensorData(_controllerMap[deviceId]->_sdlController, SDL_SENSOR_GYRO, rawGyro, 3);
+			SDL_GetGamepadSensorData(_controllerMap[deviceId]->_sdlController, SDL_SENSOR_GYRO, rawGyro, 3);
 		}
 		return float();
 	}
@@ -550,7 +568,7 @@ public:
 		if (_controllerMap[deviceId]->_has_gyro)
 		{
 			float rawGyro[3];
-			SDL_GameControllerGetSensorData(_controllerMap[deviceId]->_sdlController, SDL_SENSOR_GYRO, rawGyro, 3);
+			SDL_GetGamepadSensorData(_controllerMap[deviceId]->_sdlController, SDL_SENSOR_GYRO, rawGyro, 3);
 		}
 		return float();
 	}
@@ -577,18 +595,14 @@ public:
 
 	bool GetTouchDown(int deviceId, bool secondTouch)
 	{
-		uint8_t touchState = 0;
-		if (SDL_GameControllerGetTouchpadFinger(_controllerMap[deviceId]->_sdlController, 0, secondTouch ? 1 : 0, &touchState, nullptr, nullptr, nullptr) == 0)
-		{
-			return touchState == SDL_PRESSED;
-		}
-		return false;
+		bool touchState = 0;
+		return SDL_GetGamepadTouchpadFinger(_controllerMap[deviceId]->_sdlController, 0, secondTouch ? 1 : 0, &touchState, nullptr, nullptr, nullptr) ? touchState : false;
 	}
 
 	float GetTouchX(int deviceId, bool secondTouch = false) override
 	{
 		float x = 0;
-		if (SDL_GameControllerGetTouchpadFinger(_controllerMap[deviceId]->_sdlController, 0, secondTouch ? 1 : 0, nullptr, nullptr, &x, nullptr) == 0)
+		if (SDL_GetGamepadTouchpadFinger(_controllerMap[deviceId]->_sdlController, 0, secondTouch ? 1 : 0, nullptr, nullptr, &x, nullptr))
 		{
 			return x;
 		}
@@ -598,7 +612,7 @@ public:
 	float GetTouchY(int deviceId, bool secondTouch = false) override
 	{
 		float y = 0;
-		if (SDL_GameControllerGetTouchpadFinger(_controllerMap[deviceId]->_sdlController, 0, secondTouch ? 1 : 0, nullptr, nullptr, &y, nullptr) == 0)
+		if (SDL_GetGamepadTouchpadFinger(_controllerMap[deviceId]->_sdlController, 0, secondTouch ? 1 : 0, nullptr, nullptr, &y, nullptr))
 		{
 			return y;
 		}
@@ -669,7 +683,9 @@ public:
 
 	void SetLightColour(int deviceId, int colour) override
 	{
-		if (SDL_GameControllerHasLED(_controllerMap[deviceId]->_sdlController))
+		auto prop = SDL_GetGamepadProperties(_controllerMap[deviceId]->_sdlController);
+		
+		if (SDL_GetStringProperty(prop, SDL_PROP_GAMEPAD_CAP_RGB_LED_BOOLEAN, nullptr) != nullptr)
 		{
 			union
 			{
@@ -677,7 +693,7 @@ public:
 				uint8_t argb[4];
 			} uColour;
 			uColour.raw = colour;
-			SDL_GameControllerSetLED(_controllerMap[deviceId]->_sdlController, uColour.argb[2], uColour.argb[1], uColour.argb[0]);
+			SDL_SetGamepadLED(_controllerMap[deviceId]->_sdlController, uColour.argb[2], uColour.argb[1], uColour.argb[0]);
 		}
 	}
 
@@ -691,7 +707,7 @@ public:
 
 	void SetPlayerNumber(int deviceId, int number) override
 	{
-		SDL_GameControllerSetPlayerIndex(_controllerMap[deviceId]->_sdlController, number);
+		SDL_SetGamepadPlayerIndex(_controllerMap[deviceId]->_sdlController, number);
 	}
 
 	void SetTriggerEffect(int deviceId, const AdaptiveTriggerSetting &_leftTriggerEffect, const AdaptiveTriggerSetting &_rightTriggerEffect) override

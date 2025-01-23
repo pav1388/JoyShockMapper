@@ -994,7 +994,6 @@ void joyShockPollCallback(int jcHandle, JOY_SHOCK_STATE state, JOY_SHOCK_STATE l
 		jc->handleButtonChange(ButtonID::RIGHT, buttons & (1 << JSOFFSET_RIGHT));
 		jc->handleButtonChange(ButtonID::L, buttons & (1 << JSOFFSET_L));
 		jc->handleButtonChange(ButtonID::MINUS, buttons & (1 << JSOFFSET_MINUS));
-		// for backwards compatibility, we need need to account for the fact that SDL2 maps the touchpad button differently to SDL
 		jc->handleButtonChange(ButtonID::L3, buttons & (1 << JSOFFSET_LCLICK));
 
 		float lTrigger = jsl->GetLeftTrigger(jc->_handle);

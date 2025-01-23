@@ -55,13 +55,14 @@ add_executable (
 
 if (WINDOWS)
 	set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT ${BINARY_NAME})
+    set_property(TARGET ${BINARY_NAME} PROPERTY VS_DEBUGGER_COMMAND_ARGUMENTS "${CMAKE_CURRENT_SOURCE_DIR}/dist")
 
     if(SDL)
         target_sources (
                 ${BINARY_NAME} PRIVATE
-                src/SDL2Wrapper.cpp
+                src/SDLWrapper.cpp
         )
-        add_definitions(-DSDL2)
+        add_definitions(-DSDL)
     else()
         target_sources (
                 ${BINARY_NAME} PRIVATE
@@ -105,8 +106,8 @@ if (WINDOWS)
             TARGET ${BINARY_NAME}
             POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy
-                "$<TARGET_FILE:SDL2>"
-                "$<TARGET_FILE_DIR:${BINARY_NAME}>/$<TARGET_FILE_NAME:SDL2>"
+                "$<TARGET_FILE:SDL3-shared>"
+                "$<TARGET_FILE_DIR:${BINARY_NAME}>/$<TARGET_FILE_NAME:SDL3-shared>"
         )
     else()
         add_custom_command(
@@ -132,9 +133,9 @@ if (LINUX)
     if(SDL OR NOT DEFINED SDL)
         target_sources (
                 ${BINARY_NAME} PRIVATE
-                src/SDL2Wrapper.cpp
+                src/SDLWrapper.cpp
         )
-        add_definitions(-DSDL2)
+        add_definitions(-DSDL)
     else()
         target_sources (
                 ${BINARY_NAME} PRIVATE
@@ -168,27 +169,26 @@ target_include_directories (
 if(SDL OR NOT DEFINED SDL)
 
 	set(SDL_HIDAPI ON)
-    set(SDL2_DISABLE_SDL2MAIN ON)
-    set(SDL2_DISABLE_UNINSTALL ON)
+    set(SDL_TEST_LIBRARY OFF)
+    set(SDL_SHARED ON)
     set(SDL_TEST OFF)
 	CPMAddPackage (
-		NAME SDL2
+		NAME SDL3
         GITHUB_REPOSITORY libsdl-org/SDL
-        GIT_TAG release-2.30.11
+        GIT_TAG release-3.2.0
 	)
-	set_target_properties(sdl_headers_copy PROPERTIES FOLDER "SDL2")
-    set_target_properties(SDL2 PROPERTIES FOLDER "SDL2")
+	set_target_properties(SDL_uclibc PROPERTIES FOLDER "SDL")
+    set_target_properties(SDL3-shared PROPERTIES FOLDER "SDL")
 	set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
     target_link_libraries (
         ${BINARY_NAME} PRIVATE
         Platform::Dependencies
-        SDL2
+        SDL3::SDL3-shared
     )
     
-
     install (
-        TARGETS ${BINARY_NAME} SDL2 
+       TARGETS ${BINARY_NAME} SDL3-shared
         RUNTIME DESTINATION ${PACKAGE_DIR}
     )
 else()
