@@ -1,8 +1,8 @@
 #include "dimgui/Application.h"
 #include "InputHelpers.h"
 #include "JSMVariable.hpp"
-#include "imgui_impl_sdl2.h"
-#include "imgui_impl_sdlrenderer2.h"
+#include "imgui_impl_sdl3.h"
+#include "imgui_impl_sdlrenderer3.h"
 #include "implot.h"
 #include "SettingsManager.h"
 #include "CmdRegistry.h"
@@ -240,11 +240,11 @@ void Application::init()
 {
 	HideConsole();
 	// Setup window
-	SDL_WindowFlags window_flags = (SDL_WindowFlags)(SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI); //  | SDL_WINDOW_BORDERLESS | SDL_WINDOW_FULLSCREEN_DESKTOP
-	window = SDL_CreateWindow("JoyShockMapper", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1280, 720, window_flags);
+	SDL_WindowFlags window_flags = (SDL_WindowFlags)(SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY /*| SDL_WINDOW_BORDERLESS | SDL_WINDOW_FULLSCREEN | SDL_WINDOW_TRANSPARENT*/);
+	window = SDL_CreateWindow("JoyShockMapper", 1280, 720, window_flags);
 
 	// Setup SDL_Renderer instance
-	renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_PRESENTVSYNC | SDL_RENDERER_ACCELERATED);
+	renderer = SDL_CreateRenderer(window, nullptr); // -1, SDL_RENDERER_PRESENTVSYNC | SDL_RENDERER_ACCELERATED);
 	if (!renderer || !window)
 		exit(0);
 	// SDL_RendererInfo info;
@@ -265,8 +265,8 @@ void Application::init()
 	// StyleColorsLight();
 
 	// Setup Platform/Renderer backends
-	ImGui_ImplSDL2_InitForSDLRenderer(window, renderer);
-	ImGui_ImplSDLRenderer2_Init(renderer);
+	ImGui_ImplSDL3_InitForSDLRenderer(window, renderer);
+	ImGui_ImplSDLRenderer3_Init(renderer);
 
 	// Load Fonts
 	// - If no fonts are loaded, dear imgui will use the default font. You can also load multiple fonts and use PushFont()/PopFont() to select them.
@@ -287,31 +287,26 @@ void Application::init()
 	GetIO().ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 
 	// Add window transparency
-	// MakeWindowTransparent(window, RGB(Uint8(clear_color.x * 255), Uint8(clear_color.y * 255), Uint8(clear_color.z * 255)), Uint8(clear_color.w * 255));
-	SDL_SysWMinfo wmInfo;
-	SDL_VERSION(&wmInfo.version); // Initialize wmInfo
-	SDL_GetWindowWMInfo(window, &wmInfo);
-	HWND hWnd = wmInfo.info.win.window;
+	//MakeWindowTransparent(window, RGB(Uint8(clear_color.x * 255), Uint8(clear_color.y * 255), Uint8(clear_color.z * 255)), Uint8(clear_color.w * 255));
 
 	// int (SDLCALL * SDL_EventFilter) (void *userdata, SDL_Event * event);
-	SDL_SetEventFilter([](void* userdata, SDL_Event* evt) -> int
-	  { return evt->type >= SDL_JOYAXISMOTION && evt->type <= SDL_CONTROLLERSENSORUPDATE ? FALSE : TRUE; },
+	SDL_SetEventFilter([](void* userdata, SDL_Event* evt) -> bool
+	  { return evt->type >= SDL_EVENT_JOYSTICK_AXIS_MOTION && evt->type <= SDL_EVENT_GAMEPAD_SENSOR_UPDATE ? false : true; },
 	  nullptr);
 }
 
 void Application::cleanUp()
 {
 	// Cleanup
-	ImGui_ImplSDLRenderer2_Shutdown();
-	ImGui_ImplSDL2_Shutdown();
-	ImPlot::DestroyContext();
+	ImGui_ImplSDLRenderer3_Shutdown();
+	ImGui_ImplSDL3_Shutdown();
 	DestroyContext();
 
 	SDL_DestroyRenderer(renderer);
 	SDL_DestroyWindow(window);
 }
 
-void Application::draw(SDL_GameController * controller)
+void Application::draw(SDL_Gamepad* controller)
 {
 	// Poll and handle events (inputs, window resize, etc.)
 	// You can read the io.WantCaptureMouse, io.WantCaptureKeyboard flags to tell if dear imgui wants to use your inputs.
@@ -322,10 +317,10 @@ void Application::draw(SDL_GameController * controller)
 	bool done = false;
 	while (!done && SDL_PollEvent(&event) != 0)
 	{
-		ImGui_ImplSDL2_ProcessEvent(&event);
-		if (event.type == SDL_QUIT)
+		ImGui_ImplSDL3_ProcessEvent(&event);
+		if (event.type == SDL_EVENT_QUIT)
 			done = true;
-		if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_CLOSE && event.window.windowID == SDL_GetWindowID(window))
+		if (event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED && event.window.windowID == SDL_GetWindowID(window))
 			done = true;
 	}
 
@@ -336,12 +331,12 @@ void Application::draw(SDL_GameController * controller)
 	style.Alpha = 1.0f;
 
 	// Start the Dear ImGui frame
-	ImGui_ImplSDLRenderer2_NewFrame();
-	ImGui_ImplSDL2_NewFrame();
+	ImGui_ImplSDLRenderer3_NewFrame();
+	ImGui_ImplSDL3_NewFrame();
+	PushStyleColor(ImGuiCol_WindowBg, { 0.f, 0.f, 0.f, 1.f });
 	NewFrame();
 
-	PushStyleColor(ImGuiCol_WindowBg, { 0.f, 0.f, 0.f, 0.f });
-	DockSpaceOverViewport(GetMainViewport(), ImGuiDockNodeFlags_PassthruCentralNode);
+	DockSpaceOverViewport(ImGui::GetWindowDockID(), GetMainViewport(), ImGuiDockNodeFlags_PassthruCentralNode);
 	PopStyleColor();
 
 	// 1. Show the big demo window (Most of the sample code is in ShowDemoWindow()! You can browse its code to learn more about Dear ImGui!).
@@ -497,7 +492,8 @@ void Application::draw(SDL_GameController * controller)
 			// TODO: HIDE_MINIMIZED
 			auto tickTime = SettingsManager::getV<float>(SettingID::TICK_TIME);
 			float tt = tickTime->value();
-			if (InputFloat(enum_name(SettingID::TICK_TIME).data(), &tt, 0.f, 0.f, "%.3f", ImGuiInputTextFlags_EnterReturnsTrue))
+			InputFloat(enum_name(SettingID::TICK_TIME).data(), &tt, 0.f, 0.f, "%.3f");
+			if (IsItemDeactivatedAfterEdit())
 			{
 				tickTime->set(tt);
 			}
@@ -505,7 +501,8 @@ void Application::draw(SDL_GameController * controller)
 
 			string dir = SettingsManager::getV<PathString>(SettingID::JSM_DIRECTORY)->value();
 			dir.resize(256, '\0');
-			if (InputText("JSM_DIRECTORY", dir.data(), dir.size(), ImGuiInputTextFlags_EnterReturnsTrue))
+			InputText("JSM_DIRECTORY", dir.data(), dir.size(), ImGuiInputTextFlags_EnterReturnsTrue);
+			if (IsItemDeactivatedAfterEdit())
 			{
 				dir.resize(strlen(dir.c_str()));
 				SettingsManager::getV<PathString>(SettingID::JSM_DIRECTORY)->set(dir);
@@ -540,14 +537,16 @@ void Application::draw(SDL_GameController * controller)
 			HelpMarker(enum_name(SettingID::AUTOLOAD).data());
 
 			float rwc = *SettingsManager::get<float>(SettingID::REAL_WORLD_CALIBRATION);
-			if (InputFloat("REAL_WORLD_CALIBRATION", &rwc, 0.f, 0.f, "%.3f", ImGuiInputTextFlags_EnterReturnsTrue))
+			InputFloat("REAL_WORLD_CALIBRATION", &rwc, 0.f, 0.f, "%.3f", ImGuiInputTextFlags_None);
+			if (IsItemDeactivatedAfterEdit())
 			{
 				SettingsManager::get<float>(SettingID::REAL_WORLD_CALIBRATION)->set(rwc);
 			}
 			HelpMarker(enum_name(SettingID::REAL_WORLD_CALIBRATION).data());
 
 			float igs = *SettingsManager::get<float>(SettingID::IN_GAME_SENS);
-			if (InputFloat("IN_GAME_SENS", &rwc, 0.f, 0.f, "%.3f", ImGuiInputTextFlags_EnterReturnsTrue))
+			InputFloat("IN_GAME_SENS", &rwc, 0.f, 0.f, "%.3f", ImGuiInputTextFlags_None);
+			if (IsItemDeactivatedAfterEdit())
 			{
 				SettingsManager::get<float>(SettingID::IN_GAME_SENS)->set(igs);
 			}
@@ -595,7 +594,8 @@ void Application::draw(SDL_GameController * controller)
 
 	ImVec2 renderingAreaPos;
 	ImVec2 renderingAreaSize;
-	Begin("MainWindow", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoBackground | /*ImGuiWindowFlags_NoMove | */ImGuiWindowFlags_NoTitleBar);
+	SetNextWindowBgAlpha(0.0f);
+	Begin("MainWindow", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoBackground | /*ImGuiWindowFlags_NoMouseInputs |*/ ImGuiWindowFlags_NoTitleBar);
 
 	BeginTabBar("BindingsTab");
 	// Draw all existing tabs
@@ -670,7 +670,7 @@ void Application::draw(SDL_GameController * controller)
 	// Rendering
 	SDL_RenderClear(renderer);
 	Render();
-	ImGui_ImplSDLRenderer2_RenderDrawData(GetDrawData());
+	ImGui_ImplSDLRenderer3_RenderDrawData(GetDrawData(), renderer);
 	SDL_RenderPresent(renderer);
 }
 
@@ -734,7 +734,8 @@ void Application::BindingTab::drawAnyFloat(SettingID stg, bool labeled)
 	if (!labeled)
 		ss << "##";
 	ss << enum_name(stg);
-	if (InputFloat(ss.str().data(), &value, 0.f, 0.f, variable ? "%.3f" : "[%.3f]", ImGuiInputTextFlags_EnterReturnsTrue))
+	InputFloat(ss.str().data(), &value, 0.f, 0.f, variable ? "%.3f" : "[%.3f]", ImGuiInputTextFlags_None);
+	if (IsItemDeactivatedAfterEdit())
 	{
 		if (!variable)
 			variable = &setting->createChord(_chord);
@@ -767,7 +768,8 @@ void Application::BindingTab::drawPercentFloat(SettingID stg, bool labeled)
 	if (!labeled)
 		ss << "##";
 	ss << enum_name(stg);
-	if (SliderFloat(ss.str().data(), &value, 0.f, 1.f, variable ? "%.2f" : "[%.2f]", ImGuiInputTextFlags_EnterReturnsTrue))
+	SliderFloat(ss.str().data(), &value, 0.f, 1.f, variable ? "%.2f" : "[%.2f]", ImGuiInputTextFlags_None);
+	if (IsItemDeactivatedAfterEdit())
 	{
 		if (!variable)
 			variable = &setting->createChord(_chord);
@@ -820,7 +822,8 @@ void Application::BindingTab::drawAny2Floats(SettingID stg, bool labeled)
 	if (!labeled)
 		ss << "##";
 	ss << enum_name(stg);
-	if (InputFloat2(ss.str().data(), &value.first, variable ? "%.0f" : "[%.0f]", ImGuiInputTextFlags_EnterReturnsTrue))
+	InputFloat2(ss.str().data(), &value.first, variable ? "%.0f" : "[%.0f]", ImGuiInputTextFlags_None);
+	if (IsItemDeactivatedAfterEdit())
 	{
 		if (!variable)
 			variable = &setting->createChord(_chord);
@@ -847,7 +850,7 @@ bool Application::BindingTab::draw(ImVec2& renderingAreaPos, ImVec2& renderingAr
 		// Combo("Sizing policy", &sizingPolicy, "FixedFit\0FixedSame\0StretchProp\0StretchSame");
 
 		// Left
-		BeginChild("Left Bindings", { mainWindowSize.x * 1.f / 5.f, mainWindowSize.y - barSize }, true, ImGuiWindowFlags_AlwaysAutoResize);
+		BeginChild("Left Bindings", { mainWindowSize.x * 1.f / 5.f, mainWindowSize.y - barSize }, true, ImGuiChildFlags_None);
 		if (BeginTable("LeftTable", 2, ImGuiTableFlags_SizingStretchSame))
 		{
 			TableNextRow();

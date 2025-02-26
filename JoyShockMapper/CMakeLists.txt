@@ -48,12 +48,9 @@ add_executable (
 	include/JslWrapper.h
 	include/Mapping.h
     include/AutoLoad.h
-<<<<<<< HEAD
 	include/SettingsManager.h
-=======
 	include/AutoConnect.h
     include/SettingsManager.h
->>>>>>> next
     include/Stick.h
     include/JoyShock.h
 )
@@ -64,17 +61,12 @@ if (WINDOWS)
 
     if(SDL)
         target_sources (
-<<<<<<< HEAD
             ${BINARY_NAME} PRIVATE
-            src/SDL2Wrapper.cpp
+            src/SDLWrapper.cpp
             src/dimgui/Application.cpp
             src/dimgui/InputSelector.cpp
             include/dimgui/Application.h
             include/dimgui/InputSelector.h
-=======
-                ${BINARY_NAME} PRIVATE
-                src/SDLWrapper.cpp
->>>>>>> next
         )
         add_definitions(-DSDL)
     else()
@@ -191,7 +183,6 @@ if(SDL OR NOT DEFINED SDL)
         GITHUB_REPOSITORY libsdl-org/SDL
         GIT_TAG release-3.2.0
 	)
-<<<<<<< HEAD
 
     # CPMAddPackage (
 	# 	NAME SDL_ttf
@@ -207,32 +198,13 @@ if(SDL OR NOT DEFINED SDL)
 	
 	set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
-	target_link_libraries (
-		${BINARY_NAME} PRIVATE
-		Platform::Dependencies
-		SDL2 
-		# SDL2_ttf
-	)
-	
-	# install(EXPORT SDL2
-	# 	FILE SDL2.cmake
-	# 	DESTINATION lib/cmake/SDL2
-	# )
-
-	install (
-		TARGETS ${BINARY_NAME} SDL2 
-		# SDL2_ttf
-		RUNTIME DESTINATION ${PACKAGE_DIR}
-	)
-	
-	# install(TARGETS SDL2_ttf PUBLIC_HEADER DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
-    
     # Dear ImGUI
     CPMAddPackage (
         NAME imgui
         GITHUB_REPOSITORY ocornut/imgui
-        GIT_TAG v1.89.9-docking
-=======
+        GIT_TAG v1.91.8-docking
+    )
+
 	set_target_properties(SDL_uclibc PROPERTIES FOLDER "SDL")
     set_target_properties(SDL3-shared PROPERTIES FOLDER "SDL")
 	set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
@@ -246,7 +218,7 @@ if(SDL OR NOT DEFINED SDL)
     install (
        TARGETS ${BINARY_NAME} SDL3-shared
         RUNTIME DESTINATION ${PACKAGE_DIR}
->>>>>>> next
+
     )
     # ImPlot
     CPMAddPackage (
@@ -262,14 +234,14 @@ if(SDL OR NOT DEFINED SDL)
       ${imgui_SOURCE_DIR}/imgui_tables.cpp ${imgui_SOURCE_DIR}/imgui_widgets.cpp
       ${imgui_SOURCE_DIR}/imstb_rectpack.h ${imgui_SOURCE_DIR}/imstb_textedit.h
       ${imgui_SOURCE_DIR}/imstb_truetype.h
-      ${imgui_SOURCE_DIR}/backends/imgui_impl_sdl2.h ${imgui_SOURCE_DIR}/backends/imgui_impl_sdl2.cpp
-      ${imgui_SOURCE_DIR}/backends/imgui_impl_sdlrenderer2.h ${imgui_SOURCE_DIR}/backends/imgui_impl_sdlrenderer2.cpp
+      ${imgui_SOURCE_DIR}/backends/imgui_impl_sdl3.h ${imgui_SOURCE_DIR}/backends/imgui_impl_sdl3.cpp
+      ${imgui_SOURCE_DIR}/backends/imgui_impl_sdlrenderer3.h ${imgui_SOURCE_DIR}/backends/imgui_impl_sdlrenderer3.cpp
       ${implot_SOURCE_DIR}/implot.h ${implot_SOURCE_DIR}/implot.cpp ${implot_SOURCE_DIR}/implot_internal.h
       ${implot_SOURCE_DIR}/implot_items.cpp ${implot_SOURCE_DIR}/implot_demo.cpp
     )
 
     target_include_directories(imgui PUBLIC ${imgui_SOURCE_DIR} ${implot_SOURCE_DIR})
-    target_link_libraries(imgui PUBLIC SDL2::SDL2)
+    target_link_libraries(imgui PUBLIC SDL3::SDL3-shared)
 
     target_link_libraries(${BINARY_NAME} PUBLIC imgui)
 

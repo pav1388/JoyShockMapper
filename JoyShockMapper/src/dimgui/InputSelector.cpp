@@ -387,7 +387,8 @@ void InputSelector::MappingTabItem::draw()
 	{
 		_activeHeader = CONSOLE;
 		static string command(256, '\0');
-		if (InputText("Command", command.data(), command.size(), ImGuiInputTextFlags_EnterReturnsTrue))
+		InputText("Command", command.data(), command.size(), ImGuiInputTextFlags_None);
+		if (IsItemDeactivatedAfterEdit())
 		{
 			stringstream ss;
 			ss << '\"' << command.c_str() << '\"';

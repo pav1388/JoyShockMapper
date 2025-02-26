@@ -1,8 +1,7 @@
 #pragma once
 
 #include "imgui.h"
-#include "SDL.h"
-#include "SDL_syswm.h"
+#include "SDL3/SDL.h"
 #include <functional>
 #include <future>
 #include <atomic>
@@ -36,7 +35,7 @@ public:
 
 	void cleanUp();
 
-	void draw(SDL_GameController *controller);
+	void draw(SDL_Gamepad *controller);
 
 protected:
 	void createChord(ButtonID chord) override;

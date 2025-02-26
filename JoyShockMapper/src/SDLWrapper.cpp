@@ -3,6 +3,7 @@
 #include "JSMVariable.hpp"
  #include "TriggerEffectGenerator.h"
 #include "SettingsManager.h"
+#include "dimgui/Application.h"
 #include "SDL3/SDL.h"
 #include <map>
 #include <mutex>
@@ -234,6 +235,7 @@ struct SdlInstance : public JslWrapper
 {
 public:
 	SdlInstance()
+	  : _gui(this)
 	{
 		SDL_SetHint(SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, "1");
 		SDL_SetHint(SDL_HINT_JOYSTICK_HIDAPI_JOY_CONS, "1");
@@ -248,16 +250,18 @@ public:
 		SDL_SetHint(SDL_HINT_JOYSTICK_HIDAPI_SWITCH_HOME_LED, "0");
 		SDL_SetHint(SDL_HINT_JOYSTICK_ENHANCED_REPORTS, "1");
 		SDL_SetHint(SDL_HINT_JOYSTICK_THREAD, "1");
-		SDL_Init(SDL_INIT_GAMEPAD);
+		SDL_Init(SDL_INIT_GAMEPAD | SDL_INIT_VIDEO);
 	}
 
 	virtual ~SdlInstance()
 	{
+		SDL_WaitThread(controller_polling_thread, nullptr);
 		SDL_Quit();
 	}
 
 	int pollDevices()
 	{
+		_gui.init();
 		while (keep_polling)
 		{
 			auto tick_time = SettingsManager::get<float>(SettingID::TICK_TIME)->value();
@@ -283,9 +287,10 @@ public:
 				}
 				// Perform rumble
 				SDL_RumbleGamepad(iter->second->_sdlController, iter->second->_big_rumble, iter->second->_small_rumble, Uint32(tick_time + 5));
+				_gui.draw(iter->second->_sdlController);
 			}
 		}
-
+		_gui.cleanUp();
 		return 1;
 	}
 
@@ -295,6 +300,8 @@ public:
 	void (*g_touch_callback)(int, TOUCH_STATE, TOUCH_STATE, float) = nullptr;
 	atomic_bool keep_polling = false;
 	mutex controller_lock;
+	Application _gui;
+	SDL_Thread *controller_polling_thread = nullptr;
 
 	int ConnectDevices() override
 	{
@@ -302,13 +309,12 @@ public:
 		if (keep_polling.compare_exchange_strong(isFalse, true))
 		{
 			// keep polling was false! It is set to true now.
-			SDL_Thread* controller_polling_thread = SDL_CreateThread([] (void *obj)
+			controller_polling_thread = SDL_CreateThread([] (void *obj)
 			{
 				  auto this_ = static_cast<SdlInstance *>(obj);
 				  return this_->pollDevices();
 			  },
 			  "Poll Devices", this);
-			SDL_DetachThread(controller_polling_thread);
 		}
 		SDL_UpdateGamepads(); // Refresh driver listing
 		SDL_free(_joysticksArray);
@@ -354,19 +360,21 @@ public:
 
 	void DisconnectAndDisposeAll() override
 	{
-		lock_guard guard(controller_lock);
 		keep_polling = false;
-		g_callback = nullptr;
-		g_touch_callback = nullptr;
-		auto iter = _controllerMap.begin();
-		while (iter != _controllerMap.end())
 		{
-			delete iter->second;
-			iter = _controllerMap.erase(iter);
+			lock_guard guard(controller_lock);
+			g_callback = nullptr;
+			g_touch_callback = nullptr;
+			auto iter = _controllerMap.begin();
+			while (iter != _controllerMap.end())
+			{
+				delete iter->second;
+				iter = _controllerMap.erase(iter);
+			}
+			SDL_free(_joysticksArray);
+			_joysticksArray = nullptr;
 		}
-		SDL_free(_joysticksArray);
-		_joysticksArray = nullptr;
-		SDL_Delay(200);
+		SDL_WaitThread(controller_polling_thread, nullptr);
 	}
 
 	JOY_SHOCK_STATE GetSimpleState(int deviceId) override
