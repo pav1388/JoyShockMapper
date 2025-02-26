@@ -30,9 +30,9 @@ void DigitalButton::Context::updateChordStack(bool isPressed, ButtonID id)
 
 struct Sync
 {
-	pocket_fsm::StateIF *nextState;
+	pocket_fsm::StateIF *nextState = nullptr;
 	chrono::steady_clock::time_point pressTime;
-	Mapping *activeMapping;
+	const Mapping *activeMapping = nullptr;
 	string nameToRelease;
 	float turboTime;
 	float holdTime;
@@ -41,7 +41,7 @@ struct Sync
 
 // Hidden implementation of the digital button
 // This class holds all the logic related to a single digital button. It does not hold the mapping but only a reference
-// to it. It also contains it's various states, flags and data. The concrete state of the state machine hands off the
+// to it. It also contains its various states, flags and data. The concrete state of the state machine hands off the
 // instance to the next state, and so is persistent across states
 struct DigitalButtonImpl : public pocket_fsm::PimplBase, public EventActionIf
 {
@@ -52,7 +52,7 @@ private:
 	};
 
 public:
-	vector<BtnEvent> _instantReleaseQueue;
+	multimap<BtnEvent, Callback> _instantReleaseQueue;
 	unsigned int _turboApplies = 0;
 	unsigned int _turboReleases = 0;
 	DigitalButtonImpl(JSMButton &mapping, shared_ptr<DigitalButton::Context> context)
@@ -63,7 +63,6 @@ public:
 	  , _mapping(mapping)
 	  , _instantReleaseQueue()
 	{
-		_instantReleaseQueue.reserve(2);
 	}
 
 	const ButtonID _id; // Always ID first for easy debugging
@@ -72,7 +71,7 @@ public:
 	chrono::steady_clock::time_point _press_times;
 	optional<Mapping> _keyToRelease; // At key press, remember what to release
 	const JSMButton &_mapping;
-	DigitalButton *_simPressMaster = nullptr;
+	DigitalButton *_masterPress = nullptr; // Who is this button's master in either sim or diag presses
 
 	// Pretty wrapper
 	inline float GetPressDurationMS(chrono::steady_clock::time_point time_now)
@@ -101,15 +100,14 @@ public:
 
 	bool ReleaseInstant(BtnEvent instantEvent)
 	{
-		auto instant = find(_instantReleaseQueue.begin(), _instantReleaseQueue.end(), instantEvent);
-		if (instant != _instantReleaseQueue.end())
+		auto range = _instantReleaseQueue.equal_range(instantEvent);
+		for (auto i = range.first; i != range.second; ++i)
 		{
 			// DEBUG_LOG << "Button " << _id << " releases instant " << instantEvent << '\n';
-			_keyToRelease->ProcessEvent(BtnEvent::OnInstantRelease, *this);
-			_instantReleaseQueue.erase(instant);
-			return true;
+			i->second(this);
 		}
-		return false;
+		_instantReleaseQueue.erase(range.first, range.second);
+		return true;
 	}
 
 	optional<Mapping> GetPressMapping()
@@ -133,10 +131,13 @@ public:
 		return _keyToRelease;
 	}
 
-	void RegisterInstant(BtnEvent evt) override
+	void RegisterInstant(BtnEvent evt, Callback cb) override
 	{
-		// DEBUG_LOG << "Button " << _id << " registers instant " << evt << '\n';
-		_instantReleaseQueue.push_back(evt);
+		if (cb)
+		{
+			// DEBUG_LOG << "Button " << _id << " registers instant " << evt << '\n';
+			_instantReleaseQueue.emplace(evt, cb);
+		}
 	}
 
 	void ApplyGyroAction(KeyCode gyroAction) override
@@ -150,7 +151,7 @@ public:
 		  [this](auto pair)
 		  {
 			  // On a sim press, release the master button (the one who triggered the press)
-			  return pair.first == (_simPressMaster ? _simPressMaster->_id : _id);
+			  return pair.first == (_masterPress ? _masterPress->_id : _id);
 		  });
 		if (gyroAction != _context->gyroActionQueue.end())
 		{
@@ -280,6 +281,8 @@ class WaitSim;
 class SimPressMaster;
 class SimPressSlave;
 class SimRelease;
+class DiagPressSlave;
+class DiagRelease;
 class DblPressStart;
 class DblPressNoPress;
 class DblPressNoPressTap;
@@ -353,9 +356,33 @@ public:
 		Released rel{ e.pressTime, e.turboTime, e.holdTime };
 		react(rel);
 		// Redirect change of state to the caller of the Sync
-		e.nextState = _nextState;
-		_nextState = nullptr;
-		changeState<SimRelease>();
+		if (e.nextState == nullptr)
+		{
+			// Release from SimPress
+
+			e.nextState = _nextState;
+			_nextState = nullptr;
+			changeState<SimRelease>();
+		}
+		else
+		{
+			if (e.activeMapping != nullptr)
+			{
+				// Activate Diagonal
+				// DEBUG_LOG << "Button " << pimpl()->_id << " enables active diagonal as master\n";
+				pimpl()->_masterPress = nullptr;
+				pimpl()->_keyToRelease = *e.activeMapping;
+				pimpl()->_nameToRelease = e.nameToRelease;
+			}
+			else // release diagonal
+			{
+				// DEBUG_LOG << "Button " << pimpl()->_id << " releases active diagonal\n";
+				pimpl()->ClearKey();
+			}
+			pimpl()->_press_times = e.pressTime;
+			delete _nextState;
+			_nextState = e.nextState;
+		}
 	}
 };
 
@@ -450,6 +477,30 @@ class ActiveHoldPress : public ActiveMappingState
 	}
 };
 
+class DiagPressMaster : public pocket_fsm::NestedStateMachine<ActiveMappingState, DigitalButtonState>
+{
+	DB_CONCRETE_STATE(DiagPressMaster)
+
+	REACT(OnEntry)
+	override
+	{
+		DigitalButtonState::react(e);
+		initialize(new ActiveStartPress(_pimpl));
+	}
+
+	NESTED_REACT(Pressed)
+
+	NESTED_REACT(Released)
+
+	NESTED_REACT(Sync)
+
+	void swapPimpl(DigitalButtonState &otherState) override
+	{
+		_currentState->resetPimpl(otherState);
+		DigitalButtonState::swapPimpl(otherState);
+	}
+};
+
 // Core concrete states
 
 class NoPress : public DigitalButtonState
@@ -462,7 +513,7 @@ class NoPress : public DigitalButtonState
 	{
 		DigitalButtonState::react(e);
 		pimpl()->_press_times = e.time_now;
-		if (pimpl()->_mapping.hasSimMappings())
+		if (pimpl()->_mapping.hasSimMappings() && pimpl()->GetPressDurationMS(e.time_now) < SettingsManager::getV<float>(SettingID::SIM_PRESS_WINDOW)->value())
 		{
 			changeState<WaitSim>();
 		}
@@ -470,6 +521,35 @@ class NoPress : public DigitalButtonState
 		{
 			// Start counting time between two start presses
 			changeState<DblPressStart>();
+		}
+		else if (pimpl()->_mapping.hasDiagMappings())
+		{
+			size_t counter = 0;
+			optional<MapIterator> diag = nullopt;
+			for (auto btn = pimpl()->_context->_getMatchingDiagBtn(pimpl()->_id, diag); btn;
+				 btn = pimpl()->_context->_getMatchingDiagBtn(pimpl()->_id, diag))
+			{
+				// DEBUG_LOG << "Button " << pimpl()->_id << " enables diagonal press with " << btn->_id << " who is in state " << btn->getCurrentStateName() << '\n';
+				pimpl()->_masterPress = btn;
+				pimpl()->_nameToRelease = pimpl()->_mapping.getDiagPressName((*diag)->first);
+				pimpl()->_keyToRelease = (*diag)->second.value();
+				Sync sync;
+				sync.nameToRelease = pimpl()->_nameToRelease;
+				sync.activeMapping = &*pimpl()->_keyToRelease;
+				sync.pressTime = e.time_now;
+				sync.holdTime = e.holdTime;
+				sync.turboTime = e.turboTime;
+				sync.dblPressWindow = e.dblPressWindow;
+				sync.nextState = new DiagPressMaster();
+				pimpl()->_masterPress->sendEvent(sync);
+				++*diag;
+				counter++;
+			}
+
+			if (counter > 0 )
+				changeState<DiagPressSlave>();
+			else
+				changeState<BtnPress>();
 		}
 		else
 		{
@@ -491,6 +571,7 @@ class BtnPress : public pocket_fsm::NestedStateMachine<ActiveMappingState, Digit
 
 	NESTED_REACT(Pressed);
 	NESTED_REACT(Released);
+	NESTED_REACT(Sync);
 };
 
 class TapPress : public DigitalButtonState
@@ -561,11 +642,11 @@ class SimPressSlave : public DigitalButtonState
 	override
 	{
 		DigitalButtonState::react(e);
-		if (pimpl()->_simPressMaster->getState() != BtnState::SimPressMaster)
+		if (pimpl()->_masterPress->getState() != BtnState::SimPressMaster)
 		{
 			// The master button has released! change state now!
 			changeState<SimRelease>();
-			pimpl()->_simPressMaster = nullptr;
+			pimpl()->_masterPress = nullptr;
 		}
 		// else do nothing
 	}
@@ -574,11 +655,11 @@ class SimPressSlave : public DigitalButtonState
 	override
 	{
 		DigitalButtonState::react(e);
-		if (pimpl()->_simPressMaster->getState() != BtnState::SimPressMaster)
+		if (pimpl()->_masterPress->getState() != BtnState::SimPressMaster)
 		{
 			// The master button has released! change state now!
 			changeState<SimRelease>();
-			pimpl()->_simPressMaster = nullptr;
+			pimpl()->_masterPress = nullptr;
 		}
 		else
 		{
@@ -588,7 +669,7 @@ class SimPressSlave : public DigitalButtonState
 			sync.holdTime = e.holdTime;
 			sync.turboTime = e.turboTime;
 			sync.dblPressWindow = e.dblPressWindow;
-			_nextState = pimpl()->_simPressMaster->sendEvent(sync).nextState;
+			_nextState = pimpl()->_masterPress->sendEvent(sync).nextState;
 		}
 	}
 };
@@ -609,12 +690,12 @@ class WaitSim : public DigitalButtonState
 			pimpl()->_press_times = e.time_now;                                          // reset Timer
 			pimpl()->_keyToRelease = pimpl()->_mapping.atSimPress(simBtn->_id)->value(); // Make a copy
 			pimpl()->_nameToRelease = pimpl()->_mapping.getSimPressName(simBtn->_id);
-			pimpl()->_simPressMaster = simBtn; // Second to press is the slave
+			pimpl()->_masterPress = simBtn; // Second to press is the slave
 
 			Sync sync;
 			sync.nextState = new SimPressMaster();
 			sync.pressTime = e.time_now;
-			sync.activeMapping = new Mapping(*pimpl()->_keyToRelease);
+			sync.activeMapping = &*pimpl()->_keyToRelease;
 			sync.nameToRelease = pimpl()->_nameToRelease;
 			sync.dblPressWindow = e.dblPressWindow;
 			simBtn->sendEvent(sync);
@@ -626,6 +707,35 @@ class WaitSim : public DigitalButtonState
 			{
 				// Start counting time between two start presses
 				changeState<DblPressStart>();
+			}
+			else if (pimpl()->_mapping.hasDiagMappings())
+			{
+				size_t counter = 0;
+				optional<MapIterator> diag = nullopt;
+				for (auto btn = pimpl()->_context->_getMatchingDiagBtn(pimpl()->_id, diag); btn;
+				     btn = pimpl()->_context->_getMatchingDiagBtn(pimpl()->_id, diag))
+				{
+					// DEBUG_LOG << "Button " << pimpl()->_id << " enables diagonal press with " << btn->_id << " who is in state " << btn->getCurrentStateName() << '\n';
+					pimpl()->_masterPress = btn;
+					pimpl()->_nameToRelease = pimpl()->_mapping.getDiagPressName((*diag)->first);
+					pimpl()->_keyToRelease = (*diag)->second.value();
+					Sync sync;
+					sync.nameToRelease = pimpl()->_nameToRelease;
+					sync.activeMapping = &*pimpl()->_keyToRelease;
+					sync.pressTime = e.time_now;
+					sync.holdTime = e.holdTime;
+					sync.turboTime = e.turboTime;
+					sync.dblPressWindow = e.dblPressWindow;
+					sync.nextState = new DiagPressMaster();
+					pimpl()->_masterPress->sendEvent(sync);
+					++*diag;
+					counter++;
+				}
+
+				if (counter > 0)
+					changeState<DiagPressSlave>();
+				else
+					changeState<BtnPress>();
 			}
 			else // Handle regular press mapping
 			{
@@ -655,11 +765,11 @@ class WaitSim : public DigitalButtonState
 	REACT(Sync)
 	override
 	{
-		pimpl()->_simPressMaster = nullptr;
+		pimpl()->_masterPress = nullptr;
 		pimpl()->_press_times = e.pressTime;
 		pimpl()->_keyToRelease = *e.activeMapping;
 		pimpl()->_nameToRelease = e.nameToRelease;
-		_nextState = e.nextState; // changeState<SimPressMaster>()
+		_nextState = e.nextState; // changeState <typeof(e.nextState)> () 
 	}
 };
 
@@ -673,6 +783,78 @@ class SimRelease : public DigitalButtonState
 		DigitalButtonState::react(e);
 		changeState<NoPress>();
 		pimpl()->ClearKey();
+	}
+
+	REACT(Sync)
+	final
+	{
+		if (e.nextState != nullptr && e.activeMapping != nullptr)
+		{
+			Released rel{ e.pressTime, e.turboTime, e.holdTime };
+			react(rel);
+			// Redirect change of state to the caller of the Sync
+
+			// Activate Diagonal
+			// DEBUG_LOG << "Button " << pimpl()->_id << " enables active diagonal as master\n";
+			pimpl()->_masterPress = nullptr;
+			pimpl()->_keyToRelease = *e.activeMapping;
+			pimpl()->_nameToRelease = e.nameToRelease;
+			pimpl()->_press_times = e.pressTime;
+			delete _nextState;
+			_nextState = e.nextState;
+		}
+	}
+};
+
+
+
+class DiagPressSlave : public DigitalButtonState
+{
+	DB_CONCRETE_STATE(DiagPressSlave)
+
+	REACT(Pressed)
+	override
+	{
+		DigitalButtonState::react(e);
+
+		if (!pimpl()->_masterPress || pimpl()->_masterPress->getState() != BtnState::DiagPressMaster)
+		{
+			// Master has released me!
+			pimpl()->_masterPress = nullptr;
+			pimpl()->ClearKey();
+			changeState<NoPress>();
+		}
+	}
+
+	REACT(Released)
+	override
+	{
+		DigitalButtonState::react(e);
+		if (pimpl()->_masterPress && pimpl()->_masterPress->getState() == BtnState::DiagPressMaster)
+		{
+			// Inform Diagonal Master of the release
+			// Here we're swapping the current state of the master and slave buttons. This enables the released button
+			// to process taps and instants whereas the other button can process its own binding activation.
+			optional<MapIterator> it;
+			auto me = pimpl()->_context->_getMatchingDiagBtn(pimpl()->_masterPress->_id, it);
+			if (me)
+			{
+				// DEBUG_LOG << pimpl()->_id << " is performing the swap!\n";
+				pimpl()->_masterPress->swapState(*me);
+				//DEBUG_LOG << pimpl()->_id << " is now in state " << getState() << " with mapping " << pimpl()->_nameToRelease << " set to " << pimpl()->_mapping.value() << '\n';
+				//DEBUG_LOG << pimpl()->_masterPress->_id << " is now in state " << pimpl()->_masterPress->getState() << '\n';
+			}
+			else
+			{
+				CERR << "I can't find myself as the other diagonal?!?";
+			}
+		}
+		else 
+		{
+			pimpl()->_masterPress = nullptr;
+			pimpl()->ClearKey();
+			changeState<NoPress>();
+		}
 	}
 };
 

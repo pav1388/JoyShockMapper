@@ -3,8 +3,43 @@
 Most recent updates will appear first.
 This is a summary of new features and bugfixes. Read the README to learn how to use the features mentioned here.
 
-## Known issues
-* SDL always merges joycons behind the scene into a single controller. JSM is not able to split them. Use legacy-JSL version to use this feature.
+## 3.6.1
+
+Fixing all the stuff I broke.
+
+### Bugfixes
+
+* Fix crash on Simultaneous press
+* Fix crash on command action
+* Improve handling of overlaping sim press and diag press
+* Fix SCROLL_WHEEL stick mode
+
+## 3.6.0
+
+New features, bugfixes and all around improvements!
+
+Biggest improvement is reworking how SDL2 deals with joycon to be on par with legacy/JSL version.
+RECONNECT_CONTROLLERS \[MERGE|SPLIT\] now work as expected!
+
+Update SDL2 to from v2.28.5 to v2.30.11
+
+### Features
+
+* (SDL2 only) AUTOCONNECT thread will connect new controllers automatically when the count changes. Disable with ```AUTOCONNECT = OFF```.
+* New Action Modifier: Release (-) can be used to send key-up/release at the timing if your choosing!
+* If SDL2 struggles to reconnect controllers (HIDAPI issue at times), it will retry up to 2 times.
+
+### Bugfixes
+
+* SDL2 now handles joycons the same way JSL does. Call ```RECONNECT_CONTROLLERS [MERGE|SPLIT]``` to count pairs as separate or not. The command remembers which was used last time. Default is MERGE.
+* Instant press and turbo presses would not trigger events as expected. This is now fixed.
+
+## 3.5.5
+
+Adding a highly requested new feature!
+
+### Features
+* Added Diagonal press as an alternate way to have a binding to 2 buttons. See README section
 
 ## 3.5.3
 

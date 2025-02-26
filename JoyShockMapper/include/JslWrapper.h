@@ -186,6 +186,7 @@ public:
 	static JslWrapper* getNew();
 
 	virtual int ConnectDevices() = 0;
+	virtual int GetDeviceCount() = 0;
 	virtual int GetConnectedDeviceHandles(int* deviceHandleArray, int size) = 0;
 	virtual void DisconnectAndDisposeAll() = 0;
 	virtual JOY_SHOCK_STATE GetSimpleState(int deviceId) = 0;

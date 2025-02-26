@@ -12,6 +12,7 @@
 class JSMButton;
 class DigitalButton;      // Finite State Machine
 struct DigitalButtonImpl; // Button implementation
+class MapIterator;
 
 // The enum values match the concrete class names
 enum class BtnState
@@ -23,6 +24,8 @@ enum class BtnState
 	SimPressMaster,
 	SimPressSlave,
 	SimRelease,
+	DiagPressMaster,
+	DiagPressSlave,
 	DblPressStart,
 	DblPressNoPress,
 	DblPressNoPressTap,
@@ -95,6 +98,16 @@ class DigitalButtonState : public pocket_fsm::StatePimplIF<DigitalButtonImpl>
 
 	// Get matching enum value
 	virtual BtnState getState() const = 0;
+
+	virtual void swapPimpl(DigitalButtonState& otherState)
+	{
+		_pimpl.swap(otherState._pimpl);
+	}
+
+	virtual void resetPimpl(DigitalButtonState & otherState)
+	{
+		_pimpl = otherState._pimpl;
+	}
 };
 
 // Feed this state machine with Pressed and Released events and it will sort out
@@ -112,6 +125,7 @@ public:
 		deque<ButtonID> chordStack; // Represents the current active _buttons in order from most recent to latest
 		unique_ptr<Gamepad> _vigemController;
 		function<DigitalButton *(ButtonID)> _getMatchingSimBtn; // A functor to JoyShock::getMatchingSimBtn
+		function<DigitalButton *(ButtonID, optional<MapIterator>&)> _getMatchingDiagBtn; // A functor to JoyShock::getMatchingDiagBtn
 		function<void(int small, int big)> _rumble;             // A functor to JoyShock::sendRumble
 		mutex callback_lock;                                    // Needs to be in the common struct for both joycons to use the same
 		shared_ptr<MotionIf> rightMainMotion = nullptr;
@@ -129,5 +143,12 @@ public:
 	BtnState getState() const
 	{
 		return getCurrentState()->getState();
+	}
+
+	void swapState(DigitalButton& otherBtn)
+	{
+		// Swap just the state, but leave the pimpls in their respective button
+		_currentState->swapPimpl(*otherBtn._currentState);
+		_currentState.swap(otherBtn._currentState);
 	}
 };

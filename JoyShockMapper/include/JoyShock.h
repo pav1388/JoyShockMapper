@@ -113,6 +113,7 @@ private:
 	void sendRumble(int smallRumble, int bigRumble);
 
 	DigitalButton *getMatchingSimBtn(ButtonID index);
+	DigitalButton *getMatchingDiagBtn(ButtonID index, optional<MapIterator> &iter);
 
 	void resetSmoothSample();
 

@@ -179,10 +179,10 @@ void setMouseNorm(float x, float y)
 
 BOOL WriteToConsole(string_view command)
 {
-	static const INPUT_RECORD ESC_DOWN = { KEY_EVENT, { TRUE, 1, VK_ESCAPE, MapVirtualKey(WORD(VK_ESCAPE), MAPVK_VK_TO_VSC), VK_ESCAPE, 0 } };
-	static const INPUT_RECORD ESC_UP = { KEY_EVENT, { FALSE, 1, VK_ESCAPE, MapVirtualKey(WORD(VK_ESCAPE), MAPVK_VK_TO_VSC), VK_ESCAPE, 0 } };
-	static const INPUT_RECORD RET_DOWN = { KEY_EVENT, { TRUE, 1, VK_RETURN, MapVirtualKey(WORD(VK_RETURN), MAPVK_VK_TO_VSC), VK_RETURN, 0 } };
-	static const INPUT_RECORD RET_UP = { KEY_EVENT, { FALSE, 1, VK_RETURN, MapVirtualKey(WORD(VK_RETURN), MAPVK_VK_TO_VSC), VK_RETURN, 0 } };
+	static const INPUT_RECORD ESC_DOWN = { KEY_EVENT, { TRUE, 1, VK_ESCAPE, WORD(MapVirtualKey(VK_ESCAPE, MAPVK_VK_TO_VSC)), VK_ESCAPE, 0 } };
+	static const INPUT_RECORD ESC_UP = { KEY_EVENT, { FALSE, 1, VK_ESCAPE, WORD(MapVirtualKey(VK_ESCAPE, MAPVK_VK_TO_VSC)), VK_ESCAPE, 0 } };
+	static const INPUT_RECORD RET_DOWN = { KEY_EVENT, { TRUE, 1, VK_RETURN, WORD(MapVirtualKey(VK_RETURN, MAPVK_VK_TO_VSC)), VK_RETURN, 0 } };
+	static const INPUT_RECORD RET_UP = { KEY_EVENT, { FALSE, 1, VK_RETURN, WORD(MapVirtualKey(VK_RETURN, MAPVK_VK_TO_VSC)), VK_RETURN, 0 } };
 
 	vector<INPUT_RECORD> inputs(0);
 	inputs.reserve(command.size() + 4);

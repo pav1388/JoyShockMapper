@@ -175,6 +175,19 @@ protected:
 					return simAssignment;
 				}
 			}
+			else if (op == '*')
+			{
+				auto buttonVar = dynamic_cast<JSMButton*>(&_var);
+				if (buttonVar && btn > ButtonID::NONE)
+				{
+					auto diagPressVar = buttonVar->atDiagPress(btn);
+					auto diagAssignment = make_unique<JSMAssignment<Mapping>>(name.str(), *diagPressVar);
+					diagAssignment->setHelp(_help)->setParser(_parse)->setTaskOnDestruction(bind(&JSMButton::processDiagPressRemoval, buttonVar, btn, diagPressVar));
+					// BE ADVISED! If a custom parser was set using bind(), the very same bound vars will
+					// be passed along.
+					return diagAssignment;
+				}
+			}
 		}
 		return JSMCommand::getModifiedCmd(op, chord);
 	}

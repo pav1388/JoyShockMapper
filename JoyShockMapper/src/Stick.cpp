@@ -18,8 +18,8 @@ void ScrollAxis::processScroll(float distance, float sens, chrono::steady_clock:
 		return; // not initalized!
 
 	_leftovers += distance;
-	if (distance != 0)
-		DEBUG_LOG << " leftover is now " << _leftovers << '\n';
+	//if (distance != 0)
+	//	DEBUG_LOG << " leftover is now " << _leftovers << '\n';
 	//"[" << _negativeId << "," << _positiveId << "] moved " << distance << " so that
 
 	Pressed isPressed;

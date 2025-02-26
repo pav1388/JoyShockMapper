@@ -7,6 +7,7 @@
 #include "JSMAssignment.hpp"
 #include "Gamepad.h"
 #include "AutoLoad.h"
+#include "AutoConnect.h"
 #include "SettingsManager.h"
 #include "JoyShock.h"
 #include <filesystem>
@@ -22,8 +23,8 @@
 
 #pragma warning(disable : 4996) // Disable deprecated API warnings
 
-string NONAME;
-unique_ptr<JslWrapper> jsl;
+std::string NONAME;
+shared_ptr<JslWrapper> jsl;
 unique_ptr<TrayIcon> tray;
 unique_ptr<Whitelister> whitelister;
 
@@ -34,6 +35,7 @@ vector<JSMButton> mappings;      // array enables use of for each loop and other
 float os_mouse_speed = 1.0;
 float last_flick_and_rotation = 0.0;
 unique_ptr<PollingThread> autoLoadThread;
+unique_ptr<JSM::AutoConnect> autoConnectThread;
 unique_ptr<PollingThread> minimizeThread;
 bool devicesCalibrating = false;
 unordered_map<int, shared_ptr<JoyShock>> handle_to_joyshock;
@@ -230,10 +232,10 @@ void calibrateTriggers(shared_ptr<JoyShock> jc)
 	auto rpos = jsl->GetRightTrigger(jc->_handle);
 	auto lpos = jsl->GetLeftTrigger(jc->_handle);
 	auto tick_time = *SettingsManager::get<float>(SettingID::TICK_TIME);
-	static auto &right_trigger_offset = *SettingsManager::get<int>(SettingID::RIGHT_TRIGGER_OFFSET);
-	static auto &right_trigger_range = *SettingsManager::get<int>(SettingID::RIGHT_TRIGGER_RANGE);
-	static auto &left_trigger_offset = *SettingsManager::get<int>(SettingID::LEFT_TRIGGER_OFFSET);
-	static auto &left_trigger_range = *SettingsManager::get<int>(SettingID::LEFT_TRIGGER_RANGE);
+	static auto &right_trigger_offset = *SettingsManager::getV<int>(SettingID::RIGHT_TRIGGER_OFFSET);
+	static auto &right_trigger_range = *SettingsManager::getV<int>(SettingID::RIGHT_TRIGGER_RANGE);
+	static auto &left_trigger_offset = *SettingsManager::getV<int>(SettingID::LEFT_TRIGGER_OFFSET);
+	static auto &left_trigger_range = *SettingsManager::getV<int>(SettingID::LEFT_TRIGGER_RANGE);
 	switch (triggerCalibrationStep)
 	{
 	case 1:
@@ -992,7 +994,6 @@ void joyShockPollCallback(int jcHandle, JOY_SHOCK_STATE state, JOY_SHOCK_STATE l
 		jc->handleButtonChange(ButtonID::RIGHT, buttons & (1 << JSOFFSET_RIGHT));
 		jc->handleButtonChange(ButtonID::L, buttons & (1 << JSOFFSET_L));
 		jc->handleButtonChange(ButtonID::MINUS, buttons & (1 << JSOFFSET_MINUS));
-		// for backwards compatibility, we need need to account for the fact that SDL2 maps the touchpad button differently to SDL
 		jc->handleButtonChange(ButtonID::L3, buttons & (1 << JSOFFSET_LCLICK));
 
 		float lTrigger = jsl->GetLeftTrigger(jc->_handle);
@@ -1033,7 +1034,7 @@ void joyShockPollCallback(int jcHandle, JOY_SHOCK_STATE state, JOY_SHOCK_STATE l
 		{
 			jc->handleButtonChange(ButtonID::CAPTURE, buttons & (1 << JSOFFSET_CAPTURE));
 			jc->handleButtonChange(ButtonID::LSL, buttons & (1 << JSOFFSET_SL));
-			jc->handleButtonChange(ButtonID::LSR, buttons & (1 << JSOFFSET_FNL));
+			jc->handleButtonChange(ButtonID::LSR, buttons & (1 << JSOFFSET_SR));
 		}
 		break;
 		}
@@ -1055,8 +1056,6 @@ void joyShockPollCallback(int jcHandle, JOY_SHOCK_STATE state, JOY_SHOCK_STATE l
 		jc->handleButtonChange(ButtonID::PLUS, buttons & (1 << JSOFFSET_PLUS));
 		jc->handleButtonChange(ButtonID::HOME, buttons & (1 << JSOFFSET_HOME));
 		jc->handleButtonChange(ButtonID::R3, buttons & (1 << JSOFFSET_RCLICK));
-		jc->handleButtonChange(ButtonID::RSR, buttons & (1 << JSOFFSET_SR));
-		jc->handleButtonChange(ButtonID::RSL, buttons & (1 << JSOFFSET_FNR));
 
 		float rTrigger = jsl->GetRightTrigger(jc->_handle);
 		jc->handleTriggerChange(ButtonID::ZR, ButtonID::ZRF, jc->getSetting<TriggerMode>(SettingID::ZR_MODE), rTrigger, jc->_rightEffect);
@@ -1142,6 +1141,7 @@ void joyShockPollCallback(int jcHandle, JOY_SHOCK_STATE state, JOY_SHOCK_STATE l
 void connectDevices(bool mergeJoycons = true)
 {
 	handle_to_joyshock.clear();
+	this_thread::sleep_for(100ms);
 	int numConnected = jsl->ConnectDevices();
 	vector<int> deviceHandles(numConnected, 0);
 	if (numConnected > 0)
@@ -1166,6 +1166,7 @@ void connectDevices(bool mergeJoycons = true)
 			if (mergeJoycons && otherJoyCon != handle_to_joyshock.end())
 			{
 				// The second JC points to the same common _buttons as the other one.
+				COUT << "Found a joycon pair!\n";
 				handle_to_joyshock[handle] = make_shared<JoyShock>(handle, type, otherJoyCon->second->_context);
 			}
 			else
@@ -1206,6 +1207,17 @@ void updateSimPressPartner(ButtonID sim, ButtonID origin, const Mapping &newVal)
 		button->atSimPress(origin)->set(newVal);
 	else
 		CERR << "Cannot find the button " << sim << '\n';
+}
+
+void updateDiagPressPartner(ButtonID diag, ButtonID origin, const Mapping &newVal)
+{
+	JSMButton *button = int(diag) < mappings.size()         ? &mappings[int(diag)] :
+	  int(diag) - FIRST_TOUCH_BUTTON < grid_mappings.size() ? &grid_mappings[int(diag) - FIRST_TOUCH_BUTTON] :
+	                                                         nullptr;
+	if (button)
+		button->atDiagPress(origin)->set(newVal);
+	else
+		CERR << "Cannot find the button " << diag << '\n';
 }
 
 void updateThread(PollingThread *thread, const Switch &newValue)
@@ -1263,17 +1275,28 @@ bool do_RESET_MAPPINGS(CmdRegistry *registry)
 
 bool do_RECONNECT_CONTROLLERS(string_view arguments)
 {
-	bool mergeJoycons = arguments.empty() || (arguments.compare("MERGE") == 0);
-	if (mergeJoycons || arguments.rfind("SPLIT", 0) == 0)
+	static bool mergeJoycons = true;
+	if (arguments.compare("MERGE") == 0)
 	{
-		COUT << "Reconnecting controllers: " << arguments << '\n';
-		jsl->DisconnectAndDisposeAll();
-		connectDevices(mergeJoycons);
-		jsl->SetCallback(&joyShockPollCallback);
-		jsl->SetTouchCallback(&touchCallback);
-		return true;
+		mergeJoycons = true;
 	}
-	return false;
+	else if(arguments.compare("SPLIT") == 0)
+	{
+		mergeJoycons = false;
+	}
+	else if(!arguments.empty())
+	{
+		CERR << "Invalid argument: " << arguments << '\n';
+		return false;
+	}
+	// else remember last
+	 
+	COUT << "Reconnecting controllers: " << (mergeJoycons ? "MERGE" : "SPLIT") << '\n';
+	jsl->DisconnectAndDisposeAll();
+	connectDevices(mergeJoycons);
+	jsl->SetCallback(&joyShockPollCallback);
+	jsl->SetTouchCallback(&touchCallback);
+	return true;
 }
 
 bool do_COUNTER_OS_MOUSE_SPEED()
@@ -1451,6 +1474,11 @@ void beforeShowTrayMenu()
 		  U("AutoLoad"), [](bool isChecked)
 		  { SettingsManager::get<Switch>(SettingID::AUTOLOAD)->set(isChecked ? Switch::ON : Switch::OFF); },
 		  bind(&PollingThread::isRunning, autoLoadThread.get()));
+
+		tray->AddMenuItem(
+		  U("AutoConnect"), [](bool isChecked)
+		  { SettingsManager::get<Switch>(SettingID::AUTOCONNECT)->set(isChecked ? Switch::ON : Switch::OFF); },
+		  bind(&PollingThread::isRunning, autoConnectThread.get()));
 
 		if (whitelister && whitelister->IsAvailable())
 		{
@@ -2442,6 +2470,12 @@ void initJsmSettings(CmdRegistry *commandRegistry)
 	SettingsManager::add(SettingID::AUTOLOAD, autoloadSwitch);
 	auto *autoloadCmd = new JSMAssignment<Switch>("AUTOLOAD", *autoloadSwitch);
 	commandRegistry->add(autoloadCmd);
+
+	auto autoConnectSwitch = new JSMVariable<Switch>(Switch::ON);
+	autoConnectThread.reset(new JSM::AutoConnect(jsl, autoConnectSwitch->value() == Switch::ON)); // Start by default
+	autoConnectSwitch->setFilter(&filterInvalidValue<Switch, Switch::INVALID>)->addOnChangeListener(bind(&updateThread, autoConnectThread.get(), placeholders::_1));
+	SettingsManager::add(SettingID::AUTOCONNECT, autoConnectSwitch);
+	commandRegistry->add((new JSMAssignment<Switch>("AUTOCONNECT", *autoConnectSwitch))->setHelp("Enable or disable device hotplugging. Valid values are ON and OFF."));
 
 	auto grid_size = new JSMVariable(FloatXY{ 2.f, 1.f });
 	grid_size->setFilter([](auto current, auto next)

@@ -8,6 +8,18 @@
 #include <thread>
 #include <mutex>
 
+size_t Gamepad::_count = 0;
+
+Gamepad::Gamepad()
+{
+	++_count;
+}
+
+Gamepad::~Gamepad()
+{
+	--_count;
+}
+
 //
 // Link against SetupAPI
 //

@@ -21,9 +21,10 @@ JoyShockMapper is primarily developed on Windows. JoyShockMapper should now be a
     * **[Tap & Hold](#11-tap--hold)**
 	* **[Binding Modifiers](#12-binding-modifiers)**
 	* **[Simultaneous Press](#13-simultaneous-press)**
-	* **[Chorded Press](#14-chorded-press)**
-	* **[Double Press](#15-double-press)**
-	* **[Gyro Button](#16-gyro-button)**
+    * **[Diagonal Press](#14-diagonal-press)**
+	* **[Chorded Press](#15-chorded-press)**
+	* **[Double Press](#16-double-press)**
+	* **[Gyro Button](#17-gyro-button)**
   * **[Analog Triggers](#2-analog-triggers)**
     * **[Analog to digital](#21-analog-to-digital)**
     * **[Full pull and modes](#22-full-pull-and-modes)**
@@ -51,6 +52,7 @@ JoyShockMapper is primarily developed on Windows. JoyShockMapper should now be a
   * **[OnStartup.txt](#1-onstartuptxt)**
   * **[OnReset.txt](#2-onresettxt)**
   * **[Autoload feature](#3-autoload-feature)**
+  * **[Autoconnect feature](#4-autoconnect-feature)**
 * **[Troubleshooting](#troubleshooting)**
 * **[Known and Perceived Issues](#known-and-perceived-issues)**
 * **[Credits](#credits)**
@@ -112,9 +114,17 @@ In order to build on Linux, the following dependencies must be met, with their r
 - hidapi
 
 **Distribution-Specific Package Names:**
+- Ubuntu:
+  * ```sudo apt-get install -y libappindicator3-dev gir1.2-appindicator3-0.1 libgtk-3-dev libgtkmm-3.0-dev clang libsdl2-dev libdrm-dev libhidapi-dev libusb-1.0-0 libusb-1.0-0-dev libevdev-dev```
+  * Ubuntu's current repositories appear to be missing the `libdecor-0` package. Compile and install `libdecor-0` from [here](https://gitlab.gnome.org/jadahl/libdecor)
+    * `sudo apt install -y meson libwayland-dev wayland-protocols libpango1.0-dev libdbus-1-dev libegl-dev libxkbcommon-dev`
+    * Download and unpack source code to a folder
+    * ```meson build --buildtype release```
+    * ```meson install -C build```
 
-* Fedora: ```clang SDL2-devel libappindicator-gtk3-devel libevdev-devel gtk3-devel libusb-devel hidapi-devel```
-* Arch: ```clang sdl2 libappindicator-gtk3 libevdev gtk3 libusb hidapi```
+- Fedora: ```clang SDL2-devel libappindicator-gtk3-devel libevdev-devel gtk3-devel libusb-devel hidapi-devel```
+- Arch: ```clang sdl2 libappindicator-gtk3 libevdev gtk3 libusb hidapi```
+* Gentoo: ```media-libs/libsdl2 dev-libs/libayatana-appindicator dev-libs/libevdev x11-libs/gtk+ dev-libs/libusb dev-libs/hidapi``` The clang installed by default is sufficent to build the program. However you will need to rename the include from ```libappindicator``` to ```libayatana-appindicator``` in ```./JoyShockMapper/include/linux/StatusNotifierItem.h``` and ```./JoyShockMapper/src/linux/StatusNotifierItem.cpp```. You will also need to change line 7 in ```./cmake/LinuxConfig.cmake``` to ```pkg_search_module (appindicator REQUIRED IMPORTED_TARGET ayatana-appindicator3-0.1)```
 * Please provide an issue report or pull request to have additional library lists added.
 
 Due to a [bug](https://stackoverflow.com/questions/49707184/explicit-specialization-in-non-namespace-scope-does-not-compile-in-gcc) in GCC, the project in its current form will only build with Clang.
@@ -296,9 +306,10 @@ Before we dive in, there's a few notions to understand. A key press always invol
 
 There are two kinds of modifiers that can be applied to key bindings: action modifiers and event modifiers. They are represented by symbols added before and after the key name respectively. And each binding can only ever have one of each. You can however have multiple keys bound to the same events, thus sending multiple key presses at once.
 
-**Action modifiers** affect how the **key down** and **key up** actions are bound to the events. They come in two kinds: **toggle (^)** and **instant (!)**.
+**Action modifiers** affect how the **key down** and **key up** actions are bound to the events. They come in three kinds: **toggle (^)**, **instant (!)** and **release (-)**.
 * ^ Toggle makes it so that the key will alternate between applying and releasing the key at each press.
 * ! Instant will send the key up action very shortly after the key down, making it seem instant.
+* \- Release simply sends the key up action. This can be used to clear toggles or process key up prematurely.
 
 **Event Modifiers** affect what button events the key up and key down actions will be bound to. They come in five kinds: **start press (\\)**, **release press (/)**, **tap press (')**, **hold press (_)**,\ and **turbo (+)**.
 * \\ Start press is the default event modifier when there is only a single key bind. It will apply the key down action as soon as the button is pressed and the key up when the button is released by default. This can be useful to have a key held while other keys are being activated.
@@ -353,11 +364,33 @@ R = E      # Ability 2
 L+R = Q    # Ultimate Ability
 ```
 
-To enable a simultaneous binding, both buttons need to be pressed within a very short time of each other. Doing so will ignore the individual button bindings and apply the specified binding until either of the button is released. Simultaneous bindings also support tap & hold bindings as well as modifiers just like other mappings. This feature is great to make use of the dpad diagonals, or to add JSM specific features like gyro calibration and gyro control without taking away accessible buttons.
+To enable a simultaneous binding, both buttons need to be pressed within a very short time of each other. Doing so will ignore the individual button bindings and apply the specified binding until either of the button is released. Simultaneous bindings also support tap & hold bindings as well as modifiers just like other mappings. This feature is great to add useful commands like gyro calibration and gyro control without taking away accessible buttons.
 
 The time window in which both buttons need to be pressed can be changed by assigning a different number of milliseconds to ```SIM_PRESS_WINDOW```. This setting cannot be changed by modeshift (covered later).
 
-#### 1.4 Chorded Press
+#### 1.4 Diagonal Press
+
+Diagonal Presses is another way to apply a mapping on two separate buttons. It is designed specifically for diagonals of the dpad, face buttons and sticks, but it is not limited to those at all, and works with any two JSM Buttons.
+
+Diagonal press work in a way similar to simultaneous presses, in that a separate binding is activated when two buttons are pressed at the same time. The difference is that they don't need to be pressed simultaneously. Instead the active binding of the first button pressed is released when the second button of the diagonal press is pressed. Then, releasing either of the two buttons will not only release the diagonal binding but also activate the binding of the other button.
+
+```
+# Weapon Wheel 1~8 on the dpad
+UP = 1
+UP*RIGHT = 2     # Diagonal
+RIGHT = 3
+RIGHT*DOWN = 4   # Diagonal
+DOWN = 5
+DOWN*LEFT = 6    # Diagonal
+LEFT = 7
+LEFT*UP = 8      # Diagonal
+```
+
+**Known Limitation**
+* Activating multiple diagonal presses at the same time lead to undetermined behaviour
+
+
+#### 1.5 Chorded Press
 Chorded press works differently from Simultaneous Press, despite being similar at first blush. A chorded press mapping allows you to override a button mapping when the chord button is down. This enables a world of different practical combinations, allowing you to have contextual bindings. Here's an example for Left 4 Dead 2, that would enable you to equip items without lifting the thumb from the left stick.
 
 ```
@@ -375,7 +408,7 @@ L,N = F # Flashlight
 
 A button can be chorded with multiple other buttons. In this case, the latest chord takes precedence over previous chords. This can be understood as a stack of layers being put on top of the binding each time a chord is pressed, where only the top one is active. Notice that you don't need to have NONE as a binding : the chord binding could very well be bound to a button that brings up a weapon wheel for example.
 
-#### 1.5 Double Press
+#### 1.6 Double Press
 You can also assign the double press of a button to a different binding. Double press notation is the same as chorded button notation, except the button is chorded with itself. It supports taps & holds and modifiers like all previous entries.
 
 The double press binding is applied when a down press occurs within 150 milliseconds from a previous down press. The regular binding will apply any on press event on the first press, but will only apply the tap binding if the second press is ommitted and with a delay. The double press binding also supports tap & hold bindings as well as modifiers. The time window in which to perform the double press can be changed by assigning a different number of milliseconds to ```DBL_PRESS_WINDOW```.
@@ -391,7 +424,7 @@ E = C'         # Crouch
 E,E = Z        # Don't crouch but go prone
 ```
 
-#### 1.6 Gyro Button
+#### 1.7 Gyro Button
 Lastly, there is one digital input that works differently, because it can overlap with any other input. Well, two inputs, but you'll use at most one of them in a given configuration:
 
 ```
@@ -1089,6 +1122,9 @@ This enables the user to swap focus between your text editor of choice and the g
 
 Autoload can be turned off by entering the command ```AUTOLOAD = OFF```. You can enable it again with ```AUTOLOAD = ON```.
 
+### 4. Autoconnect feature
+
+The SDL version of JoyShockMapper can monitor the number of connected controllers and run RECONNECT\_CONTROLLERS automatically when a new one is detected. This is very handy to relieve you from running it manually. Should the feature give you grief, you can always disable with the command ```AUTOCONNECT=OFF```.
 
 ## Troubleshooting
 Some third-party devices that work as controllers on Switch, PS4, or PS5 may not work with JoyShockMapper. It only _officially_ supports first-party controllers. Issues may still arise with those, though. Reach out, and hopefully we can figure out where the problem is.

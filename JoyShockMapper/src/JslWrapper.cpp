@@ -3,10 +3,20 @@
 
 class JSlWrapperImpl : public JslWrapper
 {
+	int _deviceCount = 0;
 public:
 	int ConnectDevices() override
 	{
-		return JslConnectDevices();
+		_deviceCount = JslConnectDevices();
+		return _deviceCount;
+	}
+
+	int GetDeviceCount() override
+	{
+		// I believe this method is expected to update the current count without changing any objects.
+		// This feature of SDL2 is not available in JSL, so this implementation makes the auto reconnect unusable
+		// until JSL is updated with a similar feature.
+		return _deviceCount;
 	}
 
 	int GetConnectedDeviceHandles(int* deviceHandleArray, int size) override
