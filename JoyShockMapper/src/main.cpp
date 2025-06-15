@@ -1498,25 +1498,47 @@ void beforeShowTrayMenu()
 		  []()
 		  { return devicesCalibrating; });
 
-		string autoloadFolder{ AUTOLOAD_FOLDER() };
-		for (auto file : ListDirectory(autoloadFolder.c_str()))
+		std::vector<std::pair<std::string, std::string>> folders = {
+			{ AUTOLOAD_FOLDER(), "AutoLoad" },
+			{ GYRO_CONFIGS_FOLDER(), "GyroConfigs" },
+			{ BASE_JSM_CONFIG_FOLDER(), "Root" }
+		};
+
+		for (const auto &[folderPath, displayName] : folders)
 		{
-			string fullPathName = ".\\AutoLoad\\" + file;
-			auto noext = file.substr(0, file.find_last_of('.'));
-			tray->AddMenuItem(U("AutoLoad folder"), UnicodeString(noext.begin(), noext.end()), [fullPathName]
-			  {
-				WriteToConsole(string(fullPathName.begin(), fullPathName.end()));
-				autoLoadThread->Stop(); });
-		}
-		string gyroConfigsFolder{ GYRO_CONFIGS_FOLDER() };
-		for (auto file : ListDirectory(gyroConfigsFolder.c_str()))
-		{
-			string fullPathName = ".\\GyroConfigs\\" + file;
-			auto noext = file.substr(0, file.find_last_of('.'));
-			tray->AddMenuItem(U("GyroConfigs folder"), UnicodeString(noext.begin(), noext.end()), [fullPathName]
-			  {
-				WriteToConsole(string(fullPathName.begin(), fullPathName.end()));
-				autoLoadThread->Stop(); });
+			for (auto file : ListDirectory(folderPath.c_str()))
+			{
+				size_t dot_pos = file.find_last_of('.');
+				if (dot_pos != string::npos)
+				{
+					string ext = file.substr(dot_pos);
+					transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+					if (ext == ".txt")
+					{
+						string fullPathName = folderPath + file;
+						auto noext = file.substr(0, file.find_last_of('.'));
+
+						tray->AddMenuItem(
+						  U(" * ") + UnicodeString(displayName.begin(), displayName.end()) + U(" folder"),
+						  UnicodeString(noext.begin(), noext.end()),
+						  [fullPathName]
+						  {
+							  WriteToConsole(string(fullPathName.begin(), fullPathName.end()));
+							  autoLoadThread->Stop();
+						  });
+
+						tray->AddMenuItem(
+						  U(" * ") + UnicodeString(displayName.begin(), displayName.end()) + U(" folder"),
+						  U("\tEdit --^"),
+						  [fullPathName]
+						  {
+							  ShellExecuteA(NULL, "open", fullPathName.c_str(), NULL, NULL, SW_SHOW);
+						  });
+					}
+						
+				}
+				
+			}
 		}
 		tray->AddMenuItem(U("Calculate RWC"), []()
 		  {
