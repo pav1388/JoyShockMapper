@@ -53,6 +53,10 @@ add_executable (
     include/JoyShock.h
 )
 
+if(MSVC)
+    target_compile_options(${BINARY_NAME} PRIVATE /utf-8)
+endif()
+
 if (WINDOWS)
 	set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT ${BINARY_NAME})
 
