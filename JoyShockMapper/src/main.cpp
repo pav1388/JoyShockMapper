@@ -15,6 +15,13 @@
 #include <math.h> // M_PI
 
 #ifdef _WIN32
+#include <windows.h>
+#include <string>
+#include <vector>
+#include <algorithm>
+#include <unordered_map>
+#include <winuser.h>
+#include <winbase.h>
 #include <shellapi.h>
 #else
 #define UCHAR unsigned char
@@ -1461,6 +1468,172 @@ bool do_WHITELIST_REMOVE()
 	return true;
 }
 
+#ifdef _WIN32
+bool do_SHOW_POPUP(JSMMacro *cmd, string_view args, CmdRegistry &cmdRegistry)
+{
+	string gyroConfigsFolder{ GYRO_CONFIGS_FOLDER() };
+	std::vector<std::string> configFiles;
+
+	for (const auto &file : ListDirectory(gyroConfigsFolder))
+	{
+		if (!file.empty() && file[0] == '_')
+			continue;
+		size_t dot_pos = file.find_last_of('.');
+		if (dot_pos != string::npos)
+		{
+			string ext = file.substr(dot_pos);
+			transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+			if (ext == ".txt")
+				configFiles.push_back(file);
+		}
+	}
+
+	if (configFiles.empty())
+	{
+		MessageBoxW(NULL, L"No TXT files found in GyroConfigs folder", L"JSM", MB_OK | MB_ICONERROR);
+		return true;
+	}
+
+	// Preparing the window system
+	HWND hGameWindow = GetForegroundWindow();
+	DWORD gameThreadId = GetWindowThreadProcessId(hGameWindow, NULL);
+	DWORD ourThreadId = GetCurrentThreadId();
+
+	// Register the window class
+	WNDCLASS wc = { 0 };
+	wc.lpfnWndProc = DefWindowProc;
+	wc.hInstance = GetModuleHandle(NULL);
+	wc.lpszClassName = L"JSMGyroMenuClass";
+	RegisterClass(&wc);
+
+	// Create a parent window
+	HWND hWndParent = CreateWindowExW(
+	  WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TOPMOST | WS_EX_LAYERED,
+	  L"JSMGyroMenuClass", L"",
+	  WS_POPUP,
+	  0, 0, 0, 0,
+	  NULL, NULL,
+	  GetModuleHandle(NULL),
+	  NULL);
+
+	// Setting up the input stream
+	bool attached = false;
+	if (gameThreadId != ourThreadId)
+	{
+		attached = AttachThreadInput(ourThreadId, gameThreadId, TRUE);
+	}
+
+	// Preparing DirectX/Vulkan games
+	DWORD_PTR origStyle = 0;
+	if (hGameWindow)
+	{
+		origStyle = GetWindowLongPtr(hGameWindow, GWL_STYLE);
+		SetWindowLongPtr(hGameWindow, GWL_STYLE, origStyle | WS_CLIPSIBLINGS);
+	}
+
+	// Create a menu
+	HMENU hMenu = CreatePopupMenu();
+	UINT itemId = 1;
+	for (const auto &file : configFiles)
+	{
+		wstring wfile(file.begin(), file.end());
+		AppendMenuW(hMenu, MF_STRING, itemId++, wfile.c_str());
+	}
+
+	// Save current button bindings
+	std::unordered_map<ButtonID, Mapping> savedMappings;
+	savedMappings[ButtonID::UP] = mappings[(int)ButtonID::UP];
+	savedMappings[ButtonID::DOWN] = mappings[(int)ButtonID::DOWN];
+	savedMappings[ButtonID::E] = mappings[(int)ButtonID::E];
+	savedMappings[ButtonID::S] = mappings[(int)ButtonID::S];
+
+	// Set temporary bindings for menu navigation
+	mappings[(int)ButtonID::UP].set(Mapping("UP"));
+	mappings[(int)ButtonID::DOWN].set(Mapping("DOWN"));
+	mappings[(int)ButtonID::E].set(Mapping("ESC"));
+	mappings[(int)ButtonID::S].set(Mapping("ENTER"));
+
+	// Show the menu with focus on it
+	AllowSetForegroundWindow(ASFW_ANY);
+	SetWindowLongPtr(hWndParent, GWL_EXSTYLE,
+	  WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_LAYERED);
+
+	ShowWindow(hWndParent, SW_SHOWNA);
+	SetForegroundWindow(hWndParent);
+	SetFocus(hWndParent);
+	SetActiveWindow(hWndParent);
+	Sleep(50);
+
+	POINT pt = { GetSystemMetrics(SM_CXSCREEN) / 2, 200 };
+	UINT selected = TrackPopupMenuEx(
+	  hMenu,
+	  TPM_RETURNCMD | TPM_NONOTIFY | TPM_CENTERALIGN | TPM_TOPALIGN |
+	    TPM_NOANIMATION | TPM_RIGHTBUTTON | TPM_VERTICAL | TPM_LEFTBUTTON,
+	  pt.x, pt.y,
+	  hWndParent,
+	  NULL);
+
+	SetWindowLongPtr(hWndParent, GWL_EXSTYLE,
+	  WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TOPMOST | WS_EX_LAYERED);
+
+	// Restore state
+	if (hGameWindow)
+	{
+		SetWindowLongPtr(hGameWindow, GWL_STYLE, origStyle);
+
+		// Basic focus recovery
+		for (int i = 0; i < 3; i++)
+		{
+			SetForegroundWindow(hGameWindow);
+			Sleep(50);
+		}
+
+		// Emulate pressing ENTER
+		INPUT enterInput[2] = { 0 };
+		enterInput[0].type = INPUT_KEYBOARD;
+		enterInput[0].ki.wVk = VK_RETURN;
+		enterInput[1].type = INPUT_KEYBOARD;
+		enterInput[1].ki.wVk = VK_RETURN;
+		enterInput[1].ki.dwFlags = KEYEVENTF_KEYUP;
+		SendInput(2, enterInput, sizeof(INPUT));
+
+		// Additional check
+		if (GetForegroundWindow() != hGameWindow)
+		{
+			SetForegroundWindow(hGameWindow);
+			SetFocus(hGameWindow);
+			SetActiveWindow(hGameWindow);
+		}
+	}
+
+	// Cleaning
+	if (attached)
+		AttachThreadInput(ourThreadId, gameThreadId, FALSE);
+	DestroyMenu(hMenu);
+	DestroyWindow(hWndParent);
+	UnregisterClass(L"JSMGyroMenuClass", GetModuleHandle(NULL));
+
+	// Processing selection
+	if (selected >= 1 && selected <= configFiles.size())
+	{
+		if (cmdRegistry.loadConfigFile(".\\GyroConfigs\\" + configFiles[selected - 1]))
+		{
+			return true;
+		}
+		MessageBoxW(NULL, L"Failed to load selected config", L"JSM", MB_OK | MB_ICONERROR);
+	}
+
+	// If there was no choice or an error occurred while loading the config,
+	// then we restore the previous bindings
+	mappings[(int)ButtonID::UP].set(savedMappings[ButtonID::UP]);
+	mappings[(int)ButtonID::DOWN].set(savedMappings[ButtonID::DOWN]);
+	mappings[(int)ButtonID::E].set(savedMappings[ButtonID::E]);
+	mappings[(int)ButtonID::S].set(savedMappings[ButtonID::S]);
+	savedMappings.clear();
+	return true;
+}
+#endif
+
 void beforeShowTrayMenu()
 {
 	if (!tray || !*tray)
@@ -2873,7 +3046,12 @@ int main(int argc, char *argv[])
 		                      WriteToConsole(""); // If ran from autoload thread, you need to send RETURN to resume the main loop and check the quit flag.
 		                      return true; })
 	                      ->setHelp("Close the application."));
-
+#ifdef _WIN32
+	commandRegistry.add((new JSMMacro("SHOW_POPUP"))
+	    ->SetMacro([&commandRegistry](JSMMacro *cmd, string_view args)
+	      { return do_SHOW_POPUP(cmd, args, commandRegistry); })
+		->setHelp("Show a popup menu with list of configs from GyroConfigs folder."));
+#endif
 	Mapping::_isCommandValid = bind(&CmdRegistry::isCommandValid, &commandRegistry, placeholders::_1);
 
 	connectDevices();
