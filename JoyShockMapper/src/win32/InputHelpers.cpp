@@ -241,6 +241,8 @@ void initConsole()
 	freopen_s((FILE **)stdout, "conout$", "w", stdout);
 	freopen_s((FILE **)stderr, "conout$", "w", stderr);
 	SetConsoleCtrlHandler(&ConsoleCtrlHandler, TRUE);
+	SetConsoleOutputCP(CP_UTF8);  // UTF-8 for Output
+	SetConsoleCP(CP_UTF8);        // UTF-8 for Input
 }
 
 tuple<string, string> GetActiveWindowName()
