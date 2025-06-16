@@ -1,0 +1,7 @@
+# Temporary bindings for popup menu navigation
+# SHOW_POPUP
+
+UP = UP
+DOWN = DOWN
+S = ENTER # confirm
+E = ESC # cancel

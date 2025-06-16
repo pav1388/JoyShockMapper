@@ -1535,22 +1535,17 @@ bool do_SHOW_POPUP(JSMMacro *cmd, string_view args, CmdRegistry &cmdRegistry)
 	UINT itemId = 1;
 	for (const auto &file : configFiles)
 	{
-		wstring wfile(file.begin(), file.end());
+		wstring wfile(file.begin(), file.end() - 4);
 		AppendMenuW(hMenu, MF_STRING, itemId++, wfile.c_str());
 	}
 
 	// Save current button bindings
 	std::unordered_map<ButtonID, Mapping> savedMappings;
-	savedMappings[ButtonID::UP] = mappings[(int)ButtonID::UP];
-	savedMappings[ButtonID::DOWN] = mappings[(int)ButtonID::DOWN];
-	savedMappings[ButtonID::E] = mappings[(int)ButtonID::E];
-	savedMappings[ButtonID::S] = mappings[(int)ButtonID::S];
+	for (int i = 0; i < static_cast<int>(ButtonID::SIZE); ++i)
+		savedMappings[static_cast<ButtonID>(i)] = mappings[i].value();
 
 	// Set temporary bindings for menu navigation
-	mappings[(int)ButtonID::UP].set(Mapping("UP"));
-	mappings[(int)ButtonID::DOWN].set(Mapping("DOWN"));
-	mappings[(int)ButtonID::E].set(Mapping("ESC"));
-	mappings[(int)ButtonID::S].set(Mapping("ENTER"));
+	cmdRegistry.loadConfigFile(".\\GyroConfigs\\_show_popup.txt");
 
 	// Show the menu with focus on it
 	AllowSetForegroundWindow(ASFW_ANY);
@@ -1608,6 +1603,7 @@ bool do_SHOW_POPUP(JSMMacro *cmd, string_view args, CmdRegistry &cmdRegistry)
 	// Cleaning
 	if (attached)
 		AttachThreadInput(ourThreadId, gameThreadId, FALSE);
+	
 	DestroyMenu(hMenu);
 	DestroyWindow(hWndParent);
 	UnregisterClass(L"JSMGyroMenuClass", GetModuleHandle(NULL));
@@ -1616,18 +1612,16 @@ bool do_SHOW_POPUP(JSMMacro *cmd, string_view args, CmdRegistry &cmdRegistry)
 	if (selected >= 1 && selected <= configFiles.size())
 	{
 		if (cmdRegistry.loadConfigFile(".\\GyroConfigs\\" + configFiles[selected - 1]))
-		{
 			return true;
-		}
+		
 		MessageBoxW(NULL, L"Failed to load selected config", L"JSM", MB_OK | MB_ICONERROR);
 	}
 
 	// If there was no choice or an error occurred while loading the config,
 	// then we restore the previous bindings
-	mappings[(int)ButtonID::UP].set(savedMappings[ButtonID::UP]);
-	mappings[(int)ButtonID::DOWN].set(savedMappings[ButtonID::DOWN]);
-	mappings[(int)ButtonID::E].set(savedMappings[ButtonID::E]);
-	mappings[(int)ButtonID::S].set(savedMappings[ButtonID::S]);
+	for (const auto &[id, mapping] : savedMappings)
+		mappings[static_cast<int>(id)].set(mapping);
+
 	savedMappings.clear();
 	return true;
 }
