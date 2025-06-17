@@ -1,0 +1,337 @@
+﻿-= Original lines from source code in English =-
+Index 
+ is not a valid enum setting
+There is no function defined to parse this command.
+Error assigning 
+ to 
+See 
+ and 
+ commands for further details.\n
+Error when processing the assignment. See the 
+ for details on valid assignment values\n
+Modeshift 
+ has been removed.\n
+ has been set to 
+ mapped to 
+no input
+None
+[AUTOCONNECT] Going from 
+ devices to 
+\" in focus: 
+create 
+ to autoload for this application.\n
+Up on the d-pad
+Down on the d-pad
+Left on the d-pad
+Right on the d-pad
+L1 or L, the top left shoulder button
+L2 or ZL, the bottom left shoulder button(or trigger)
+Share or -
+Touchpad click or Capture
+The East face button, Circle or A
+The South face button, Cross or B
+The North face button, Triangle or X
+The West face button, Square or Y
+R1 or R, the top right shoulder button
+R2 or ZR, the bottom right shoulder button
+Options or +
+PS or Home
+Left joycon SL, only on JoyCons
+Left joycon SR, only on JoyCons
+Right Joycon SL, only on JoyCons
+Right joycon SR, only on JoyCons
+L3 or Left stick click
+R3 or Right stick click
+Left stick tilted up
+Left stick tilted down
+Left stick tilted left
+Left stick tilted right
+Left ring binding, either inner or outer.
+Right stick tilted up
+Right stick tilted down
+Right stick tilted left
+Right stick tilted right
+Right ring binding, either inner or outer.
+Motion stick tilted forward
+Motion stick tilted back
+Motion stick tilted left
+Motion stick tilted right
+Motion ring binding, either inner or outer.
+Tilt the controller to the left
+Tilt the controller to the right
+The touchpad is being touched
+PS5 microphone button
+Full pull binding of left trigger, only on controllers with analog triggers
+Full pull binding of right trigger, only on controllers with analog triggers
+Touch stick tilted forward
+Touch stick tilted back
+Touch stick tilted left
+Touch stick tilted right
+Touch ring binding, either inner or outer.
+Enter README to bring up the user manual.
+Loading commands from file 
+Unrecognized command: \
+\"\nEnter 
+ to display all commands.\n
+No Macro was set for this command.
+The 
+ command can lead you to further details on this command.\n
+Rumbling at 
+Pressing down on key 
+Releasing key 
+Adding active toggle for 
+Removing active toggle for 
+Starting continuous calibration\n
+Gyro calibration set\n
+There is no controller object
+[ViGEm Client] The controller is of the wrong type!\n
+ is not a valid float setting
+ is not a valid FloatXY setting
+ is not a valid GyroSetting
+ is not a valid Color
+ is not a valid AdaptiveTriggerSetting
+ is not a valid AxisSignPair setting
+Cannot find the button 
+Button 
+ with tocuchpadId 
+ could not be found\n
+Error: Trigger 
+ does not exist in state map. Dual Stage Trigger not possible.\n
+Trigger 
+ has invalid state 
+. Reset to NoPress.\n
+Flick: 
+ degrees\n
+Abandonning calibration\n
+Softly press on the right trigger until you just feel the resistance.\n
+Then press the dpad down button to proceed, or press HOME to abandon.\n
+trigger pos is at 
+%) and effect pos is at 
+Softly press on the left trigger until you just feel the resistance.\n
+Then press the cross button to proceed, or press HOME to abandon.\n
+Your triggers have been successfully calibrated. Add the trigger offset and range values in your OnReset.txt file to have those values set by default.\n
+Neutral orientation for device 
+ set...\n
+Found a joycon pair!\n
+1 device connected\n
+ devices connected\n
+The thread does not exist\n
+Resetting all mappings to defaults\n
+There is no 
+ file to load.\n
+Invalid argument: 
+Reconnecting controllers: 
+Countering OS mouse speed setting\n
+Ignoring OS mouse speed setting\n
+Can't convert \
+\" to a number\n
+Can't calculate calibration from zero rotations\n
+Need to use the flick stick at least once before calculating an appropriate calibration value\n
+Recommendation: REAL_WORLD_CALIBRATION = 
+Finishing continuous calibration for all devices\n
+Restarting continuous calibration for all devices\n
+Setting neutral motion stick orientation...\n
+Sleep time must be greater than 0 and less than or equal to 10\n
+Sleep is capped at 10s per command\n
+Sleeping for 
+ second(s)...\n
+Finished sleeping.\n
+Could not open online help. Error #
+Your PID is 
+Whitelister is not implemented
+JoyShockMapper was successfully whitelisted\n
+Whitelist operation failed: 
+JoyShockMapper removed from whitelist\n
+No TXT files found in GyroConfigs folder
+Failed to load selected config
+ERROR: Cannot create tray item.\n
+Show Console
+Reconnect controllers
+AutoLoad
+AutoConnect
+Whitelist
+Calibrate all devices
+AutoLoad folder
+GyroConfigs folder
+Root folder
+\tEdit --^
+Calculate RWC
+Hide when minimized
+Quit
+ can only be set to a value higher than 
+ which is 
+ms.\n
+Before using this mapping, you need to set VIRTUAL_CONTROLLER.\n
+WARNING: Dual Stage Triggers are only valid on analog triggers. Full pull bindings will be ignored on non DS4 controllers.\n
+Before using this trigger mode, you need to set VIRTUAL_CONTROLLER.\n
+ doesn't support vigem analog modes.\n
+Before using this stick mode, you need to set VIRTUAL_CONTROLLER.\n
+This mode is only available for MOTION_STICK_MODE.\n
+Before using gyro mode PS_MOTION, you need to set 
+Before using this gyro mode, you need to set VIRTUAL_CONTROLLER.\n
+AUTOLOAD will attempt load a file from the following folder when a window with a matching executable name enters focus:\n
+You forgot to bind the command registry properly!
+Here's the list of all commands.\n
+Enter HELP [cmd1] [cmd2] ... for details on specific commands.\n
+ is not a recognized command\n
+\" is not a command, but the following are:\n
+Pick a ring where to apply the LEFT_RING binding. Valid values are the following: INNER and OUTER.
+Set a mouse mode for the left stick. Valid values are the following:\nNO_MOUSE, AIM, FLICK, FLICK_ONLY, ROTATE_ONLY, MOUSE_RING, MOUSE_AREA, OUTER_RING, INNER_RING, SCROLL_WHEEL, LEFT_STICK, RIGHT_STICK
+Pick a ring where to apply the RIGHT_RING binding. Valid values are the following: INNER and OUTER.
+Set a mouse mode for the right stick. Valid values are the following:\nNO_MOUSE, AIM, FLICK, FLICK_ONLY, ROTATE_ONLY, MOUSE_RING, MOUSE_AREA, OUTER_RING, INNER_RING LEFT_STICK, RIGHT_STICK
+Pick a ring where to apply the MOTION_RING binding. Valid values are the following: INNER and OUTER.
+Set a mouse mode for the motion-stick -- the whole controller is treated as a stick. Valid values are the following:\nNO_MOUSE, AIM, FLICK, FLICK_ONLY, ROTATE_ONLY, MOUSE_RING, MOUSE_AREA, OUTER_RING, INNER_RING LEFT_STICK, RIGHT_STICK
+Pick a gyro axis to operate on the mouse's X axis. Valid values are the following: X, Y and Z.
+Pick a gyro axis to operate on the mouse's Y axis. Valid values are the following: X, Y and Z.
+Assign a controller button to disable the gyro when pressed.
+Assign a controller button to enable the gyro when pressed.
+When using two Joycons, select which one will be used for gyro. Valid values are the following:\nUSE_BOTH, IGNORE_LEFT, IGNORE_RIGHT, IGNORE_BOTH
+When using two Joycons, select which one will be used for non-gyro motion. Valid values are the following:\nUSE_BOTH, IGNORE_LEFT, IGNORE_RIGHT, IGNORE_BOTH
+Controllers with a right analog trigger can use one of the following dual stage trigger modes:\nNO_FULL, NO_SKIP, MAY_SKIP, MUST_SKIP, MAY_SKIP_R, MUST_SKIP_R, NO_SKIP_EXCLUSIVE, X_LT, X_RT, PS_L2, PS_R2
+Controllers with a left analog trigger can use one of the following dual stage trigger modes:\nNO_FULL, NO_SKIP, MAY_SKIP, MUST_SKIP, MAY_SKIP_R, MUST_SKIP_R, NO_SKIP_EXCLUSIVE, X_LT, X_RT, PS_L2, PS_R2
+Snap flicks to cardinal directions. Valid values are the following: NONE or 0, FOUR or 4 and EIGHT or 8.
+Minimum gyro sensitivity when turning controller at or below MIN_GYRO_THRESHOLD.\nYou can assign a second value as a different vertical sensitivity.
+Maximum gyro sensitivity when turning controller at or above MAX_GYRO_THRESHOLD.\nYou can assign a second value as a different vertical sensitivity.
+Sets a gyro sensitivity to use. This sets both MIN_GYRO_SENS and MAX_GYRO_SENS to the same values. You can assign a second value as a different vertical sensitivity.
+Degrees per second at and below which to apply minimum gyro sensitivity.
+Degrees per second at and above which to apply maximum gyro sensitivity.
+Power curve for stick input when in AIM mode. 1 for linear, 0 for no curve (full strength once out of deadzone). Higher numbers make more of the stick's range appear like a very slight tilt.
+Stick sensitivity when using classic AIM mode.
+Calibration value mapping mouse values to in game degrees. This value is used for FLICK mode, and to make GYRO and stick AIM sensitivities use real world values.
+With a virtual controller, how fast a full tilt of the stick will turn the controller, in degrees per second. This value is used for FLICK mode with virtual controllers and to make GYRO sensitivities use real world values.
+Set this value to the sensitivity you use in game. It is used by stick FLICK and AIM modes as well as GYRO aiming.
+Set this to a value between 0 and 1. This is the threshold at which a soft press binding is triggered. Or set the value to -1 to use hair trigger mode
+When in AIM mode, set stick X axis inversion. Valid values are the following:\nSTANDARD or 1, and INVERTED or -1
+Set gyro X axis inversion. Valid values are the following:\nSTANDARD or 1, and INVERTED or -1
+Set gyro Y axis inversion. Valid values are the following:\nSTANDARD or 1, and INVERTED or -1
+Sets how long a flick takes in seconds. This value is used by stick FLICK mode.
+Applies a delta exponent to flick_time, effectively making flick speed depend on the flick angle: use 0 for no effect and 1 for linear. This value is used by stick FLICK mode.
+This length of the smoothing window in seconds. Smoothing is only applied below the GYRO_SMOOTH_THRESHOLD, with a smooth transition to full smoothing.
+When the controller's angular velocity is below this threshold (in degrees per second), smoothing will be applied.
+Gyro deadzone. Gyro input will be ignored when below this angular velocity (in degrees per second). This should be a last-resort stability option.
+Below this threshold (in degrees per second), gyro sensitivity is pushed down towards zero. This can tighten and steady aim without a deadzone.
+When in AIM mode and the stick is fully tilted, stick sensitivity increases over time. This is a multiplier starting at 1x and increasing this by this value per second.
+When in AIM mode and the stick is fully tilted, stick sensitivity increases over time. This value is the maximum sensitivity multiplier.
+Defines a radius of the left stick within which all values will be ignored. This value can only be between 0 and 1 but it should be small. Stick input out of this radius will be adjusted.
+Defines a distance from the left stick's outer edge for which the stick will be considered fully tilted. This value can only be between 0 and 1 but it should be small. Stick input out of this deadzone will be adjusted.
+Defines a minimum angle (in degrees) for the flick to be considered a flick. Helps ignore unintentional turns when tilting the stick straight forward.
+Defines a radius of the right stick within which all values will be ignored. This value can only be between 0 and 1 but it should be small. Stick input out of this radius will be adjusted.
+Defines a distance from the right stick's outer edge for which the stick will be considered fully tilted. This value can only be between 0 and 1 but it should be small. Stick input out of this deadzone will be adjusted.
+Defines a distance from both sticks' outer edge for which the stick will be considered fully tilted. This value can only be between 0 and 1 but it should be small. Stick input out of this deadzone will be adjusted.
+Defines a radius of the motion-stick within which all values will be ignored. This value can only be between 0 and 1 but it should be small. Stick input out of this radius will be adjusted.
+Defines a distance from the motion-stick's outer edge for which the stick will be considered fully tilted. Stick input out of this deadzone will be adjusted.
+Defines an angle within which _ANGLE_TO_X and _ANGLE_TO_Y stick modes will be ignored (in degrees). Since a circular deadzone is already used for deciding whether the stick is engaged at all, it's recommended not to use an inner angular deadzone, which is why the default value is 0.
+Defines an angle from max or min rotation that will be treated as max or min rotation, respectively, for _ANGLE_TO_X and _ANGLE_TO_Y stick modes. Since players intending to point the stick perfectly up/down or perfectly left/right will usually be off by a few degrees, this enables players to more easily hit their intended min/max values, so the default value is 10 degrees.
+How far the controller must be leaned left or right to trigger a LEAN_LEFT or LEAN_RIGHT binding.
+Let the stick modes account for how you're holding the controller:\nFORWARD, LEFT, RIGHT, BACKWARD
+How gyro input is converted to 2D input. With LOCAL, your MOUSE_X_FROM_GYRO_AXIS and MOUSE_Y_FROM_GYRO_AXIS settings decide which local angular axis maps to which 2D mouse axis.\nYour other options are PLAYER_TURN and PLAYER_LEAN. These both take gravity into account to combine your axes more reliably.\n\tUse PLAYER_TURN if you like to turn your camera or move your cursor by turning your controller side to side.\n\tUse PLAYER_LEAN if you'd rather lean your controller to turn the camera.
+Choose the rate at which trackball gyro slows down. 0 means no decay, 1 means it'll halve each second, 2 to halve each 1/2 seconds, etc.
+Indicate your monitor's horizontal resolution when using the stick mode MOUSE_RING.
+Indicate your monitor's vertical resolution when using the stick mode MOUSE_RING.
+Pick a radius on which the cursor will be allowed to move. This value is used for stick mode MOUSE_RING and MOUSE_AREA.
+Some smoothing is applied to flick stick rotations to account for the controller's stick resolution. This value overrides the smoothing threshold.
+If FLICK_SNAP_MODE is set to something other than NONE, this sets the degree of snapping -- 0 for none, 1 for full snapping to the nearest direction, and values in between will bias you towards the nearest direction instead of snapping.
+Sets the amount of time in milliseconds within which the user needs to reach the full press to skip the soft pull binding of the trigger.
+Sets the time in milliseconds to wait between each turbo activation.
+Sets the amount of time in milliseconds to hold a button before the hold press is enabled. Releasing the button before this time will trigger the tap press. Turbo press only starts after this delay.
+Sets the amount of time in milliseconds within which both buttons of a simultaneous press needs to be pressed before enabling the sim press mappings. This setting does not support modeshift.
+Sets the amount of time in milliseconds within which the user needs to press a button twice before enabling the double press mappings. This setting does not support modeshift.
+Sets the time in milliseconds that JoyShockMaper waits before reading from each controller again.
+Changes the color bar of the DS4. Either enter as a hex code (xRRGGBB), as three decimal values between 0 and 255 (RRR GGG BBB), or as a common color name in all caps and underscores.
+Scrolling sensitivity for sticks.
+Enable or disable device hotplugging. Valid values are ON and OFF.
+When TOUCHPAD_MODE is set to GRID_AND_STICK, this variable sets the number of rows and columns in the grid. The product of the two numbers need to be between 1 and 25.
+Assign a mode to the touchpad. Valid values are GRID_AND_STICK or MOUSE.
+Sets the ring mode for the touch stick. Valid values are INNER and OUTER
+Set a mouse mode for the touchpad stick. Valid values are the following:\nNO_MOUSE, AIM, FLICK, FLICK_ONLY, ROTATE_ONLY, MOUSE_RING, MOUSE_AREA, OUTER_RING, INNER_RING
+Sets the radius of the circle in which a touch stick input sends no output.
+Set the radius of the touchpad stick. The center of the stick is always the first point of contact. Use a very large value (ex: 800) to use it as swipe gesture.
+Changes the sensitivity of the touchpad when set as a mouse. Enter a second value for a different vertical sensitivity.
+JSM will be hidden in the notification area when minimized if this setting is ON. Otherwise it stays in the taskbar.
+Sets the vigem virtual controller type. Can be NONE (default), XBOX (360) or DS4 (PS4).
+Dual stage mode for the touchpad TOUCH and CAPTURE (i.e. click) bindings.
+Disable the rumbling feature from vigem. Valid values are ON and OFF.
+Control the adaptive trigger feature of the DualSense. Valid values are ON and OFF.
+Sets the adaptive trigger effect on the left trigger:\n
+OFF: No effect\n
+ON: Use effect generated by JSM depending on ZL_MODE\n
+RESISTANCE start[0 9] force[0 8]: Some resistance starting at point\n
+BOW start[0 8] end[0 8] forceStart[0 8] forceEnd[0 8]: increasingly strong resistance\n
+GALLOPING start[0 8] end[0 9] foot1[0 6] foot2[0 7] freq[Hz]: Two pulses repeated periodically\n
+SEMI_AUTOMATIC start[2 7] end[0 8] force[0 8]: Trigger effect\n
+AUTOMATIC start[0 9] strength[0 8] freq[Hz]: Regular pulse effect\n
+MACHINE start[0 9] end[0 9] force1[0 7] force2[0 7] freq[Hz] period: Irregular pulsing
+Sets the adaptive trigger effect on the right trigger:\n
+ON: Use effect generated by JSM depending on ZR_MODE\n
+Gyro calibration happens automatically when this setting is ON. Otherwise you'll need to calibrate the gyro manually when using gyro aiming.
+When outputting as a virtual controller, account for this much inner deadzone being applied in the target game. This value can only be between 0 and 1 but it should be small.
+When outputting as a virtual controller, account for this much outer deadzone being applied in the target game. This value can only be between 0 and 1 but it should be small.
+When outputting as a virtual controller, account for this power curve being applied in the target game.
+When outputting as a virtual controller, use this to adjust the scale of the left stick output. This does not affect the gyro->stick conversion.
+When outputting as a virtual controller, use this to adjust the scale of the right stick output. This does not affect the gyro->stick conversion.
+When using the WIND stick modes, this is how many degrees the stick has to be wound to cover the full range of the ouptut, from minimum value to maximum value.
+Power curve for WIND stick modes, letting you have more or less sensitivity towards the neutral position.
+How quickly the WIND sticks unwind on their own when the relevant stick isn't engaged (in degrees per second).
+Whether gyro should be converted to mouse, left stick, or right stick movement. If you don't want to use gyro aiming, simply leave GYRO_SENS set to 0.
+Whether flick stick should be converted to a mouse, left stick, or right stick movement.
+If AUTOLOAD doesn't work properly, set this value to the path to the directory holding the JoyShockMapper.exe file. Make sure a folder named \"AutoLoad\" exists there.
+Stick sensitivity of the relative movement when in HYBRID_AIM mode. Like the sensitivity of a mouse.
+In HYBRID_AIM stick mode, select the mode's behaviour in the deadzone.\n
+This deadzone is determined by the angle of the output from the stick position to the center.\n
+It is fully active up to RETURN_DEADZONE_ANGLE and tapers off until RETURN_DEADZONE_CUTOFF_ANGLE.\n
+When in DEADZONE_INNER it transitions to an output deadzone based on the distance to the center so the relative part of the input smoothly fades back in.
+In HYBRID_AIM stick mode, enables continuous travelling when the stick is at the edge.
+In HYBRID_AIM stick mode, angle to the center in which the return deadzone is still partially active.\n
+Valid values range from 0 to 90
+In HYBRID_AIM stick mode, angle to the center in which the return deadzone is fully active.\n
+Welcome to JoyShockMapper version 
+AUTOLOAD is available. Files in 
+ folder will get loaded automatically when a matching application is in focus.\n
+AutoLoad is unavailable\n
+Please update the button help map in ButtonHelp.cpp
+Delete all custom bindings and reset to default,\nand run script OnReset.txt in JSM_DIRECTORY.
+Enable gyro at all times, without any GYRO_OFF binding.
+Look for newly connected controllers. Specify MERGE (default) or SPLIT whether you want to consider joycons as a single or separate controllers.
+JoyShockMapper will load the user's OS mouse sensitivity value to consider it in its calculations.
+Disable JoyShockMapper's consideration of the the user's OS mouse sensitivity value.
+Get JoyShockMapper to recommend you a REAL_WORLD_CALIBRATION value after performing the calibration sequence. Visit GyroWiki for details:\nhttp://gyrowiki.jibbsmart.com/blog:joyshockmapper-guide#calibrating
+Sleep for the given number of seconds, or one second if no number is given. Can't sleep more than 10 seconds per command.
+Finish calibrating the gyro in all controllers.
+Start calibrating the gyro in all controllers.
+Set the neutral orientation for motion stick to whatever the orientation of the controller is.
+Open the latest JoyShockMapper README in your browser.
+Open the whitelister application
+Add JoyShockMapper to the whitelisted applications.
+Remove JoyShockMapper from whitelisted applications.
+Removes all text in the console screen
+Starts the trigger calibration procedure for the dualsense triggers.
+Close the application.
+Show a popup menu with list of configs from GyroConfigs folder.
+Finished executing startup file.\n
+: true\n
+: false\n
+: tapped\n
+: held\n
+: turbo\n
+You need to assign a function to this field. It should be a function that validates the command line.
+Error: \
+\" is not a valid command\n
+ on Start Press
+ on 
+. Trying again!\n
+Uh, not enough memory to do that?!
+ViGEm bus is not installed. You can download the latest version of it here:\n
+ViGEm Bus connection failed: 
+Target plugin failed: 
+Open HIDCerberus at the following adress in your browser:
+No Whitelister Application is available. JoyShockMapper ecommends the latest HidHide from Nefarius\n
+JoyShockMapper is already whitelisted
+No whitelisting application is available. JoyShockMapper recommends the latest HidHide from Nefarius:\n
+JoyShockMapper is not whitelisted
+HidHide Present() error 
+Search for \"HidHide Configuration Client\" in your windows search bar.\n
+HidHideWhitelister did not initialize properly
+Error writing to console input: 
+Error code 
+ raised with FindNextFile()\n
+See the latest user manual at the web page below:\n
