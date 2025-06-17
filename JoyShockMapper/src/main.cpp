@@ -1664,10 +1664,10 @@ void beforeShowTrayMenu()
 		  []()
 		  { return devicesCalibrating; });
 
-		std::vector<std::pair<std::string, std::string>> folders = {
-			{ AUTOLOAD_FOLDER(), "AutoLoad" },
-			{ GYRO_CONFIGS_FOLDER(), "GyroConfigs" },
-			{ BASE_JSM_CONFIG_FOLDER(), "Root" }
+		std::vector<std::pair<std::string, std::wstring>> folders = {
+			{ AUTOLOAD_FOLDER(), L"AutoLoad folder" },
+			{ GYRO_CONFIGS_FOLDER(), L"GyroConfigs folder" },
+			{ BASE_JSM_CONFIG_FOLDER(), L"Root folder" }
 		};
 
 		for (const auto &[folderPath, displayName] : folders)
@@ -1685,7 +1685,7 @@ void beforeShowTrayMenu()
 						auto noext = file.substr(0, file.find_last_of('.'));
 
 						tray->AddMenuItem(
-						  U(" * ") + UnicodeString(displayName.begin(), displayName.end()) + U(" folder"),
+						  U(" * ") + UnicodeString(displayName.begin(), displayName.end()),
 						  UnicodeString(noext.begin(), noext.end()),
 						  [fullPathName]
 						  {
@@ -1694,7 +1694,7 @@ void beforeShowTrayMenu()
 						  });
 
 						tray->AddMenuItem(
-						  U(" * ") + UnicodeString(displayName.begin(), displayName.end()) + U(" folder"),
+						  U(" * ") + UnicodeString(displayName.begin(), displayName.end()),
 						  U("\tEdit --^"),
 						  [fullPathName]
 						  {
