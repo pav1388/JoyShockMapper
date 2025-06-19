@@ -13,10 +13,10 @@
 #include <filesystem>
 #define _USE_MATH_DEFINES
 #include <math.h> // M_PI
+#include <string>
 
 #ifdef _WIN32
 #include <windows.h>
-#include <string>
 #include <vector>
 #include <algorithm>
 #include <unordered_map>
@@ -26,6 +26,7 @@
 #else
 #define UCHAR unsigned char
 #include <algorithm>
+#include <cstdlib>
 #endif
 
 #pragma warning(disable : 4996) // Disable deprecated API warnings
@@ -1698,7 +1699,12 @@ void beforeShowTrayMenu()
 						  U("\tEdit --^"),
 						  [fullPathName]
 						  {
-							  ShellExecuteA(NULL, "open", fullPathName.c_str(), NULL, NULL, SW_SHOW);
+#ifdef _WIN32
+							ShellExecuteA(NULL, "open", fullPathName.c_str(), NULL, NULL, SW_SHOW);
+#else
+							std::string command = "xdg-open \"" + filePath + "\"";
+							system(command.c_str());
+#endif
 						  });
 					}
 						
