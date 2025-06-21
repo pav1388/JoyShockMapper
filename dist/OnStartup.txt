@@ -10,3 +10,6 @@
 #AUTOLOAD = OFF # Uncomment to disable AUTOLOAD on startup
 
 #HIDE_MINIMIZED = ON # Uncomment to remove JSM from the taskbar when minimized.
+
+# Usage: IGNORE_CONTROLLER <GUID>
+#IGNORE_CONTROLLER t35t_GU1D_w1th_d1g1t_4nd_l3tt3r5

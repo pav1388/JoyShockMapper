@@ -228,5 +228,6 @@ public:
 	virtual void SetRumble(int deviceId, int smallRumble, int bigRumble) = 0;
 	virtual void SetPlayerNumber(int deviceId, int number) = 0;
 	virtual void SetTriggerEffect(int deviceId, const AdaptiveTriggerSetting &_leftTriggerEffect, const AdaptiveTriggerSetting &_rightTriggerEffect) { };
-	virtual void SetMicLight(int deviceId, unsigned char mode) { }
+	virtual void SetMicLight(int deviceId, unsigned char mode) { };
+	virtual std::string GetControllerGUID(int deviceId) = 0;
 };

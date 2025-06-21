@@ -14,6 +14,7 @@
 #define _USE_MATH_DEFINES
 #include <math.h> // M_PI
 #include <string>
+#include <unordered_set>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -35,6 +36,7 @@ std::string NONAME;
 shared_ptr<JslWrapper> jsl;
 unique_ptr<TrayIcon> tray;
 unique_ptr<Whitelister> whitelister;
+static std::unordered_set<std::string> ignoredControllers; // GUID ignored list
 
 vector<JSMButton> grid_mappings; // array of virtual _buttons on the touchpad grid
 vector<JSMButton> mappings;      // array enables use of for each loop and other i/f
@@ -1164,6 +1166,20 @@ void connectDevices(bool mergeJoycons = true)
 
 		for (auto handle : deviceHandles) // Don't use foreach!
 		{
+			auto guid = jsl->GetControllerGUID(handle);
+            
+            // Check if this GUID is in the ignore list
+            if (ignoredControllers.find(guid) != ignoredControllers.end())
+            {
+                COUT << "Ignoring device with GUID: " << guid << '\n';
+				numConnected--;
+                continue;
+            }
+			else
+			{
+				COUT << "Found controller: " << handle << ", GUID: " << guid << '\n';
+			}
+			
 			auto type = jsl->GetControllerSplitType(handle);
 			auto otherJoyCon = find_if(handle_to_joyshock.begin(), handle_to_joyshock.end(),
 			  [type](auto &pair)
@@ -1627,6 +1643,19 @@ bool do_SHOW_POPUP(JSMMacro *cmd, string_view args, CmdRegistry &cmdRegistry)
 	return true;
 }
 #endif
+
+bool do_IGNORE_CONTROLLER(string_view arguments)
+{
+	if (arguments.empty())
+	{
+		CERR << "Command IGNORE_CONTROLLER is empty. Specify controller GUID to ignore\n";
+		return true;
+	}
+
+	ignoredControllers.insert(std::string(arguments));
+	COUT << "IGNORE_CONTROLLER" << " has been set to " << arguments << '\n';
+	return true;
+}
 
 void beforeShowTrayMenu()
 {
@@ -3051,11 +3080,12 @@ int main(int argc, char *argv[])
 	      { return do_SHOW_POPUP(cmd, args, commandRegistry); })
 		->setHelp("Show a popup menu with list of configs from GyroConfigs folder."));
 #endif
-	Mapping::_isCommandValid = bind(&CmdRegistry::isCommandValid, &commandRegistry, placeholders::_1);
+	commandRegistry.add((new JSMMacro("IGNORE_CONTROLLER"))
+	    ->SetMacro(bind(&do_IGNORE_CONTROLLER, placeholders::_2))
+	    ->setHelp("Add controller GUID to ignore list. Usage: IGNORE_CONTROLLER <GUID>"));
 
-	connectDevices();
-	jsl->SetCallback(&joyShockPollCallback);
-	jsl->SetTouchCallback(&touchCallback);
+	Mapping::_isCommandValid = bind(&CmdRegistry::isCommandValid, &commandRegistry, placeholders::_1);
+	
 	tray.reset(TrayIcon::getNew(trayIconData, &beforeShowTrayMenu));
 	if (tray)
 	{
@@ -3073,6 +3103,10 @@ int main(int argc, char *argv[])
 		COUT_INFO << "OnStartup.txt";
 		COUT << " file to load.\n";
 	}
+
+	connectDevices();
+	jsl->SetCallback(&joyShockPollCallback);
+	jsl->SetTouchCallback(&touchCallback);
 
 	for (int i = 0; i < argc; ++i)
 	{

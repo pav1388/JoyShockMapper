@@ -715,6 +715,22 @@ public:
 			_controllerMap[deviceId]->SendEffect();
 		}
 	}
+
+	std::string GetControllerGUID(int deviceId) override
+	{
+		if (_controllerMap.find(deviceId) != _controllerMap.end() && _controllerMap[deviceId]->_sdlController)
+		{
+			SDL_Joystick *joystick = SDL_GameControllerGetJoystick(_controllerMap[deviceId]->_sdlController);
+			if (joystick)
+			{
+				SDL_JoystickGUID guid = SDL_JoystickGetGUID(joystick);
+				char guidStr[33];
+				SDL_JoystickGetGUIDString(guid, guidStr, sizeof(guidStr));
+				return std::string(guidStr);
+			}
+		}
+		return "";
+	}
 };
 
 JslWrapper *JslWrapper::getNew()
