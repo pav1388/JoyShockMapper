@@ -1154,6 +1154,8 @@ void connectDevices(bool mergeJoycons = true)
 	handle_to_joyshock.clear();
 	int numConnected = jsl->ConnectDevices();
 	vector<int> deviceHandles(numConnected, 0);
+	int numIgnored = 0;
+
 	if (numConnected > 0)
 	{
 		numConnected = jsl->GetConnectedDeviceHandles(&deviceHandles[0], numConnected);
@@ -1166,12 +1168,19 @@ void connectDevices(bool mergeJoycons = true)
 
 		for (auto handle : deviceHandles) // Don't use foreach!
 		{
+			if (handle == -1)
+				continue;
+			
 			auto guid = jsl->GetControllerGUID(handle);
+			if (guid.empty())
+				continue;
             
             // Check if this GUID is in the ignore list
-            if (ignoredControllers.find(guid) != ignoredControllers.end())
+			if (ignoredControllers.find(guid) != ignoredControllers.end())
             {
-                COUT << "Ignoring device with GUID: " << guid << '\n';
+				jsl->RemoveController(handle);
+				COUT_INFO << "Found controller: " << handle << ", GUID: " << guid << " IGNORED and REMOVED!" << '\n';
+				numIgnored++;
 				numConnected--;
                 continue;
             }
@@ -1202,15 +1211,15 @@ void connectDevices(bool mergeJoycons = true)
 
 	if (numConnected == 1)
 	{
-		COUT << "1 device connected\n";
+		COUT << "1 device connected, " << numIgnored << " ignored\n";
 	}
 	else if (numConnected == 0)
 	{
-		CERR << numConnected << " devices connected\n";
+		CERR << numConnected << " devices connected, " << numIgnored << " ignored\n";
 	}
 	else
 	{
-		COUT << numConnected << " devices connected\n";
+		COUT << numConnected << " devices connected, " << numIgnored << " ignored\n";
 	}
 	// if (!IsVisible())
 	//{

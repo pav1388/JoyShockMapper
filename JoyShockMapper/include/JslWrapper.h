@@ -230,4 +230,5 @@ public:
 	virtual void SetTriggerEffect(int deviceId, const AdaptiveTriggerSetting &_leftTriggerEffect, const AdaptiveTriggerSetting &_rightTriggerEffect) { };
 	virtual void SetMicLight(int deviceId, unsigned char mode) { };
 	virtual std::string GetControllerGUID(int deviceId) = 0;
+	virtual bool RemoveController(int handle) = 0;
 };

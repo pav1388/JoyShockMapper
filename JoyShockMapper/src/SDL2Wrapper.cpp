@@ -718,18 +718,36 @@ public:
 
 	std::string GetControllerGUID(int deviceId) override
 	{
-		if (_controllerMap.find(deviceId) != _controllerMap.end() && _controllerMap[deviceId]->_sdlController)
+		std::lock_guard<std::mutex> lock(controller_lock);
+
+		auto it = _controllerMap.find(deviceId);
+		if (it == _controllerMap.end() || !it->second->_sdlController)
 		{
-			SDL_Joystick *joystick = SDL_GameControllerGetJoystick(_controllerMap[deviceId]->_sdlController);
-			if (joystick)
-			{
-				SDL_JoystickGUID guid = SDL_JoystickGetGUID(joystick);
-				char guidStr[33];
-				SDL_JoystickGetGUIDString(guid, guidStr, sizeof(guidStr));
-				return std::string(guidStr);
-			}
+			return "";
 		}
-		return "";
+
+		SDL_Joystick *joystick = SDL_GameControllerGetJoystick(it->second->_sdlController);
+		if (!joystick)
+		{
+			return "";
+		}
+
+		char guidStr[33];
+		SDL_JoystickGUID guid = SDL_JoystickGetGUID(joystick);
+		SDL_JoystickGetGUIDString(guid, guidStr, sizeof(guidStr));
+		return std::string(guidStr);
+	}
+
+	bool RemoveController(int handle) override
+	{
+		auto it = _controllerMap.find(handle);
+		if (it != _controllerMap.end())
+		{
+			delete it->second;
+			_controllerMap.erase(it);
+			return true;
+		}
+		return false;
 	}
 };
 
