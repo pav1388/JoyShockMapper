@@ -32,7 +32,7 @@
 namespace ExtendInput::DataTools::DualSense
 {
 
-bool TriggerEffectGenerator::SimpleResistance(byte *destinationArray, int destinationIndex, byte start, byte force)
+bool TriggerEffectGenerator::SimpleResistance(byte *destinationArray, int destinationIndex, uint16_t start, uint16_t force)
 {
 	destinationArray[destinationIndex + 0] = (byte)TriggerEffectType::SimpleResistance;
 	destinationArray[destinationIndex + 1] = start;
@@ -48,7 +48,7 @@ bool TriggerEffectGenerator::SimpleResistance(byte *destinationArray, int destin
 	return true;
 }
 
-bool TriggerEffectGenerator::SimpleSemiAutomaticGun(byte *destinationArray, int destinationIndex, byte start, byte end, byte force)
+bool TriggerEffectGenerator::SimpleSemiAutomaticGun(byte *destinationArray, int destinationIndex, uint16_t start, uint16_t end, uint16_t force)
 {
 	destinationArray[destinationIndex + 0] = (byte)TriggerEffectType::SimpleSemiAutomaticGun;
 	destinationArray[destinationIndex + 1] = start;
@@ -80,7 +80,7 @@ bool TriggerEffectGenerator::reset(byte *destinationArray, int destinationIndex)
 	return true;
 }
 
-bool TriggerEffectGenerator::SimpleAutomaticGun(byte *destinationArray, int destinationIndex, byte start, byte strength, byte frequency)
+bool TriggerEffectGenerator::SimpleAutomaticGun(byte *destinationArray, int destinationIndex, uint16_t start, uint16_t strength, uint16_t frequency)
 {
 	if (frequency > 0 && strength > 0)
 	{
@@ -100,7 +100,7 @@ bool TriggerEffectGenerator::SimpleAutomaticGun(byte *destinationArray, int dest
 	return reset(destinationArray, destinationIndex);
 }
 
-bool TriggerEffectGenerator::LimitedResistance(byte *destinationArray, int destinationIndex, byte start, byte force)
+bool TriggerEffectGenerator::LimitedResistance(byte *destinationArray, int destinationIndex, uint16_t start, uint16_t force)
 {
 	if (force > 10)
 		return false;
@@ -122,7 +122,7 @@ bool TriggerEffectGenerator::LimitedResistance(byte *destinationArray, int desti
 	return reset(destinationArray, destinationIndex);
 }
 
-bool TriggerEffectGenerator::LimitedSemiAutomaticGun(byte *destinationArray, int destinationIndex, byte start, byte end, byte force)
+bool TriggerEffectGenerator::LimitedSemiAutomaticGun(byte *destinationArray, int destinationIndex, uint16_t start, uint16_t end, uint16_t force)
 {
 	if (start < 0x10)
 		return false;
@@ -148,7 +148,7 @@ bool TriggerEffectGenerator::LimitedSemiAutomaticGun(byte *destinationArray, int
 	return reset(destinationArray, destinationIndex);
 }
 
-bool TriggerEffectGenerator::Resistance(byte *destinationArray, int destinationIndex, byte start, byte force)
+bool TriggerEffectGenerator::Resistance(byte *destinationArray, int destinationIndex, uint16_t start, uint16_t force)
 {
 	if (start > 9)
 		return false;
@@ -181,7 +181,7 @@ bool TriggerEffectGenerator::Resistance(byte *destinationArray, int destinationI
 	return reset(destinationArray, destinationIndex);
 }
 
-bool TriggerEffectGenerator::Bow(byte *destinationArray, int destinationIndex, byte start, byte end, byte force, byte snapForce)
+bool TriggerEffectGenerator::Bow(byte *destinationArray, int destinationIndex, uint16_t start, uint16_t end, uint16_t force, uint16_t snapForce)
 {
 	if (start > 8)
 		return false;
@@ -215,7 +215,7 @@ bool TriggerEffectGenerator::Bow(byte *destinationArray, int destinationIndex, b
 	return reset(destinationArray, destinationIndex);
 }
 
-bool TriggerEffectGenerator::Galloping(byte *destinationArray, int destinationIndex, byte start, byte end, byte firstFoot, byte secondFoot, byte frequency)
+bool TriggerEffectGenerator::Galloping(byte *destinationArray, int destinationIndex, uint16_t start, uint16_t end, uint16_t firstFoot, uint16_t secondFoot, uint16_t frequency)
 {
 	if (start > 8)
 		return false;
@@ -251,7 +251,7 @@ bool TriggerEffectGenerator::Galloping(byte *destinationArray, int destinationIn
 	return reset(destinationArray, destinationIndex);
 }
 
-bool TriggerEffectGenerator::SemiAutomaticGun(byte *destinationArray, int destinationIndex, byte start, byte end, byte force)
+bool TriggerEffectGenerator::SemiAutomaticGun(byte *destinationArray, int destinationIndex, uint16_t start, uint16_t end, uint16_t force)
 {
 	if (start > 7 || start < 2)
 		return false;
@@ -281,7 +281,7 @@ bool TriggerEffectGenerator::SemiAutomaticGun(byte *destinationArray, int destin
 	return reset(destinationArray, destinationIndex);
 }
 
-bool TriggerEffectGenerator::AutomaticGun(byte *destinationArray, int destinationIndex, byte start, byte strength, byte frequency)
+bool TriggerEffectGenerator::AutomaticGun(byte *destinationArray, int destinationIndex, uint16_t start, uint16_t strength, uint16_t frequency)
 {
 	if (start > 9)
 		return false;
@@ -314,7 +314,7 @@ bool TriggerEffectGenerator::AutomaticGun(byte *destinationArray, int destinatio
 	return reset(destinationArray, destinationIndex);
 }
 
-bool TriggerEffectGenerator::Machine(byte *destinationArray, int destinationIndex, byte start, byte end, byte strengthA, byte strengthB, byte frequency, byte period)
+bool TriggerEffectGenerator::Machine(byte *destinationArray, int destinationIndex, uint16_t start, uint16_t end, uint16_t strengthA, uint16_t strengthB, uint16_t frequency, uint16_t period)
 {
 	if (start > 8)
 		return false;

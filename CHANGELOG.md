@@ -3,6 +3,14 @@
 Most recent updates will appear first.
 This is a summary of new features and bugfixes. Read the README to learn how to use the features mentioned here.
 
+## 3.6.2
+
+content
+
+### Bugfixes
+
+* Fix Adaptive triggers
+
 ## 3.6.1
 
 Fixing all the stuff I broke.

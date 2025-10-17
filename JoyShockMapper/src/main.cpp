@@ -27,7 +27,7 @@
 #else
 #define UCHAR unsigned char
 #include <algorithm>
-#include <cstdlib>
+#include <unistd.h>
 #endif
 
 #pragma warning(disable : 4996) // Disable deprecated API warnings
@@ -48,6 +48,8 @@ unique_ptr<JSM::AutoConnect> autoConnectThread;
 unique_ptr<PollingThread> minimizeThread;
 bool devicesCalibrating = false;
 unordered_map<int, shared_ptr<JoyShock>> handle_to_joyshock;
+
+int input_pipe_fd[2];
 int triggerCalibrationStep = 0;
 
 struct TOUCH_POINT
@@ -2992,6 +2994,18 @@ int __stdcall wWinMain(HINSTANCE hInstance, HINSTANCE prevInstance, LPWSTR cmdLi
 #else
 int main(int argc, char *argv[])
 {
+#if !defined(_WIN32)
+	if (pipe(input_pipe_fd) == -1)
+	{
+		perror("pipe");
+		exit(EXIT_FAILURE);
+	}
+	if (dup2(input_pipe_fd[0], STDIN_FILENO) == -1)
+	{
+		perror("dup2");
+		exit(EXIT_FAILURE);
+	}
+#endif
 	static_cast<void>(argc);
 	static_cast<void>(argv);
 	void *trayIconData = nullptr;
@@ -3010,6 +3024,15 @@ int main(int argc, char *argv[])
 	}
 	// console
 	initConsole();
+	#ifndef _WIN32
+	// Set up the console to receive commands from the pipe
+	// This is only needed on non-Windows platforms
+	// The pipe is created in the main function
+	// and the console is set up in initConsole()
+	// The pipe is used to receive commands from the console
+	// to the main thread
+	initFifoCommandListener();
+	#endif
 	COUT_BOLD << "Welcome to JoyShockMapper version " << version << "!\n";
 	// if (whitelister) COUT << "JoyShockMapper was successfully whitelisted!\n";
 	//  Threads need to be created before listeners
@@ -3134,7 +3157,19 @@ int main(int argc, char *argv[])
 	string enteredCommand;
 	while (!quit)
 	{
-		getline(cin, enteredCommand);
+		#if _WIN32
+			getline(cin, enteredCommand);
+        #else
+			std::unique_lock<std::mutex> lock(commandQueueMutex);
+			commandQueueCV.wait(lock, []{ return !commandQueue.empty(); });
+
+			Command cmd = commandQueue.front();
+			commandQueue.pop();
+			lock.unlock();
+			enteredCommand = cmd.text;
+        #endif
+		
+
 		commandRegistry.processLine(enteredCommand);
 	}
 #ifdef _WIN32

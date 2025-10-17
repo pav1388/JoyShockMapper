@@ -28,14 +28,13 @@
 
 #pragma once
 
-namespace ExtendInput
-{
-namespace DataTools
-{
-namespace DualSense
+#include <cstdint>
+
+namespace ExtendInput::DataTools::DualSense
 {
 	
 using byte = unsigned char;
+
 
 enum class TriggerEffectType : byte
 {
@@ -73,7 +72,7 @@ public:
 	/// @param start The starting zone of the trigger effect.
 	/// @param force The force of the resistance.
 	/// @returns The success of the effect write.
-	static bool SimpleResistance(byte *destinationArray, int destinationIndex, byte start, byte force);
+	static bool SimpleResistance(byte *destinationArray, int destinationIndex, uint16_t start, uint16_t force);
 
 	/// Simplistic semi-automatic gun effect data generator.
 	/// This is not used by libpad and may be removed in a future DualSense firmware.
@@ -84,7 +83,7 @@ public:
 	/// @param end The ending zone of the trigger effect.
 	/// @param force The force of the resistance.
 	/// @returns The success of the effect write.
-	static bool SimpleSemiAutomaticGun(byte *destinationArray, int destinationIndex, byte start, byte end, byte force);
+	static bool SimpleSemiAutomaticGun(byte *destinationArray, int destinationIndex, uint16_t start, uint16_t end, uint16_t force);
 
 	/// reset effect data generator.
 	/// This is used by libpad and is expected to be present in future DualSense firmware.
@@ -102,7 +101,7 @@ public:
 	/// @param force Strength of the automatic cycling action.
 	/// @param frequency Frequency of the automatic cycling action in hertz.
 	/// @returns The success of the effect write.
-	static bool SimpleAutomaticGun(byte *destinationArray, int destinationIndex, byte start, byte strength, byte frequency);
+	static bool SimpleAutomaticGun(byte *destinationArray, int destinationIndex, uint16_t start, uint16_t strength, uint16_t frequency);
 
 	/// Simplistic resistance effect data generator with stricter paramater limits.
 	/// This is not used by libpad and may be removed in a future DualSense firmware.
@@ -112,7 +111,7 @@ public:
 	/// @param start The starting zone of the trigger effect.
 	/// @param force The force of the resistance. Must be between 0 and 10 inclusive.
 	/// @returns The success of the effect write.
-	static bool LimitedResistance(byte *destinationArray, int destinationIndex, byte start, byte force);
+	static bool LimitedResistance(byte *destinationArray, int destinationIndex, uint16_t start, uint16_t force);
 
 	/// Simplistic semi-automatic gun effect data generator with stricter paramater limits.
 	/// This is not used by libpad and may be removed in a future DualSense firmware.
@@ -123,7 +122,7 @@ public:
 	/// @param end The ending zone of the trigger effect. Must be between <paramref name="start"/> and <paramref name="start"/>+100 inclusive.
 	/// @param force The force of the resistance. Must be between 0 and 10 inclusive.
 	/// @returns The success of the effect write.
-	static bool LimitedSemiAutomaticGun(byte *destinationArray, int destinationIndex, byte start, byte end, byte force);
+	static bool LimitedSemiAutomaticGun(byte *destinationArray, int destinationIndex, uint16_t start, uint16_t end, uint16_t force);
 
 	/// Resistance effect data generator.
 	/// This is used by libpad and is expected to be present in future DualSense firmware.
@@ -132,7 +131,7 @@ public:
 	/// @param start The starting zone of the trigger effect. Must be between 0 and 9 inclusive.
 	/// @param force The force of the resistance. Must be between 0 and 8 inclusive.
 	/// @returns The success of the effect write.
-	static bool Resistance(byte *destinationArray, int destinationIndex, byte start, byte force);
+	static bool Resistance(byte *destinationArray, int destinationIndex, uint16_t start, uint16_t force);
 
 	/// Bow effect data generator.
 	/// This is not used by libpad but is in the used effect block, it may be removed in a future DualSense firmware.
@@ -143,7 +142,7 @@ public:
 	/// @param force The force of the resistance. Must be between 0 and 8 inclusive.
 	/// @param snapForce The force of the snap-back. Must be between 0 and 8 inclusive.
 	/// @returns The success of the effect write.
-	static bool Bow(byte *destinationArray, int destinationIndex, byte start, byte end, byte force, byte snapForce);
+	static bool Bow(byte *destinationArray, int destinationIndex, uint16_t start, uint16_t end, uint16_t force, uint16_t snapForce);
 
 	/// Galloping effect data generator.
 	/// This is not used by libpad but is in the used effect block, it may be removed in a future DualSense firmware.
@@ -155,7 +154,7 @@ public:
 	/// @param secondFoot Position of second foot in cycle. Must be between <paramref name="firstFoot"/> + 1 and 7 inclusive.
 	/// @param frequency Frequency of the automatic cycling action in hertz.
 	/// @returns The success of the effect write.
-	static bool Galloping(byte *destinationArray, int destinationIndex, byte start, byte end, byte firstFoot, byte secondFoot, byte frequency);
+	static bool Galloping(byte *destinationArray, int destinationIndex, uint16_t start, uint16_t end, uint16_t firstFoot, uint16_t secondFoot, uint16_t frequency);
 
 	/// Semi-automatic gun effect data generator.
 	/// This is used by libpad and is expected to be present in future DualSense firmware.
@@ -165,7 +164,7 @@ public:
 	/// @param end The ending zone of the trigger effect. Must be between <paramref name="start"/> and 8 inclusive.
 	/// @param force The force of the resistance. Must be between 0 and 8 inclusive.
 	/// @returns The success of the effect write.
-	static bool SemiAutomaticGun(byte *destinationArray, int destinationIndex, byte start, byte end, byte force);
+	static bool SemiAutomaticGun(byte *destinationArray, int destinationIndex, uint16_t start, uint16_t end, uint16_t force);
 
 	/// Automatic gun effect data generator.
 	/// This is used by libpad and is expected to be present in future DualSense firmware.
@@ -175,7 +174,7 @@ public:
 	/// @param force Strength of the automatic cycling action. Must be between 0 and 8 inclusive.
 	/// @param frequency Frequency of the automatic cycling action in hertz.
 	/// @returns The success of the effect write.
-	static bool AutomaticGun(byte *destinationArray, int destinationIndex, byte start, byte strength, byte frequency);
+	static bool AutomaticGun(byte *destinationArray, int destinationIndex, uint16_t start, uint16_t strength, uint16_t frequency);
 
 	/// Machine effect data generator.
 	/// This is not used by libpad but is in the used effect block, it may be removed in a future DualSense firmware.
@@ -188,9 +187,7 @@ public:
 	/// @param frequency Frequency of the automatic cycling action in hertz.
 	/// @param period Period of the oscillation between <paramref name="strengthA"/> and <paramref name="strengthB"/> in tenths of a second.
 	/// @returns The success of the effect write.
-	static bool Machine(byte *destinationArray, int destinationIndex, byte start, byte end, byte strengthA, byte strengthB, byte frequency, byte period);
+	static bool Machine(byte *destinationArray, int destinationIndex, uint16_t start, uint16_t end, uint16_t strengthA, uint16_t strengthB, uint16_t frequency, uint16_t period);
 };
 
-}
-}
 }
